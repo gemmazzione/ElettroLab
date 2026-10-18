@@ -1,5 +1,6 @@
 import { checkWiring } from '../graph/erc';
 import { catalogItem } from '../model/catalog';
+import { modulesUsed, panelOf } from '../model/placement';
 import { MODEL_ASSUMPTIONS } from '../model/constants';
 import { FAULT_INFO } from '../model/faults';
 import type { Project } from '../model/types';
@@ -55,8 +56,12 @@ export function buildReport(project: Project, now = new Date()): ReportData {
     general.push(['Fornitura', 'non presente']);
   }
   general.push(['Impianto di terra', earth && earth.params.kind === 'earth' ? `RA = ${f(earth.params.p.ra, 1)} Ω (${earth.params.p.raMeasured ? 'misurata' : 'valore di progetto'})` : 'assente']);
-  const used = project.components.reduce((n, c) => n + (c.rail ? catalogItem(c.catalogId).modules : 0), 0);
-  general.push(['Quadro', `${project.panel.modulesPerRow * project.panel.rows} moduli (${project.panel.rows} × ${project.panel.modulesPerRow}), ${used} occupati`]);
+  for (const panel of project.panels) {
+    general.push([
+      project.panels.length > 1 ? `Quadro: ${panel.name}` : 'Quadro',
+      `${panel.modulesPerRow * panel.rows} moduli (${panel.rows} × ${panel.modulesPerRow}), ${modulesUsed(project, panel.id)} occupati`,
+    ]);
+  }
   general.push(['Contesto', `${ctx.settings.residential ? 'Locali ad uso abitativo' : 'Locali non abitativi'} · UL = ${ctx.settings.ul} V${ctx.settings.declaredIccKA ? ` · Icc dichiarata ${f(ctx.settings.declaredIccKA, 1)} kA` : ''}`]);
   general.push(['Circuiti utilizzatori', String(ctx.circuits.length)]);
 
@@ -66,7 +71,12 @@ export function buildReport(project: Project, now = new Date()): ReportData {
     widths: [10, 30, 32, 16, 12],
     body: project.components
       .filter((c) => c.rail)
-      .sort((a, b) => a.rail!.row - b.rail!.row || a.rail!.slot - b.rail!.slot)
+      .sort(
+        (a, b) =>
+          project.panels.indexOf(panelOf(project, a.rail!.panelId)) - project.panels.indexOf(panelOf(project, b.rail!.panelId)) ||
+          a.rail!.row - b.rail!.row ||
+          a.rail!.slot - b.rail!.slot,
+      )
       .map((c) => {
         const pr = c.params;
         let car = '';
@@ -76,7 +86,8 @@ export function buildReport(project: Project, now = new Date()): ReportData {
         if (pr.kind === 'switch') car = `${pr.p.poles} ${pr.p.in} A`;
         if (pr.kind === 'bar') car = `${pr.p.barFn}, ${pr.p.ways} vie`;
         const m = catalogItem(c.catalogId).modules;
-        const pos = `guida ${c.rail!.row + 1}, mod. ${c.rail!.slot + 1}${m > 1 ? `-${c.rail!.slot + m}` : ''}`;
+        const pn = project.panels.length > 1 ? `${panelOf(project, c.rail!.panelId).name}, ` : '';
+        const pos = `${pn}guida ${c.rail!.row + 1}, mod. ${c.rail!.slot + 1}${m > 1 ? `-${c.rail!.slot + m}` : ''}`;
         const stato = pr.kind === 'bar' ? '—' : c.closed ? 'chiuso' : 'aperto';
         return [c.label, catalogItem(c.catalogId).name, car, pos, stato];
       }),
@@ -136,12 +147,12 @@ export function buildReport(project: Project, now = new Date()): ReportData {
   if (visibleFaults.length) {
     tables.push({
       title: 'Guasti simulati presenti nel progetto',
-      head: ['Guasto', 'Su', 'Resistenza di guasto'],
+      head: ['Guasto', 'Su', 'Parametro'],
       widths: [40, 30, 30],
       body: visibleFaults.map((x) => [
         FAULT_INFO[x.type].label,
         byId.get(x.targetId)?.label ?? 'conduttore',
-        FAULT_INFO[x.type].resistive ? `${f(x.resistance, 2)} Ω` : '—',
+        FAULT_INFO[x.type].resistive ? `Rf ${f(x.resistance, 2)} Ω` : FAULT_INFO[x.type].power ? `+${f(x.powerW ?? 0, 0)} W` : '—',
       ]),
     });
   }

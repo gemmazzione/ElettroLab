@@ -2,6 +2,7 @@ import { tracePhase } from '../graph/netGraph';
 import { catalogItem } from './catalog';
 import { DEFAULT_COLOR_FOR } from './constants';
 import { railToPosition } from './geometry';
+import { panelOf } from './placement';
 import { getTerminals, parseTerminalId } from './terminals';
 import type {
   ComponentInstance,
@@ -28,7 +29,7 @@ export function emptyProject(name = 'Nuovo progetto', panel: PanelConfig = { mod
     id: newId('prj'),
     name,
     description: '',
-    panel,
+    panels: [{ id: 'P1', name: 'Quadro generale', origin: { x: 0, y: 0 }, ...panel }],
     components: [],
     wires: [],
     updatedAt: new Date().toISOString(),
@@ -51,13 +52,13 @@ export function createComponent(
 ): ComponentInstance {
   const item = catalogItem(catalogId);
   if (!item.defaults) throw new Error(`${item.name}: ${item.unavailableReason ?? 'non disponibile'}`);
-  const rail = 'rail' in where ? where.rail : undefined;
+  const rail = 'rail' in where ? { ...where.rail, panelId: panelOf(project, where.rail.panelId).id } : undefined;
   return {
     id: newId(item.kind),
     catalogId,
     label: nextLabel(project, item.labelPrefix),
     params: structuredClone(item.defaults),
-    position: rail ? railToPosition(rail) : (where as { position: XY }).position,
+    position: rail ? railToPosition(rail, panelOf(project, rail.panelId)) : (where as { position: XY }).position,
     ...(rail ? { rail } : {}),
     closed: false,
   };

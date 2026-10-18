@@ -36,6 +36,7 @@ function SummaryChips({ s }: { s: ProjectSummary }) {
       {s.contractKW !== null && <Chip>{s.contractKW.toLocaleString('it-IT')} kW</Chip>}
       <Chip>{s.circuits} circuiti</Chip>
       <Chip>{s.devices} dispositivi</Chip>
+      {s.panels > 1 && <Chip>{s.panels} quadri</Chip>}
       <Chip>
         {s.modulesUsed}/{s.modulesTotal} moduli
       </Chip>

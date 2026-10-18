@@ -91,6 +91,7 @@ export function LoadFaultSection({ comp }: { comp: ComponentInstance }) {
   const faults = useStore((s) => s.project.faults);
   const toggle = useStore((s) => s.toggleFault);
   const setR = useStore((s) => s.setFaultResistance);
+  const setW = useStore((s) => s.setFaultPower);
   const own = (faults ?? []).filter((f) => f.targetId === comp.id && !f.hidden);
   const types = loadFaultsFor(isThreePhaseLoad(comp), loadHasNeutral(comp));
   return (
@@ -109,6 +110,12 @@ export function LoadFaultSection({ comp }: { comp: ComponentInstance }) {
               {f && (
                 <>
                   <p className="mt-1 text-[11px] leading-snug text-slate-400">{info.description}</p>
+                  {info.power && (
+                    <div className="mt-1.5">
+                      <span className="mb-1 block text-[11px] text-slate-400">Potenza aggiunta sulla linea</span>
+                      <NumberInput value={f.powerW ?? 0} min={0} max={50000} step={100} suffix="W" onChange={(v) => setW(f.id, v)} />
+                    </div>
+                  )}
                   {info.resistive && (
                     <div className="mt-1.5">
                       <span className="mb-1 block text-[11px] text-slate-400">Resistenza di guasto Rf</span>
@@ -246,6 +253,7 @@ export function ActiveFaults() {
                 >
                   {FAULT_INFO[f.type].label} — {target}
                   {FAULT_INFO[f.type].resistive ? ` (Rf ${fmt(f.resistance, f.resistance < 10 ? 2 : 0)} Ω)` : ''}
+                  {FAULT_INFO[f.type].power ? ` (+${fmt(f.powerW ?? 0, 0)} W)` : ''}
                 </button>
                 <button className="text-slate-500 hover:text-red-300" onClick={() => toggle(f.type, f.targetId)}>
                   rimuovi

@@ -1,5 +1,6 @@
 import { buildNetGraph, analyzeCircuits, phaseOfNet, seriesDevices } from '../graph/netGraph';
 import { getPoles, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, terminalId } from '../model/terminals';
+import { panelOf } from '../model/placement';
 import type { ComponentInstance, Project } from '../model/types';
 
 /**
@@ -19,6 +20,8 @@ export interface SLNode {
   conductors: number;
   /** Fase della fornitura per i circuiti monofase in un impianto trifase */
   phase?: string;
+  /** Nome del quadro, se il dispositivo apre un quadro diverso da quello a monte */
+  panelStart?: string;
   depth: number;
   x: number;
   y: number;
@@ -118,6 +121,17 @@ export function buildSingleLine(project: Project): SingleLine | null {
     n.children.forEach(sortRec);
   };
   sortRec(root);
+
+  // Inizio di un quadro diverso da quello del dispositivo a monte.
+  if (project.panels.length > 1) {
+    const panelId = (n: SLNode) => (n.comp.rail ? panelOf(project, n.comp.rail.panelId).id : null);
+    const mark = (n: SLNode, upstream: string) => {
+      const own = n.kind === 'device' ? panelId(n) : null;
+      if (own && own !== upstream) n.panelStart = panelOf(project, own).name;
+      n.children.forEach((c) => mark(c, own ?? upstream));
+    };
+    mark(root, project.panels[0]!.id);
+  }
 
   // Profondità; gli utilizzatori sono allineati sull'ultima riga.
   let maxDeviceDepth = 0;

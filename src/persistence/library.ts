@@ -1,4 +1,4 @@
-import { catalogItem } from '../model/catalog';
+import { modulesTotal, modulesUsed } from '../model/placement';
 import { newId } from '../model/factory';
 import type { Project } from '../model/types';
 import { deleteSaved, loadSaved, saveProject, validateProject } from './storage';
@@ -11,6 +11,7 @@ export interface ProjectSummary {
   devices: number;
   modulesUsed: number;
   modulesTotal: number;
+  panels: number;
   contractKW: number | null;
 }
 
@@ -21,8 +22,9 @@ export function summarizeProject(p: Project): ProjectSummary {
     phases: supply && supply.params.kind === 'supply' ? (supply.params.p.phases === 3 ? 3 : 1) : null,
     circuits: p.components.filter((c) => c.params.kind === 'load').length,
     devices: p.components.filter((c) => c.rail && c.params.kind !== 'bar').length,
-    modulesUsed: p.components.reduce((n, c) => n + (c.rail ? catalogItem(c.catalogId).modules : 0), 0),
-    modulesTotal: p.panel.modulesPerRow * p.panel.rows,
+    modulesUsed: modulesUsed(p),
+    modulesTotal: modulesTotal(p),
+    panels: p.panels.length,
     contractKW: supply && supply.params.kind === 'supply' ? supply.params.p.contractKW : null,
   };
 }

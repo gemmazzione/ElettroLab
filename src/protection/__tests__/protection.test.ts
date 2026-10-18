@@ -5,7 +5,7 @@ import { innerNode, wireResistance } from '../../engine/netlist';
 import { simulate } from '../../engine/simulate';
 import { CONTACT_RESISTANCE } from '../../model/constants';
 import type { FaultType } from '../../model/types';
-import { ProjectBuilder, t } from '../../projects/demos';
+import { appartamento, ProjectBuilder, t } from '../../projects/demos';
 import { magneticZone, residualZone, thermalTripTime } from '../curves';
 import { advance } from '../stepper';
 
@@ -84,6 +84,29 @@ describe('sovraccarico', () => {
     expect(out.prot[q.id]!.tripped).toBe('termico');
     expect(out.events[0]!.at).toBeCloseTo(expected, 6);
     expect(out.project.components.find((c) => c.id === q.id)!.closed).toBe(false);
+  });
+
+  it('guasto «sovraccarico»: apparecchi in più sulla linea fanno intervenire il termico del circuito', () => {
+    const p = appartamento();
+    for (const c of p.components) if (c.params.kind !== 'load') c.closed = true;
+    const prese = p.components.find((c) => c.params.kind === 'load' && c.params.p.name === 'Prese zona giorno')!;
+    const r0 = simulate(p);
+    if (!r0.ok) throw new Error(r0.reason);
+    p.faults = [{ id: 'ov', type: 'overload', targetId: prese.id, resistance: 0, powerW: 4000 }];
+    const r1 = simulate(p);
+    if (!r1.ok) throw new Error(r1.reason);
+    // la corrente di linea cresce della quota del carico aggiunto
+    expect(r1.cableI.get(prese.id)!.L).toBeDefined();
+    const iBefore = abs(r0.cableI.get(prese.id)!.L!);
+    const iAfter = abs(r1.cableI.get(prese.id)!.L!);
+    // 4000 W a 230 V sarebbero 17,4 A; con la caduta lungo la linea la resistenza aggiunta assorbe un po' meno
+    expect(iAfter - iBefore).toBeGreaterThan(15);
+    expect(iAfter - iBefore).toBeLessThan(17.4);
+    const out = advance(p, {}, r1, 600);
+    const q4 = p.components.find((c) => c.label === 'Q4')!;
+    const q1 = p.components.find((c) => c.label === 'Q1')!;
+    expect(out.prot[q4.id]?.tripped).toBe('termico');
+    expect(out.prot[q1.id]?.tripped).toBeUndefined();
   });
 
   it('a 1,13·In non interviene', () => {

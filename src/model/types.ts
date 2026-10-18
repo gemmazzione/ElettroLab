@@ -151,6 +151,8 @@ export type ComponentParams =
   | { kind: 'load'; p: LoadParams };
 
 export interface RailPlacement {
+  /** Quadro di appartenenza (assente = primo quadro del progetto) */
+  panelId?: string;
   row: number;
   slot: number;
 }
@@ -189,7 +191,7 @@ export interface Wire {
  * - open-N / open-PE / open-L: interruzione del conduttore nella linea dell'utilizzatore
  * - open-wire: interruzione di un conduttore del quadro
  */
-export type FaultType = 'short-LN' | 'short-LL' | 'L-PE' | 'L-earth' | 'open-N' | 'open-PE' | 'open-L' | 'open-wire';
+export type FaultType = 'overload' | 'short-LN' | 'short-LL' | 'L-PE' | 'L-earth' | 'open-N' | 'open-PE' | 'open-L' | 'open-wire';
 
 export interface Fault {
   id: string;
@@ -200,6 +202,8 @@ export interface Fault {
   resistance: number;
   /** Guasto nascosto (esercizi di ricerca guasti): non mostrato nell'interfaccia */
   hidden?: boolean;
+  /** Sovraccarico: potenza aggiuntiva collegata alla linea [W] */
+  powerW?: number;
 }
 
 /** Parametri del contesto normativo del progetto. */
@@ -217,12 +221,21 @@ export interface PanelConfig {
   rows: number;
 }
 
+/** Quadro elettrico: involucro con guide DIN, posizionato nell'area di lavoro. */
+export interface PanelDef extends PanelConfig {
+  id: string;
+  name: string;
+  /** Angolo superiore sinistro nell'area di lavoro */
+  origin: XY;
+}
+
 export interface Project {
   schemaVersion: 1;
   id: string;
   name: string;
   description: string;
-  panel: PanelConfig;
+  /** Quadri del progetto (il primo è il quadro generale) */
+  panels: PanelDef[];
   components: ComponentInstance[];
   wires: Wire[];
   /** Guasti attivi (scenario di simulazione) */

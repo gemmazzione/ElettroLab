@@ -20,7 +20,8 @@ import {
 import { CONDUCTOR_LABEL, WIRE_COLOR_HEX, WIRE_COLOR_LABEL } from '../model/constants';
 import { PANEL_SIZES } from '../model/geometry';
 import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId } from '../model/terminals';
-import { WIRE_SECTIONS, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
+import { modulesUsed } from '../model/placement';
+import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { InstallSection } from './InstallSection';
 import { InfoTab } from './InfoPanel';
@@ -60,15 +61,80 @@ export function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => vo
 
 // ------------------------------------------------------------------ progetto e quadro
 
-function ProjectProps() {
+function PanelEditor({ panel, main, canRemove }: { panel: PanelDef; main: boolean; canRemove: boolean }) {
   const project = useStore((s) => s.project);
   const setPanel = useStore((s) => s.setPanel);
+  const renamePanel = useStore((s) => s.renamePanel);
+  const removePanel = useStore((s) => s.removePanel);
+  const total = panel.modulesPerRow * panel.rows;
+  const used = modulesUsed(project, panel.id);
+  const sizes = PANEL_SIZES.map((s) => s.modules);
+  return (
+    <div className="space-y-2 rounded-md border border-slate-800 p-2.5">
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <TextInput value={panel.name} onChange={(v) => renamePanel(panel.id, v)} />
+        </div>
+        {main ? (
+          <span className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-400">generale</span>
+        ) : (
+          <button
+            className="rounded p-1 text-slate-500 hover:bg-red-950 hover:text-red-300 disabled:opacity-30"
+            disabled={!canRemove}
+            title={canRemove ? 'Rimuovi il quadro' : 'Svuota il quadro prima di rimuoverlo'}
+            onClick={() => removePanel(panel.id)}
+          >
+            <Trash2 size={13} />
+          </button>
+        )}
+      </div>
+      <Field label="Formato standard">
+        <Select
+          value={sizes.includes(total) ? total : sizes[0]!}
+          options={sizes}
+          format={(m) => {
+            const c = PANEL_SIZES.find((s) => s.modules === m)!.config;
+            return `${m} moduli (${c.rows} × ${c.modulesPerRow})`;
+          }}
+          onChange={(m) => setPanel(panel.id, PANEL_SIZES.find((s) => s.modules === m)!.config)}
+        />
+      </Field>
+      <div className="flex items-center justify-between text-[12px]">
+        <span className="text-slate-400">Guide DIN</span>
+        <div className="flex items-center gap-2">
+          <button
+            className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
+            disabled={panel.rows <= 1}
+            onClick={() => setPanel(panel.id, { modulesPerRow: panel.modulesPerRow, rows: panel.rows - 1 })}
+            title="Rimuovi l'ultima guida"
+          >
+            <Minus size={12} />
+          </button>
+          <span className="w-4 text-center font-mono">{panel.rows}</span>
+          <button
+            className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
+            disabled={panel.rows >= 6}
+            onClick={() => setPanel(panel.id, { modulesPerRow: panel.modulesPerRow, rows: panel.rows + 1 })}
+            title="Aggiungi una guida"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+      <Field label="Moduli per guida">
+        <Select value={panel.modulesPerRow} options={[12, 18, 24]} onChange={(m) => setPanel(panel.id, { modulesPerRow: m, rows: panel.rows })} />
+      </Field>
+      <Row k="Moduli occupati" v={`${used} / ${total}`} />
+    </div>
+  );
+}
+
+function ProjectProps() {
+  const project = useStore((s) => s.project);
   const rename = useStore((s) => s.renameProject);
+  const addPanel = useStore((s) => s.addPanel);
   const preset = useStore((s) => s.wirePreset);
   const setPreset = useStore((s) => s.setWirePreset);
-  const total = project.panel.modulesPerRow * project.panel.rows;
-  const used = project.components.reduce((n, c) => n + (c.rail ? catalogItem(c.catalogId).modules : 0), 0);
-  const sizes = PANEL_SIZES.map((s) => s.modules);
   return (
     <>
       <Section title="Progetto">
@@ -77,44 +143,18 @@ function ProjectProps() {
         </Field>
         {project.description && <p className="text-[11.5px] leading-snug text-slate-400">{project.description}</p>}
       </Section>
-      <Section title="Quadro elettrico">
-        <Field label="Formato standard">
-          <Select
-            value={sizes.includes(total) ? total : sizes[0]!}
-            options={sizes}
-            format={(m) => {
-              const c = PANEL_SIZES.find((s) => s.modules === m)!.config;
-              return `${m} moduli (${c.rows} × ${c.modulesPerRow})`;
-            }}
-            onChange={(m) => setPanel(PANEL_SIZES.find((s) => s.modules === m)!.config)}
-          />
-        </Field>
-        <div className="flex items-center justify-between text-[12px]">
-          <span className="text-slate-400">Guide DIN</span>
-          <div className="flex items-center gap-2">
-            <button
-              className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
-              disabled={project.panel.rows <= 1}
-              onClick={() => setPanel({ ...project.panel, rows: project.panel.rows - 1 })}
-              title="Rimuovi l'ultima guida"
-            >
-              <Minus size={12} />
-            </button>
-            <span className="w-4 text-center font-mono">{project.panel.rows}</span>
-            <button
-              className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
-              disabled={project.panel.rows >= 6}
-              onClick={() => setPanel({ ...project.panel, rows: project.panel.rows + 1 })}
-              title="Aggiungi una guida"
-            >
-              <Plus size={12} />
-            </button>
-          </div>
-        </div>
-        <Field label="Moduli per guida">
-          <Select value={project.panel.modulesPerRow} options={[12, 18, 24]} onChange={(m) => setPanel({ ...project.panel, modulesPerRow: m })} />
-        </Field>
-        <Row k="Moduli occupati" v={`${used} / ${total}`} />
+      <Section title={project.panels.length > 1 ? `Quadri elettrici (${project.panels.length})` : 'Quadro elettrico'}>
+        {project.panels.map((p, i) => (
+          <PanelEditor key={p.id} panel={p} main={i === 0} canRemove={modulesUsed(project, p.id) === 0} />
+        ))}
+        <button onClick={addPanel} className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-slate-600 py-1.5 text-[12px] text-slate-300 hover:bg-slate-800">
+          <Plus size={13} /> Aggiungi quadro (sottoquadro)
+        </button>
+        {project.panels.length > 1 && (
+          <p className="text-[11px] leading-snug text-slate-500">
+            I quadri si collegano con normali conduttori: imposta la lunghezza reale della linea di alimentazione del sottoquadro nelle proprietà del conduttore.
+          </p>
+        )}
       </Section>
       <ActiveFaults />
       <Section title="Nuovi conduttori">

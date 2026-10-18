@@ -4,8 +4,8 @@ import { simulate, type SimResult } from '../engine/simulate';
 import { catalogItem } from '../model/catalog';
 import { DEFAULT_COLOR_FOR } from '../model/constants';
 import { createComponent, createWire, emptyProject, inferConductor } from '../model/factory';
-import { positionToRail, railToPosition } from '../model/geometry';
-import { canPlace, nearestFreeSlot, panelFits } from '../model/placement';
+import { nextPanelOrigin, PANEL_GAP, panelSize, positionToRail, railToPosition } from '../model/geometry';
+import { canPlace, nearestFreeSlot, panelFits, panelOf } from '../model/placement';
 import { getTerminals, parseTerminalId } from '../model/terminals';
 import { DEFAULT_NORM } from '../rules/context';
 import { buildCtx, evaluate, loadProgress, saveProgress, type Progress } from '../academy/evaluate';
@@ -91,6 +91,7 @@ interface State {
   setClampTarget: (t: ClampTarget) => void;
   toggleFault: (type: FaultType, targetId: string) => void;
   setFaultResistance: (faultId: string, r: number) => void;
+  setFaultPower: (faultId: string, w: number) => void;
   clearFaults: () => void;
   testRcd: (id: string) => void;
   setLoadNeutral: (id: string, withNeutral: boolean) => void;
@@ -123,7 +124,10 @@ interface State {
   renameComponent: (id: string, label: string) => void;
   connect: (from: string, to: string) => boolean;
   updateWire: (id: string, patch: Partial<Wire>) => void;
-  setPanel: (panel: PanelConfig) => boolean;
+  setPanel: (panelId: string, config: PanelConfig) => boolean;
+  addPanel: () => string;
+  renamePanel: (panelId: string, name: string) => void;
+  removePanel: (panelId: string) => void;
   renameProject: (name: string) => void;
   select: (s: Selection) => void;
   setShowLabels: (v: boolean) => void;
@@ -139,6 +143,17 @@ interface State {
 }
 
 const HISTORY_LIMIT = 100;
+
+/** Riallinea i quadri affiancati (dopo un ridimensionamento) e aggiorna la posizione dei dispositivi. */
+function relayoutPanels(p: Project) {
+  let x = p.panels[0]?.origin.x ?? 0;
+  const y = p.panels[0]?.origin.y ?? 0;
+  for (const panel of p.panels) {
+    panel.origin = { x, y };
+    x += panelSize(panel).w + PANEL_GAP;
+  }
+  for (const c of p.components) if (c.rail) c.position = railToPosition(c.rail, panelOf(p, c.rail.panelId));
+}
 let eventSeq = 0;
 let toastSeq = 0;
 
@@ -149,16 +164,11 @@ function initialProject(): Project {
 const alertKey = (a: { code: string; componentIds: string[] }) => `${a.code}:${a.componentIds.join(',')}`;
 
 export const useStore = create<State>((set, get) => {
-  /** Ricalcola verifiche e (se attiva) simulazione dopo ogni modifica, registrando i nuovi allarmi. */
-  const recompute = (project: Project, prevResult: SimResult | null, running: boolean) => {
+  /** Ricalcola verifiche e (se attiva) simulazione dopo ogni modifica. Gli allarmi si registrano in settle(). */
+  const recompute = (project: Project, running: boolean) => {
     const issues = checkWiring(project);
     if (!running) return { issues, result: null as SimResult | null };
-    const result = simulate(project);
-    if (result.ok) {
-      const before = new Set(prevResult && prevResult.ok ? prevResult.alerts.map(alertKey) : []);
-      for (const a of result.alerts) if (!before.has(alertKey(a))) get().log(a.severity, a.message);
-    }
-    return { issues, result };
+    return { issues, result: simulate(project) };
   };
 
   /** Applica l'esito di un avanzamento temporale: interventi, eventi e nuovi allarmi. */
@@ -179,11 +189,28 @@ export const useStore = create<State>((set, get) => {
     });
   };
 
-  /** Dopo una modifica a impianto alimentato: gestisce subito gli interventi "istantanei" (entro 0,5 s). */
-  const settle = () => {
+  /**
+   * Dopo una modifica a impianto alimentato: gestisce subito gli interventi "istantanei" (entro 0,5 s)
+   * e solo dopo registra gli allarmi dello stato risultante, confrontandoli con lo stato stabile precedente.
+   * Così i sintomi dei pochi millisecondi che precedono un intervento magnetico o differenziale
+   * (tensioni anomale durante il cortocircuito) non vengono riportati come condizioni permanenti.
+   */
+  const settle = (stableBefore: SimResult | null) => {
     const s = get();
-    if (!s.running || !s.result || !s.result.ok) return;
-    applyStep(advance(s.project, s.prot, s.result, 0.5, 'settle'));
+    if (!s.running || !s.result) return;
+    if (!s.result.ok) {
+      if (!stableBefore || stableBefore.ok) get().log('errore', s.result.reason);
+      return;
+    }
+    const out = advance(s.project, s.prot, s.result, 0.5, 'settle');
+    for (const e of out.events) get().log(e.level, e.text, s.simTime + e.at);
+    const t1 = s.simTime + out.elapsed;
+    if (out.result.ok) {
+      const before = new Set(stableBefore && stableBefore.ok ? stableBefore.alerts.map(alertKey) : []);
+      for (const a of out.result.alerts) if (!before.has(alertKey(a))) get().log(a.severity, a.message, t1);
+    }
+    if (out.tripped) saveCurrent(out.project);
+    set({ project: out.tripped ? out.project : s.project, prot: out.prot, result: out.result, simTime: t1 });
   };
 
   const first = initialProject();
@@ -239,7 +266,17 @@ export const useStore = create<State>((set, get) => {
       get().log(existing ? 'info' : 'attenzione', `${existing ? 'Guasto rimosso' : 'Guasto inserito'}: ${FAULT_INFO[type].label} su ${target}`);
       get().commit((p) => {
         if (existing) p.faults = (p.faults ?? []).filter((f) => f.id !== existing.id);
-        else p.faults = [...(p.faults ?? []), { id: newId('f'), type, targetId, resistance: FAULT_INFO[type].defaultResistance }];
+        else
+          p.faults = [
+            ...(p.faults ?? []),
+            {
+              id: newId('f'),
+              type,
+              targetId,
+              resistance: FAULT_INFO[type].defaultResistance,
+              ...(FAULT_INFO[type].power ? { powerW: FAULT_INFO[type].defaultPowerW ?? 2000 } : {}),
+            },
+          ];
       });
     },
 
@@ -247,6 +284,12 @@ export const useStore = create<State>((set, get) => {
       get().commit((p) => {
         const f = (p.faults ?? []).find((x) => x.id === faultId);
         if (f) f.resistance = r;
+      }),
+
+    setFaultPower: (faultId, w) =>
+      get().commit((p) => {
+        const f = (p.faults ?? []).find((x) => x.id === faultId);
+        if (f) f.powerW = w;
       }),
 
     clearFaults: () => {
@@ -331,9 +374,9 @@ export const useStore = create<State>((set, get) => {
         project: next,
         past: history ? [...past.slice(-HISTORY_LIMIT + 1), project] : past,
         future: history ? [] : get().future,
-        ...recompute(next, result, running),
+        ...recompute(next, running),
       });
-      settle();
+      settle(result);
     },
 
     undo: () => {
@@ -341,8 +384,8 @@ export const useStore = create<State>((set, get) => {
       const prev = past[past.length - 1];
       if (!prev) return;
       saveCurrent(prev);
-      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], ...recompute(prev, result, running) });
-      settle();
+      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], ...recompute(prev, running) });
+      settle(result);
     },
 
     redo: () => {
@@ -350,8 +393,8 @@ export const useStore = create<State>((set, get) => {
       const next = future[0];
       if (!next) return;
       saveCurrent(next);
-      set({ project: next, past: [...past, project], future: future.slice(1), ...recompute(next, result, running) });
-      settle();
+      set({ project: next, past: [...past, project], future: future.slice(1), ...recompute(next, running) });
+      settle(result);
     },
 
     newProject: () => get().openProject(emptyProject()),
@@ -388,7 +431,7 @@ export const useStore = create<State>((set, get) => {
       }
       let comp: ComponentInstance;
       if (item.mount === 'din') {
-        const desired = at ? positionToRail(at, project.panel) : { row: 0, slot: 0 };
+        const desired = at ? positionToRail(at, project.panels) : { row: 0, slot: 0 };
         const rail = nearestFreeSlot(project, item.modules, desired);
         if (!rail) {
           get().toast('errore', `Spazio insufficiente sulle guide DIN per ${item.name} (${item.modules} moduli).`);
@@ -415,7 +458,7 @@ export const useStore = create<State>((set, get) => {
         });
         return true;
       }
-      const target = positionToRail({ x: pos.x + 0.001, y: pos.y }, project.panel);
+      const target = positionToRail({ x: pos.x + 0.001, y: pos.y }, project.panels);
       if (!canPlace(project, item.modules, target, id)) {
         get().toast('errore', 'Posizione occupata o fuori dalla guida: il dispositivo torna al suo posto.');
         // forza il ri-render alla posizione precedente
@@ -425,7 +468,7 @@ export const useStore = create<State>((set, get) => {
       get().commit((p) => {
         const t = p.components.find((x) => x.id === id)!;
         t.rail = target;
-        t.position = railToPosition(target);
+        t.position = railToPosition(target, panelOf(p, target.panelId));
       });
       return true;
     },
@@ -524,17 +567,55 @@ export const useStore = create<State>((set, get) => {
         if (w) Object.assign(w, patch);
       }),
 
-    setPanel: (panel) => {
-      const err = panelFits(get().project, panel);
+    setPanel: (panelId, config) => {
+      const err = panelFits(get().project, panelId, config);
       if (err) {
         get().toast('errore', `Impossibile ridimensionare il quadro: ${err}`);
         return false;
       }
       get().commit((p) => {
-        p.panel = panel;
-        for (const c of p.components) if (c.rail) c.position = railToPosition(c.rail);
+        const panel = p.panels.find((x) => x.id === panelId);
+        if (!panel) return;
+        panel.modulesPerRow = config.modulesPerRow;
+        panel.rows = config.rows;
+        relayoutPanels(p);
       });
       return true;
+    },
+
+    addPanel: () => {
+      const { project } = get();
+      let n = project.panels.length + 1;
+      while (project.panels.some((x) => x.id === `P${n}`)) n += 1;
+      const id = `P${n}`;
+      get().commit((p) => {
+        p.panels.push({ id, name: `Sottoquadro ${p.panels.length}`, origin: nextPanelOrigin(p.panels), modulesPerRow: 12, rows: 1 });
+      });
+      get().toast('info', 'Quadro aggiunto a destra. Collegalo con una linea in partenza da un dispositivo del quadro generale.');
+      return id;
+    },
+
+    renamePanel: (panelId, name) =>
+      get().commit((p) => {
+        const panel = p.panels.find((x) => x.id === panelId);
+        if (panel) panel.name = name;
+      }),
+
+    removePanel: (panelId) => {
+      const { project } = get();
+      if (project.panels.length <= 1) return;
+      if (project.panels[0]!.id === panelId) {
+        get().toast('errore', 'Il quadro generale non può essere eliminato.');
+        return;
+      }
+      if (project.components.some((c) => c.rail && panelOf(project, c.rail.panelId).id === panelId)) {
+        get().toast('errore', 'Il quadro contiene dei dispositivi: eliminali o spostali prima di rimuoverlo.');
+        return;
+      }
+      get().commit((p) => {
+        p.panels = p.panels.filter((x) => x.id !== panelId);
+        relayoutPanels(p);
+      });
     },
 
     renameProject: (name) => get().commit((p) => (p.name = name), false),
@@ -548,11 +629,8 @@ export const useStore = create<State>((set, get) => {
       const { project } = get();
       set({ running: true, simTime: 0, events: [], prot: {} });
       get().log('info', 'Simulazione avviata: rete di distribuzione in tensione al punto di consegna.');
-      const result = simulate(project);
-      if (!result.ok) get().log('errore', result.reason);
-      else for (const a of result.alerts) get().log(a.severity, a.message);
-      set({ result });
-      settle();
+      set({ result: simulate(project) });
+      settle(null);
     },
 
     stopSimulation: () => {

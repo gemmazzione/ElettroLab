@@ -204,6 +204,14 @@ export function SingleLineSvg({ sl, project, palette: p, live, selectedId, onSel
         <g key={n.id} transform={`translate(${n.x} ${n.y})`} {...click}>
           {sel && <rect x={-24} y={-4} width={48} height={SL.symbolH + 8} rx={4} fill="none" stroke={p.select} strokeWidth={2} />}
           <rect x={-22} y={0} width={44} height={SL.symbolH} fill="transparent" />
+          {n.panelStart && (
+            <g>
+              <rect x={-58} y={-2} width={44} height={14} rx={3} fill="none" stroke={p.accent} strokeDasharray="3 2" />
+              <text x={-36} y={8} textAnchor="middle" fontSize={8} fontWeight={700} fill={p.accent} fontFamily={font}>
+                {n.panelStart.length > 9 ? `${n.panelStart.slice(0, 8)}…` : n.panelStart}
+              </text>
+            </g>
+          )}
           <DeviceSymbol node={n} p={p} />
           <text x={12} y={14} fontSize={11} fontWeight={700} fill={p.accent} fontFamily={font}>
             {n.comp.label}

@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react
 import { catalogItem } from '../model/catalog';
 import { DEVICE_H, MODULE_W, PANEL_PAD_X, panelSize, railTop } from '../model/geometry';
 import { componentHeight, componentWidth, parseTerminalId, railYOffset } from '../model/terminals';
-import type { ComponentInstance } from '../model/types';
+import type { ComponentInstance, PanelDef } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { edgeTypes } from './edges/WireEdge';
 import { Instruments } from '../ui/Instruments';
@@ -44,51 +44,64 @@ function toNode(c: ComponentInstance, selected: boolean, draggable: boolean): No
   };
 }
 
-/** Quadro e guide DIN: strato sotto nodi e conduttori, allineato al viewport. */
-function PanelBackdrop() {
-  const { x, y, zoom } = useViewport();
-  const panel = useStore((s) => s.project.panel);
-  const name = useStore((s) => s.project.name);
+/** Un quadro con le sue guide DIN, disegnato nelle coordinate dell'area di lavoro. */
+function PanelShape({ panel, title, main }: { panel: PanelDef; title: string; main: boolean }) {
   const { w, h } = panelSize(panel);
   const railW = panel.modulesPerRow * MODULE_W;
   return (
+    <g transform={`translate(${panel.origin.x} ${panel.origin.y})`}>
+      <rect x={0} y={0} width={w} height={h} rx={10} fill="#1b2230" stroke={main ? '#3b4659' : '#475a75'} strokeWidth={2} />
+      <rect x={8} y={8} width={w - 16} height={h - 16} rx={6} fill="none" stroke="#2a3446" strokeDasharray="4 6" />
+      <text x={20} y={30} fontSize={13} fontWeight={600} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
+        {title}
+      </text>
+      <text x={20} y={47} fontSize={10.5} fill="#64748b" fontFamily="ui-monospace, monospace">
+        {panel.modulesPerRow * panel.rows} moduli · {panel.rows} {panel.rows === 1 ? 'guida' : 'guide'} DIN da {panel.modulesPerRow}
+      </text>
+      {Array.from({ length: panel.rows }, (_, r) => {
+        const cy = railTop(r) + DEVICE_H / 2;
+        return (
+          <g key={r}>
+            <rect x={PANEL_PAD_X - 14} y={cy - 32} width={railW + 28} height={64} rx={2} fill="#4b5563" stroke="#6b7280" />
+            <rect x={PANEL_PAD_X - 14} y={cy - 24} width={railW + 28} height={48} fill="#3a414c" />
+            {Array.from({ length: Math.floor((railW + 28) / 26) }, (_, k) => (
+              <rect key={k} x={PANEL_PAD_X - 6 + k * 26} y={cy - 4} width={14} height={8} rx={3} fill="#1f242c" />
+            ))}
+            {Array.from({ length: panel.modulesPerRow }, (_, m) => (
+              <text
+                key={m}
+                x={PANEL_PAD_X + m * MODULE_W + MODULE_W / 2}
+                y={railTop(r) - 8}
+                textAnchor="middle"
+                fontSize={8}
+                fill="#475569"
+                fontFamily="ui-monospace, monospace"
+              >
+                {m + 1}
+              </text>
+            ))}
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+/** Quadri e guide DIN: strato sotto nodi e conduttori, allineato al viewport. */
+function PanelBackdrop() {
+  const { x, y, zoom } = useViewport();
+  const panels = useStore((s) => s.project.panels);
+  const name = useStore((s) => s.project.name);
+  const bottom = Math.max(...panels.map((p) => p.origin.y + panelSize(p).h));
+  const left = Math.min(...panels.map((p) => p.origin.x));
+  return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full" style={{ zIndex: 0 }}>
       <g transform={`translate(${x} ${y}) scale(${zoom})`}>
-        <rect x={0} y={0} width={w} height={h} rx={10} fill="#1b2230" stroke="#3b4659" strokeWidth={2} />
-        <rect x={8} y={8} width={w - 16} height={h - 16} rx={6} fill="none" stroke="#2a3446" strokeDasharray="4 6" />
-        <text x={20} y={30} fontSize={13} fontWeight={600} fill="#94a3b8" fontFamily="ui-sans-serif, system-ui">
-          {name}
-        </text>
-        <text x={20} y={47} fontSize={10.5} fill="#64748b" fontFamily="ui-monospace, monospace">
-          Quadro {panel.modulesPerRow * panel.rows} moduli · {panel.rows} {panel.rows === 1 ? 'guida' : 'guide'} DIN da {panel.modulesPerRow}
-        </text>
-        {Array.from({ length: panel.rows }, (_, r) => {
-          const cy = railTop(r) + DEVICE_H / 2;
-          return (
-            <g key={r}>
-              <rect x={PANEL_PAD_X - 14} y={cy - 32} width={railW + 28} height={64} rx={2} fill="#4b5563" stroke="#6b7280" />
-              <rect x={PANEL_PAD_X - 14} y={cy - 24} width={railW + 28} height={48} fill="#3a414c" />
-              {Array.from({ length: Math.floor((railW + 28) / 26) }, (_, k) => (
-                <rect key={k} x={PANEL_PAD_X - 6 + k * 26} y={cy - 4} width={14} height={8} rx={3} fill="#1f242c" />
-              ))}
-              {Array.from({ length: panel.modulesPerRow }, (_, m) => (
-                <text
-                  key={m}
-                  x={PANEL_PAD_X + m * MODULE_W + MODULE_W / 2}
-                  y={railTop(r) - 8}
-                  textAnchor="middle"
-                  fontSize={8}
-                  fill="#475569"
-                  fontFamily="ui-monospace, monospace"
-                >
-                  {m + 1}
-                </text>
-              ))}
-            </g>
-          );
-        })}
-        <text x={0} y={h + 40} fontSize={11} fill="#475569" fontFamily="ui-sans-serif, system-ui">
-          ▼ Zona utilizzatori (condutture in partenza dal quadro)
+        {panels.map((p, i) => (
+          <PanelShape key={p.id} panel={p} main={i === 0} title={panels.length > 1 ? p.name : name} />
+        ))}
+        <text x={left} y={bottom + 40} fontSize={11} fill="#475569" fontFamily="ui-sans-serif, system-ui">
+          ▼ Zona utilizzatori (condutture in partenza dai quadri)
         </text>
       </g>
     </svg>

@@ -170,6 +170,12 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         for (const f of fs) {
           const rf = C(Math.max(f.resistance, MIN_FAULT_RESISTANCE));
           const tag: ElementTag = { t: 'fault', faultId: f.id };
+          if (f.type === 'overload' && (f.powerW ?? 0) > 0) {
+            // Carico resistivo aggiuntivo alla tensione nominale, ripartito sui rami della stella.
+            const per = (f.powerW ?? 0) / phaseKeys.length;
+            const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
+            for (const k of phaseKeys) elements.push({ a: innerNode(c.id, k), b: star, z: C((LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE) / per), tag });
+          }
           if (f.type === 'short-LN' && hasN) elements.push({ a: innerNode(c.id, main), b: innerNode(c.id, 'N'), z: rf, tag });
           if (f.type === 'short-LL' && phaseKeys.length === 3) elements.push({ a: innerNode(c.id, 'L1'), b: innerNode(c.id, 'L2'), z: rf, tag });
           if (f.type === 'L-PE') elements.push({ a: innerNode(c.id, main), b: innerNode(c.id, 'PE'), z: rf, tag });

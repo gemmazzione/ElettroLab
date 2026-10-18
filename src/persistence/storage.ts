@@ -71,7 +71,14 @@ export function validateProject(raw: unknown): Project {
   const p = raw as Partial<Project>;
   if (!p || typeof p !== 'object') throw new Error('Il file non contiene un progetto.');
   if (p.schemaVersion !== 1) throw new Error('Versione del formato non supportata.');
-  if (!Array.isArray(p.components) || !Array.isArray(p.wires) || !p.panel) throw new Error('Struttura del progetto incompleta.');
+  // Formato precedente con un solo quadro ("panel"): conversione automatica a "panels".
+  const legacy = p as Partial<Project> & { panel?: { modulesPerRow: number; rows: number } };
+  if (!Array.isArray(legacy.panels) && legacy.panel) {
+    legacy.panels = [{ id: 'P1', name: 'Quadro generale', origin: { x: 0, y: 0 }, ...legacy.panel }];
+    delete legacy.panel;
+  }
+  if (!Array.isArray(p.components) || !Array.isArray(p.wires) || !Array.isArray(p.panels) || !p.panels.length)
+    throw new Error('Struttura del progetto incompleta.');
   for (const c of p.components) {
     if (!CATALOG_BY_ID[c.catalogId]?.defaults) throw new Error(`Componente sconosciuto o non supportato: ${c.catalogId}`);
   }

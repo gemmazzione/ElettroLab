@@ -286,7 +286,7 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
       alerts.push({
         code: 'OVERCURRENT',
         severity: 'attenzione',
-        message: `${c.label}: ${n(imax, 1)} A superiore alla corrente nominale In = ${inom} A (${what}).`,
+        message: `${c.label}: ${n(imax, 2)} A = ${n(imax / inom, 2)}·In, oltre la corrente nominale In = ${inom} A (${what}).`,
         componentIds: [c.id],
       });
     }

@@ -6,9 +6,21 @@ export interface FaultInfo {
   /** Il guasto ha una resistenza di guasto configurabile */
   resistive: boolean;
   defaultResistance: number;
+  /** Il guasto ha una potenza configurabile (sovraccarico) */
+  power?: boolean;
+  defaultPowerW?: number;
 }
 
 export const FAULT_INFO: Record<FaultType, FaultInfo> = {
+  overload: {
+    label: 'Sovraccarico (apparecchi in più sulla linea)',
+    description:
+      'Sulla stessa linea vengono collegati altri apparecchi (stufa, phon, bollitore…): la corrente supera quella per cui il circuito è stato dimensionato. Non è un guasto d\'isolamento: lo sganciatore termico interviene dopo un tempo che dipende da quanto la corrente supera In.',
+    resistive: false,
+    defaultResistance: 0,
+    power: true,
+    defaultPowerW: 2500,
+  },
   'short-LN': {
     label: 'Cortocircuito L-N',
     description: 'Contatto tra fase e neutro all\'utilizzatore (es. cavo schiacciato). La corrente è limitata solo dalle impedenze di rete, conduttori e contatti.',
@@ -59,7 +71,7 @@ export const FAULT_INFO: Record<FaultType, FaultInfo> = {
   },
 };
 
-export const LOAD_FAULTS: FaultType[] = ['short-LN', 'short-LL', 'L-PE', 'L-earth', 'open-L', 'open-N', 'open-PE'];
+export const LOAD_FAULTS: FaultType[] = ['overload', 'short-LN', 'short-LL', 'L-PE', 'L-earth', 'open-L', 'open-N', 'open-PE'];
 
 /** Guasti applicabili a un utilizzatore (L-L solo sui trifase, N solo se presente). */
 export function loadFaultsFor(threePhase: boolean, hasNeutral: boolean): FaultType[] {

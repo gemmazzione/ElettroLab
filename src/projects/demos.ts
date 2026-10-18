@@ -1,4 +1,5 @@
 import { createComponent, createWire, emptyProject } from '../model/factory';
+import { nextPanelOrigin } from '../model/geometry';
 import type { ComponentInstance, Project, RailPlacement, WireSection, XY } from '../model/types';
 
 export interface DemoProject {
@@ -20,6 +21,13 @@ export class ProjectBuilder {
     patch?.(c);
     this.project.components.push(c);
     return c;
+  }
+
+  /** Aggiunge un quadro a destra di quelli esistenti e ne restituisce l'identificativo. */
+  addPanel(name: string, modulesPerRow = 12, rows = 1): string {
+    const id = `P${this.project.panels.length + 1}`;
+    this.project.panels.push({ id, name, origin: nextPanelOrigin(this.project.panels), modulesPerRow, rows });
+    return id;
   }
 
   wire(from: string, to: string, section: WireSection = 2.5, length = 0.25): this {
@@ -256,6 +264,56 @@ export function trifase(): Project {
   return b.project;
 }
 
+export function villetta(): Project {
+  const b = new ProjectBuilder('Villetta con sottoquadro', 2, 12);
+  b.project.panels[0]!.name = 'Quadro generale';
+  b.project.description =
+    'Villetta da 6 kW con quadro generale e un sottoquadro nella taverna, a 25 m. Dal quadro generale parte la linea Q5 (2P C20) che alimenta il sottoquadro: lì un interruttore-sezionatore generale e un differenziale 30 mA proteggono luci e prese della taverna. ' +
+    'Il PE arriva al sottoquadro da una morsettiera all\'altra. Osserva nello schema unifilare dove inizia il sottoquadro e confronta la Icc presunta dei dispositivi a monte e a valle della linea. ' +
+    'La linea tra i quadri è un conduttore con la sua resistenza: le verifiche di dimensionamento riguardano le linee terminali verso gli utilizzatori.';
+  const cnt = b.add('supply-mono', { position: { x: -280, y: 30 } }, (c) => {
+    if (c.params.kind === 'supply') c.params.p.contractKW = 6;
+  });
+  const earth = b.add('earth', { position: { x: -260, y: 430 } });
+  const q1 = b.add('mcb-2p', { rail: { row: 0, slot: 0 } }, (c) => ((c.closed = true), setMcb(c, 32, 'C', 6)));
+  const q2 = b.add('rcd-2p', { rail: { row: 0, slot: 2 } }, (c) => (c.closed = true));
+  const q3 = b.add('mcb-1pn', { rail: { row: 0, slot: 4 } }, (c) => ((c.closed = true), setMcb(c, 10)));
+  const q4 = b.add('mcb-1pn', { rail: { row: 0, slot: 5 } }, (c) => ((c.closed = true), setMcb(c, 16)));
+  const q5 = b.add('mcb-2p', { rail: { row: 0, slot: 7 } }, (c) => ((c.closed = true), setMcb(c, 20, 'C', 6)));
+  const xpe1 = b.add('bar-pe-8', { rail: { row: 1, slot: 0 } });
+
+  const p2 = b.addPanel('Sottoquadro taverna', 12, 1);
+  const q6 = b.add('switch-2p', { rail: { panelId: p2, row: 0, slot: 0 } }, (c) => (c.closed = true));
+  const q7 = b.add('rcd-2p', { rail: { panelId: p2, row: 0, slot: 2 } }, (c) => (c.closed = true));
+  const q8 = b.add('mcb-1pn', { rail: { panelId: p2, row: 0, slot: 4 } }, (c) => ((c.closed = true), setMcb(c, 10)));
+  const q9 = b.add('mcb-1pn', { rail: { panelId: p2, row: 0, slot: 5 } }, (c) => ((c.closed = true), setMcb(c, 16)));
+  const xpe2 = b.add('bar-pe-8', { rail: { panelId: p2, row: 0, slot: 7 } });
+
+  const y = 700;
+  const u1 = addLoad(b, { catalogId: 'load-luce', name: 'Luci casa', powerW: 500, section: 1.5, length: 20 }, -40, y, 3);
+  const u2 = addLoad(b, { catalogId: 'load-prese', name: 'Prese casa', powerW: 2000, section: 2.5, length: 22, sockets: true }, 150, y, 3);
+  const u3 = addLoad(b, { catalogId: 'load-luce', name: 'Luci taverna', powerW: 300, section: 1.5, length: 12 }, 700, y, 2);
+  const u4 = addLoad(b, { catalogId: 'load-prese', name: 'Prese taverna', powerW: 1500, section: 2.5, length: 15, sockets: true }, 890, y, 2);
+
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 10, 10).wire(t(cnt, 'N'), t(q1, 'p1_in'), 10, 10);
+  b.wire(t(q1, 'p0_out'), t(q2, 'p0_in'), 6, 0.2).wire(t(q1, 'p1_out'), t(q2, 'p1_in'), 6, 0.2);
+  b.wire(t(q2, 'p0_in'), t(q5, 'p0_in'), 6, 0.3).wire(t(q2, 'p1_in'), t(q5, 'p1_in'), 6, 0.3);
+  b.wire(t(q2, 'p0_out'), t(q3, 'p0_in'), 4, 0.2).wire(t(q2, 'p1_out'), t(q3, 'p1_in'), 4, 0.2);
+  bridge(b, [q3, q4], 4);
+  // linea di alimentazione del sottoquadro: 25 m in 4 mm²
+  b.wire(t(q5, 'p0_out'), t(q6, 'p0_in'), 4, 25).wire(t(q5, 'p1_out'), t(q6, 'p1_in'), 4, 25);
+  b.wire(t(q6, 'p0_out'), t(q7, 'p0_in'), 4, 0.2).wire(t(q6, 'p1_out'), t(q7, 'p1_in'), 4, 0.2);
+  b.wire(t(q7, 'p0_out'), t(q8, 'p0_in'), 4, 0.2).wire(t(q7, 'p1_out'), t(q8, 'p1_in'), 4, 0.2);
+  bridge(b, [q8, q9], 4);
+  b.wire(t(earth, 'PE'), t(xpe1, 't0'), 10, 5);
+  b.wire(t(xpe1, 't5'), t(xpe2, 't0'), 4, 25);
+  line(b, q3, u1, xpe1, 1, 1.5);
+  line(b, q4, u2, xpe1, 2, 2.5);
+  line(b, q8, u3, xpe2, 1, 1.5);
+  line(b, q9, u4, xpe2, 2, 2.5);
+  return b.project;
+}
+
 export const DEMO_PROJECTS: DemoProject[] = [
   {
     id: 'demo-monolocale',
@@ -274,6 +332,12 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Abitazione con fornitura da 6 kW',
     summary: 'Generale 2P C32 e un magnetotermico differenziale (RCBO) 30 mA per ciascuno dei sette circuiti.',
     build: abitazione,
+  },
+  {
+    id: 'demo-villetta',
+    name: 'Villetta con sottoquadro taverna',
+    summary: 'Due quadri: generale con linea 2P C20 verso un sottoquadro a 25 m con sezionatore, differenziale 30 mA e due circuiti.',
+    build: villetta,
   },
   {
     id: 'demo-trifase',
