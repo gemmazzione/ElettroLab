@@ -1,0 +1,126 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: dark;
+  font-family: ui-sans-serif, system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #020617;
+}
+
+/* ---------------------------------------------------------- canvas */
+.react-flow {
+  --xy-background-color: #0b1120;
+}
+
+.react-flow__node {
+  cursor: grab;
+}
+
+.react-flow__node.dragging {
+  cursor: grabbing;
+}
+
+.node-selected {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* morsetti */
+.react-flow__handle.terminal {
+  width: 11px;
+  height: 11px;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 9999px;
+  background: rgba(15, 23, 42, 0.15);
+  border-width: 2px;
+  border-style: solid;
+  transform: translate(-50%, -50%);
+  opacity: 0.75;
+  transition: transform 0.12s, opacity 0.12s;
+}
+
+.react-flow__handle.terminal:hover,
+.react-flow__handle.terminal.connectingfrom,
+.react-flow__handle.terminal.connectingto {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.45);
+  background: rgba(56, 189, 248, 0.35);
+}
+
+.react-flow__handle.terminal.terminal-wiring {
+  opacity: 1;
+  width: 13px;
+  height: 13px;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.35);
+}
+
+.react-flow__handle.terminal.terminal-live {
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.55), 0 0 8px rgba(239, 68, 68, 0.7);
+}
+
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  filter: none;
+}
+
+.react-flow__connection-path {
+  stroke: #38bdf8;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 4;
+}
+
+.wire-flow {
+  animation: wire-flow 1.2s linear infinite;
+}
+
+@keyframes wire-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire-flow {
+    animation: none;
+  }
+}
+
+.lever-knob {
+  transition: y 0.12s ease-out;
+}
+
+.react-flow__controls button {
+  background: #1e293b;
+  border-color: #334155;
+  fill: #cbd5e1;
+}
+
+.react-flow__minimap {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+.react-flow__handle.terminal.probe-red {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.5);
+  opacity: 1;
+}
+
+.react-flow__handle.terminal.probe-black {
+  background: #0b0b0b;
+  box-shadow: 0 0 0 3px rgba(226, 232, 240, 0.7);
+  opacity: 1;
+}

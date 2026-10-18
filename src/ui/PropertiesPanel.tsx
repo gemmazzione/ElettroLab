@@ -1,0 +1,622 @@
+import { AlertOctagon, AlertTriangle, Info, Minus, Plus, Trash2 } from 'lucide-react';
+import { abs, sub } from '../engine/complex';
+import { wireResistance } from '../engine/netlist';
+import { deviceCurrent } from '../engine/simulate';
+import { issuesFor, type Issue } from '../graph/erc';
+import { analyzeCircuits } from '../graph/netGraph';
+import {
+  catalogItem,
+  CONTRACT_KW,
+  CURVES,
+  ICN_VALUES,
+  IDN_VALUES,
+  IN_VALUES_MCB,
+  IN_VALUES_RCBO,
+  IN_VALUES_RCD,
+  IN_VALUES_SWITCH,
+  KIND_LABEL,
+  RCD_TYPES,
+} from '../model/catalog';
+import { CONDUCTOR_LABEL, WIRE_COLOR_HEX, WIRE_COLOR_LABEL } from '../model/constants';
+import { PANEL_SIZES } from '../model/geometry';
+import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId } from '../model/terminals';
+import { WIRE_SECTIONS, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
+import { useStore } from '../store/projectStore';
+import { InstallSection } from './InstallSection';
+import { InfoTab } from './InfoPanel';
+import { ExercisePanel } from './Academy';
+import { NormPanel } from './NormPanel';
+import { ActiveFaults, LoadFaultCurrents, LoadFaultSection, ProtectionSection, WireFaultToggle } from './FaultPanels';
+import { Field, NumberInput, Row, Section, Select, TextInput } from './fields';
+import { fmt, fmtCurrent, fmtPower } from './format';
+
+const CONDUCTORS: Conductor[] = ['L1', 'L2', 'L3', 'N', 'PE'];
+const COLORS: WireColor[] = ['marrone', 'nero', 'grigio', 'blu', 'giallo-verde'];
+const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'generico'];
+
+export function SeverityIcon({ s, size = 14 }: { s: Issue['severity']; size?: number }) {
+  if (s === 'errore') return <AlertOctagon size={size} className="shrink-0 text-red-400" />;
+  if (s === 'attenzione') return <AlertTriangle size={size} className="shrink-0 text-amber-400" />;
+  return <Info size={size} className="shrink-0 text-sky-400" />;
+}
+
+export function IssueCard({ issue, onClick }: { issue: Issue; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="block w-full rounded-md border border-slate-800 bg-slate-950/60 p-2.5 text-left hover:border-slate-600"
+    >
+      <div className="flex items-start gap-2">
+        <SeverityIcon s={issue.severity} />
+        <div className="min-w-0">
+          <div className="text-[12px] font-semibold text-slate-100">{issue.title}</div>
+          <div className="mt-0.5 text-[11.5px] text-slate-300">{issue.message}</div>
+          <div className="mt-1 text-[11px] leading-snug text-slate-500">{issue.explanation}</div>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// ------------------------------------------------------------------ progetto e quadro
+
+function ProjectProps() {
+  const project = useStore((s) => s.project);
+  const setPanel = useStore((s) => s.setPanel);
+  const rename = useStore((s) => s.renameProject);
+  const preset = useStore((s) => s.wirePreset);
+  const setPreset = useStore((s) => s.setWirePreset);
+  const total = project.panel.modulesPerRow * project.panel.rows;
+  const used = project.components.reduce((n, c) => n + (c.rail ? catalogItem(c.catalogId).modules : 0), 0);
+  const sizes = PANEL_SIZES.map((s) => s.modules);
+  return (
+    <>
+      <Section title="Progetto">
+        <Field label="Nome">
+          <TextInput value={project.name} onChange={rename} />
+        </Field>
+        {project.description && <p className="text-[11.5px] leading-snug text-slate-400">{project.description}</p>}
+      </Section>
+      <Section title="Quadro elettrico">
+        <Field label="Formato standard">
+          <Select
+            value={sizes.includes(total) ? total : sizes[0]!}
+            options={sizes}
+            format={(m) => {
+              const c = PANEL_SIZES.find((s) => s.modules === m)!.config;
+              return `${m} moduli (${c.rows} × ${c.modulesPerRow})`;
+            }}
+            onChange={(m) => setPanel(PANEL_SIZES.find((s) => s.modules === m)!.config)}
+          />
+        </Field>
+        <div className="flex items-center justify-between text-[12px]">
+          <span className="text-slate-400">Guide DIN</span>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
+              disabled={project.panel.rows <= 1}
+              onClick={() => setPanel({ ...project.panel, rows: project.panel.rows - 1 })}
+              title="Rimuovi l'ultima guida"
+            >
+              <Minus size={12} />
+            </button>
+            <span className="w-4 text-center font-mono">{project.panel.rows}</span>
+            <button
+              className="rounded border border-slate-700 p-1 hover:bg-slate-800 disabled:opacity-40"
+              disabled={project.panel.rows >= 6}
+              onClick={() => setPanel({ ...project.panel, rows: project.panel.rows + 1 })}
+              title="Aggiungi una guida"
+            >
+              <Plus size={12} />
+            </button>
+          </div>
+        </div>
+        <Field label="Moduli per guida">
+          <Select value={project.panel.modulesPerRow} options={[12, 18, 24]} onChange={(m) => setPanel({ ...project.panel, modulesPerRow: m })} />
+        </Field>
+        <Row k="Moduli occupati" v={`${used} / ${total}`} />
+      </Section>
+      <ActiveFaults />
+      <Section title="Nuovi conduttori">
+        <Field label="Identificazione" hint="Automatica: dedotta dalla funzione dei morsetti collegati">
+          <Select
+            value={preset.conductor}
+            options={['auto', ...CONDUCTORS] as const}
+            format={(c) => (c === 'auto' ? 'Automatica (dai morsetti)' : CONDUCTOR_LABEL[c])}
+            onChange={(c) => setPreset({ conductor: c })}
+          />
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Sezione">
+            <Select value={preset.section} options={WIRE_SECTIONS} format={(s) => `${fmt(s, s % 1 ? 1 : 0)} mm²`} onChange={(s) => setPreset({ section: s })} />
+          </Field>
+          <Field label="Lunghezza">
+            <NumberInput value={preset.length} min={0.01} max={200} step={0.05} suffix="m" onChange={(l) => setPreset({ length: l })} />
+          </Field>
+        </div>
+        <p className="text-[11px] leading-snug text-slate-500">
+          Per collegare: trascina da un morsetto a un altro, oppure clicca un morsetto e poi il secondo. Seleziona un componente o un conduttore per modificarlo; <kbd className="rounded bg-slate-800 px-1">Canc</kbd> lo elimina.
+        </p>
+      </Section>
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ componente
+
+function ComponentProps({ comp }: { comp: ComponentInstance }) {
+  const update = useStore((s) => s.updateParams);
+  const rename = useStore((s) => s.renameComponent);
+  const toggle = useStore((s) => s.toggleComponent);
+  const remove = useStore((s) => s.removeComponent);
+  const select = useStore((s) => s.select);
+  const setLoadNeutral = useStore((s) => s.setLoadNeutral);
+  const project = useStore((s) => s.project);
+  const issues = useStore((s) => s.issues);
+  const result = useStore((s) => s.result);
+  const running = useStore((s) => s.running);
+  const item = catalogItem(comp.catalogId);
+  const pr = comp.params;
+  const own = issuesFor(issues, comp.id);
+
+  const circuits = analyzeCircuits(project);
+  const fed = circuits.filter((c) => c.lDevices.includes(comp.id) || c.nDevices.includes(comp.id));
+  const loadName = (id: string) => {
+    const c = project.components.find((x) => x.id === id);
+    return c && c.params.kind === 'load' ? `${c.label} ${c.params.p.name}` : id;
+  };
+
+  return (
+    <>
+      <Section title={KIND_LABEL[pr.kind]}>
+        <div className="text-[12px] text-slate-300">{item.name}</div>
+        <Field label="Sigla">
+          <TextInput value={comp.label} onChange={(v) => rename(comp.id, v)} />
+        </Field>
+        {item.mount === 'din' && <Row k="Ingombro" v={`${item.modules} ${item.modules === 1 ? "modulo" : "moduli"} DIN`} />}
+        {isSwitchingDevice(pr.kind) && (
+          <>
+            <Row k="Numero di poli" v={'poles' in pr.p ? pr.p.poles : '—'} />
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] text-slate-400">Stato contatti</span>
+              <button
+                onClick={() => toggle(comp.id)}
+                className={`rounded-md px-3 py-1 text-[12px] font-semibold ${comp.closed ? 'bg-red-600/20 text-red-300 ring-1 ring-red-500/50' : 'bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-500/40'}`}
+              >
+                {comp.closed ? 'CHIUSO (I) — apri' : 'APERTO (O) — chiudi'}
+              </button>
+            </div>
+          </>
+        )}
+        <p className="text-[11px] leading-snug text-slate-500">{item.description}</p>
+      </Section>
+
+      <Section title="Caratteristiche">
+        {pr.kind === 'mcb' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Corrente nominale In">
+                <Select value={pr.p.in} options={IN_VALUES_MCB} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, in: v } })} />
+              </Field>
+              <Field label="Curva d'intervento" hint="B: 3–5 In · C: 5–10 In · D: 10–20 In (soglia magnetica)">
+                <Select value={pr.p.curve} options={CURVES} onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, curve: v } })} />
+              </Field>
+            </div>
+            <Field label="Potere di interruzione Icn (CEI EN 60898-1)">
+              <Select value={pr.p.icn} options={ICN_VALUES} format={(v) => `${fmt(v, v % 1 ? 1 : 0)} kA`} onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, icn: v } })} />
+            </Field>
+          </>
+        )}
+        {pr.kind === 'rcbo' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Corrente nominale In">
+                <Select value={pr.p.in} options={IN_VALUES_RCBO} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, in: v } })} />
+              </Field>
+              <Field label="Curva">
+                <Select value={pr.p.curve} options={CURVES} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, curve: v } })} />
+              </Field>
+              <Field label="Sensibilità IΔn">
+                <Select value={pr.p.idn} options={IDN_VALUES} format={(v) => `${v} mA`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, idn: v } })} />
+              </Field>
+              <Field label="Tipo differenziale">
+                <Select value={pr.p.rcdType} options={RCD_TYPES} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, rcdType: v } })} />
+              </Field>
+            </div>
+            <Field label="Potere di interruzione Icn">
+              <Select value={pr.p.icn} options={ICN_VALUES} format={(v) => `${fmt(v, v % 1 ? 1 : 0)} kA`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, icn: v } })} />
+            </Field>
+          </>
+        )}
+        {pr.kind === 'rcd' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Corrente nominale In">
+                <Select value={pr.p.in} options={IN_VALUES_RCD} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'rcd', p: { ...pr.p, in: v } })} />
+              </Field>
+              <Field label="Sensibilità IΔn">
+                <Select
+                  value={pr.p.idn}
+                  options={IDN_VALUES}
+                  format={(v) => `${v} mA`}
+                  onChange={(v) => update(comp.id, { kind: 'rcd', p: { ...pr.p, idn: v, selective: v >= 100 ? pr.p.selective : false } })}
+                />
+              </Field>
+              <Field label="Tipo" hint="AC: correnti alternate · A: anche pulsanti unidirezionali · F: anche frequenze miste · B: anche continue">
+                <Select value={pr.p.rcdType} options={RCD_TYPES} onChange={(v) => update(comp.id, { kind: 'rcd', p: { ...pr.p, rcdType: v } })} />
+              </Field>
+            </div>
+            <label className={`flex items-center gap-2 text-[12px] ${pr.p.idn < 100 ? 'text-slate-600' : 'text-slate-300'}`} title="Disponibile solo per IΔn ≥ 100 mA">
+              <input
+                type="checkbox"
+                disabled={pr.p.idn < 100}
+                checked={pr.p.selective}
+                onChange={(e) => update(comp.id, { kind: 'rcd', p: { ...pr.p, selective: e.target.checked } })}
+              />
+              Selettivo (S) — ritardato
+            </label>
+          </>
+        )}
+        {pr.kind === 'switch' && (
+          <Field label="Corrente nominale In">
+            <Select value={pr.p.in} options={IN_VALUES_SWITCH} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'switch', p: { ...pr.p, in: v } })} />
+          </Field>
+        )}
+        {pr.kind === 'bar' && (
+          <>
+            <Row k="Funzione" v={pr.p.barFn} />
+            <Row k="Vie" v={pr.p.ways} />
+          </>
+        )}
+        {pr.kind === 'supply' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tensione U0">
+                <NumberInput value={pr.p.voltage} min={180} max={260} suffix="V" onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, voltage: v } })} />
+              </Field>
+              <Field label="Potenza impegnata">
+                <Select value={pr.p.contractKW} options={CONTRACT_KW} format={(v) => `${fmt(v, v % 1 ? 1 : 0)} kW`} onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, contractKW: v } })} />
+              </Field>
+              <Field label="R anello di rete" hint="Resistenza fase + neutro della rete a monte del contatore">
+                <NumberInput value={pr.p.rNetwork} min={0.001} max={5} step={0.01} suffix="Ω" onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, rNetwork: v } })} />
+              </Field>
+              <Field label="X anello di rete">
+                <NumberInput value={pr.p.xNetwork} min={0} max={5} step={0.01} suffix="Ω" onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, xNetwork: v } })} />
+              </Field>
+            </div>
+            <Row k="Sistema" v={pr.p.phases === 3 ? 'Trifase 400/230 V con neutro' : 'Monofase 230 V'} mono={false} />
+            <Field label="RB — terra del neutro in cabina" hint="Sistema TT: il neutro del trasformatore è collegato a terra">
+              <NumberInput value={pr.p.rb} min={0.01} max={100} step={0.1} suffix="Ω" onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, rb: v } })} />
+            </Field>
+            <Row k="Icc presunta ai morsetti" v={`${fmt(pr.p.voltage / Math.hypot(pr.p.rNetwork, pr.p.xNetwork) / 1000, 2)} kA`} />
+            <p className="text-[11px] text-slate-500">Stima con impedenza della sola rete: U0 / |Z anello|. Non sostituisce il valore dichiarato dal distributore.</p>
+          </>
+        )}
+        {pr.kind === 'earth' && (
+          <Field label="RA — resistenza del dispersore" hint="Valore da misurare sul campo con strumento idoneo">
+            <NumberInput value={pr.p.ra} min={0.1} max={10000} step={1} suffix="Ω" onChange={(v) => update(comp.id, { kind: 'earth', p: { ...pr.p, ra: v } })} />
+          </Field>
+        )}
+        {pr.kind === 'earth' && (
+          <label className="flex items-center gap-2 text-[12px] text-slate-300" title="Senza misura il coordinamento RE × IΔn ≤ UL resta «verifica sul campo necessaria»">
+            <input type="checkbox" checked={!!pr.p.raMeasured} onChange={(e) => update(comp.id, { kind: 'earth', p: { ...pr.p, raMeasured: e.target.checked } })} />
+            Valore misurato sul campo (non di progetto)
+          </label>
+        )}
+        {pr.kind === 'load' && (
+          <>
+            <Field label="Nome circuito">
+              <TextInput value={pr.p.name} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, name: v } })} />
+            </Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tipologia">
+                <Select value={pr.p.category} options={LOAD_CATS} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, category: v } })} />
+              </Field>
+              <Field label="Potenza nominale">
+                <NumberInput value={pr.p.powerW} min={0} max={20000} step={50} suffix="W" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, powerW: v } })} />
+              </Field>
+              <Field label="Lunghezza linea">
+                <NumberInput value={pr.p.cableLength} min={0.1} max={500} step={1} suffix="m" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cableLength: v } })} />
+              </Field>
+              <Field label="Sezione linea">
+                <Select value={pr.p.cableSection} options={WIRE_SECTIONS} format={(s) => `${fmt(s, s % 1 ? 1 : 0)} mm²`} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cableSection: v } })} />
+              </Field>
+            </div>
+            <label className="flex items-center gap-2 text-[12px] text-slate-300">
+              <input type="checkbox" checked={pr.p.on} onChange={(e) => update(comp.id, { kind: 'load', p: { ...pr.p, on: e.target.checked } })} />
+              Utilizzatore acceso
+            </label>
+            {pr.p.phases === 3 && (
+              <label className="flex items-center gap-2 text-[12px] text-slate-300" title="Aggiunge o toglie il morsetto N del carico">
+                <input type="checkbox" checked={!!pr.p.withNeutral} onChange={(e) => setLoadNeutral(comp.id, e.target.checked)} />
+                Centro stella collegato al neutro
+              </label>
+            )}
+            <Row
+              k={pr.p.phases === 3 ? 'Resistenza per ramo della stella' : 'Resistenza equivalente'}
+              v={pr.p.powerW > 0 ? `${fmt((230 * 230) / (pr.p.powerW / (pr.p.phases === 3 ? 3 : 1)), 2)} Ω` : '—'}
+            />
+            <Row k="R di un conduttore di linea" v={`${fmt(wireResistance(pr.p.cableLength, pr.p.cableSection) * 1000, 1)} mΩ`} />
+            <p className="text-[11px] text-slate-500">Metodo di posa e portata Iz saranno richiesti dalle verifiche di dimensionamento (Fase 3).</p>
+          </>
+        )}
+      </Section>
+
+      {running && result && result.ok && <LiveValues comp={comp} />}
+      <ProtectionSection comp={comp} />
+      {pr.kind === 'load' && (
+        <>
+          <InstallSection comp={comp} />
+          <LoadFaultSection comp={comp} />
+          <LoadFaultCurrents comp={comp} />
+        </>
+      )}
+
+      {(isSwitchingDevice(pr.kind) || pr.kind === 'load') && (
+        <Section title="Circuito associato">
+          {pr.kind === 'load' ? (
+            (() => {
+              const c = circuits.find((x) => x.loadId === comp.id);
+              if (!c || c.lDevices.length === 0) return <p className="text-[12px] text-slate-500">Nessun dispositivo a monte collegato.</p>;
+              return (
+                <div className="flex flex-wrap items-center gap-1 text-[12px]">
+                  <span className="text-slate-500">Fornitura →</span>
+                  {c.lDevices.map((d) => {
+                    const dev = project.components.find((x) => x.id === d)!;
+                    return (
+                      <button key={d} className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-sky-300 hover:bg-slate-700" onClick={() => select({ type: 'component', id: d })}>
+                        {dev.label}
+                      </button>
+                    );
+                  })}
+                  <span className="text-slate-500">→ {comp.label}</span>
+                </div>
+              );
+            })()
+          ) : fed.length === 0 ? (
+            <p className="text-[12px] text-slate-500">Nessun utilizzatore alimentato attraverso questo dispositivo.</p>
+          ) : (
+            <ul className="space-y-0.5 text-[12px]">
+              {fed.map((c) => (
+                <li key={c.loadId}>
+                  <button className="text-sky-300 hover:underline" onClick={() => select({ type: 'component', id: c.loadId })}>
+                    {loadName(c.loadId)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
+
+      <Section title={`Problemi rilevati (${own.length})`}>
+        {own.length === 0 ? <p className="text-[12px] text-slate-500">Nessun problema di cablaggio rilevato su questo componente.</p> : own.map((i) => <IssueCard key={i.id} issue={i} />)}
+      </Section>
+
+      <div className="p-4">
+        <button onClick={() => remove(comp.id)} className="flex w-full items-center justify-center gap-2 rounded-md border border-red-900/70 py-1.5 text-[12px] text-red-300 hover:bg-red-950/50">
+          <Trash2 size={13} /> Elimina componente e conduttori collegati
+        </button>
+      </div>
+    </>
+  );
+}
+
+function LiveValues({ comp }: { comp: ComponentInstance }) {
+  const result = useStore((s) => s.result);
+  if (!result || !result.ok) return null;
+  const pr = comp.params;
+  const terms = getTerminals(comp);
+  return (
+    <Section title="Valori simulati">
+      {isSwitchingDevice(pr.kind) && (
+        <>
+          {getPoles(comp).map((p) => {
+            const i = result.poleI.get(comp.id)?.[p.index];
+            return <Row key={p.index} k={`Corrente polo ${p.fn}`} v={fmtCurrent(i ? abs(i) : 0)} />;
+          })}
+          {'in' in pr.p && (
+            <Row k="Carico rispetto a In" v={`${fmt((deviceCurrent(result, comp.id) / pr.p.in) * 100, 0)} %`} />
+          )}
+          {isResidualDevice(pr.kind) && <Row k="Corrente differenziale IΔ" v={`${fmt((result.residual.get(comp.id) ?? 0) * 1000, 2)} mA`} />}
+        </>
+      )}
+      {pr.kind === 'load' &&
+        (() => {
+          const r = result.loads.get(comp.id);
+          if (!r) return null;
+          return (
+            <>
+              {r.phaseV ? (
+                r.phaseV.map((v, k) => <Row key={k} k={`Ramo L${k + 1}`} v={`${fmt(v, 1)} V · ${fmtCurrent(r.phaseI![k]!)}`} />)
+              ) : (
+                <>
+                  <Row k="Tensione ai capi" v={`${fmt(r.v, 1)} V`} />
+                  <Row k="Corrente" v={fmtCurrent(r.i)} />
+                </>
+              )}
+              <Row k="Potenza attiva" v={fmtPower(r.p)} />
+              <Row k="Caduta di tensione" v={r.energized ? `${fmt(r.dropPct, 2)} %` : '—'} />
+              <Row k="Tensione della massa verso terra" v={(() => { const tv = result.touchV.get(comp.id); return tv === null || tv === undefined ? '— (massa isolata)' : `${fmt(tv, 1)} V`; })()} />
+            </>
+          );
+        })()}
+      {pr.kind === 'supply' && (
+        <>
+          {result.supply.phases.map((ph) => (
+            <Row key={ph.phase} k={result.supply.phases.length === 3 ? `L${ph.phase}-N` : 'Tensione L-N · corrente'} v={`${fmt(ph.v, 1)} V · ${fmtCurrent(ph.i)}`} />
+          ))}
+          {result.supply.lineV.length === 3 && <Row k="U12 · U23 · U31" v={result.supply.lineV.map((u) => fmt(u, 0)).join(' · ') + ' V'} />}
+          <Row k="Corrente nel neutro" v={fmtCurrent(result.supply.iN)} />
+          <Row k="Potenza attiva" v={fmtPower(result.supply.p)} />
+          <Row k="Fattore di potenza" v={fmt(result.supply.pf, 3)} />
+        </>
+      )}
+      <div className="pt-1 text-[11px] text-slate-500">Tensione dei morsetti verso terra</div>
+      <div className="grid grid-cols-3 gap-1">
+        {terms.map((t) => {
+          const v = result.terminalV.get(t.id);
+          return (
+            <div key={t.id} className="rounded bg-slate-950/70 px-1.5 py-1 text-center font-mono text-[10.5px]">
+              <div className="text-slate-500">{t.label}</div>
+              <div className={v && abs(v) > 50 ? 'text-red-300' : 'text-slate-300'}>{v === null || v === undefined ? '—' : `${fmt(abs(v), 1)} V`}</div>
+            </div>
+          );
+        })}
+      </div>
+    </Section>
+  );
+}
+
+// ------------------------------------------------------------------ conduttore
+
+function WireProps({ wire }: { wire: Wire }) {
+  const project = useStore((s) => s.project);
+  const update = useStore((s) => s.updateWire);
+  const remove = useStore((s) => s.removeWire);
+  const allIssues = useStore((s) => s.issues);
+  const issues = allIssues.filter((i) => i.wireIds.includes(wire.id));
+  const result = useStore((s) => s.result);
+  const name = (tid: string) => {
+    const { componentId, key } = parseTerminalId(tid);
+    const c = project.components.find((x) => x.id === componentId);
+    const t = c ? getTerminals(c).find((x) => x.key === key) : undefined;
+    return c && t ? `${c.label} · morsetto ${t.label} (${t.fn})` : tid;
+  };
+  const r = wireResistance(wire.length, wire.section);
+  const i = result && result.ok ? result.wireI.get(wire.id) : undefined;
+  const va = result && result.ok ? result.terminalV.get(wire.from) : undefined;
+  const vb = result && result.ok ? result.terminalV.get(wire.to) : undefined;
+  return (
+    <>
+      <Section title="Conduttore">
+        <Row k="Da" v={name(wire.from)} mono={false} />
+        <Row k="A" v={name(wire.to)} mono={false} />
+        <Field label="Identificazione">
+          <Select value={wire.conductor} options={CONDUCTORS} format={(c) => CONDUCTOR_LABEL[c]} onChange={(c) => update(wire.id, { conductor: c })} />
+        </Field>
+        <Field label="Colore isolante">
+          <div className="flex flex-wrap gap-1.5">
+            {COLORS.map((c) => (
+              <button
+                key={c}
+                title={WIRE_COLOR_LABEL[c]}
+                onClick={() => update(wire.id, { color: c })}
+                className={`h-6 w-6 rounded-full ring-2 ${wire.color === c ? 'ring-sky-400' : 'ring-slate-700'}`}
+                style={{
+                  background: c === 'giallo-verde' ? 'repeating-linear-gradient(45deg,#22a447 0 5px,#facc15 5px 10px)' : WIRE_COLOR_HEX[c],
+                }}
+              />
+            ))}
+          </div>
+        </Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Sezione">
+            <Select value={wire.section} options={WIRE_SECTIONS} format={(s) => `${fmt(s, s % 1 ? 1 : 0)} mm²`} onChange={(s) => update(wire.id, { section: s })} />
+          </Field>
+          <Field label="Lunghezza">
+            <NumberInput value={wire.length} min={0.01} max={500} step={0.05} suffix="m" onChange={(l) => update(wire.id, { length: l })} />
+          </Field>
+        </div>
+        <Row k="Resistenza R = ρL/S" v={`${fmt(r * 1000, 2)} mΩ`} />
+      </Section>
+      {result && result.ok && (
+        <Section title="Valori simulati">
+          <Row k="Corrente" v={fmtCurrent(i ? abs(i) : 0)} />
+          <Row k="Caduta sul conduttore" v={va && vb ? (abs(sub(va, vb)) >= 1 ? `${fmt(abs(sub(va, vb)), 1)} V` : `${fmt(abs(sub(va, vb)) * 1000, 1)} mV`) : '—'} />
+          <Row k="Potenza dissipata" v={i ? `${fmt(abs(i) ** 2 * r, 2)} W` : '—'} />
+        </Section>
+      )}
+      <WireFaultToggle wire={wire} />
+      <Section title={`Problemi rilevati (${issues.length})`}>
+        {issues.length === 0 ? <p className="text-[12px] text-slate-500">Nessun problema rilevato su questo conduttore.</p> : issues.map((x) => <IssueCard key={x.id} issue={x} />)}
+      </Section>
+      <div className="p-4">
+        <button onClick={() => remove(wire.id)} className="flex w-full items-center justify-center gap-2 rounded-md border border-red-900/70 py-1.5 text-[12px] text-red-300 hover:bg-red-950/50">
+          <Trash2 size={13} /> Elimina conduttore
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ------------------------------------------------------------------ verifiche
+
+function ChecksTab() {
+  const issues = useStore((s) => s.issues);
+  const select = useStore((s) => s.select);
+  const setTab = useStore((s) => s.setRightTab);
+  const count = (s: Issue['severity']) => issues.filter((i) => i.severity === s).length;
+  const order: Issue['severity'][] = ['errore', 'attenzione', 'info'];
+  const sorted = [...issues].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity));
+  return (
+    <>
+      <Section title="Verifiche di cablaggio">
+        <div className="grid grid-cols-3 gap-2 text-center">
+          {order.map((s) => (
+            <div key={s} className="rounded-md bg-slate-950/70 py-2">
+              <div className={`font-mono text-lg ${s === 'errore' ? 'text-red-400' : s === 'attenzione' ? 'text-amber-400' : 'text-sky-400'}`}>{count(s)}</div>
+              <div className="text-[10.5px] capitalize text-slate-500">{s === 'errore' ? 'Errori' : s === 'attenzione' ? 'Attenzioni' : 'Note'}</div>
+            </div>
+          ))}
+        </div>
+        <p className="text-[11px] leading-snug text-slate-500">
+          Controlli topologici aggiornati a ogni modifica: morsetti liberi, fase/neutro, neutri tra gruppi differenziali, continuità del PE, identificazione dei conduttori.
+        </p>
+      </Section>
+      <Section title="Verifica normativa">
+        <p className="text-[11.5px] leading-snug text-slate-400">
+          Questi sono controlli di cablaggio. Le verifiche secondo la CEI 64-8 sono nella scheda <b className="text-slate-200">Norma</b>.
+        </p>
+      </Section>
+      <div className="space-y-2 p-4">
+        {sorted.length === 0 && <p className="text-[12px] text-emerald-400">Nessun problema di cablaggio rilevato dai controlli disponibili.</p>}
+        {sorted.map((i) => (
+          <IssueCard
+            key={i.id}
+            issue={i}
+            onClick={() => {
+              if (i.wireIds[0]) select({ type: 'wire', id: i.wireIds[0] });
+              else if (i.componentIds[0]) select({ type: 'component', id: i.componentIds[0] });
+              else return;
+              setTab('props');
+            }}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
+const TAB_LABEL = { props: 'Proprietà', checks: 'Cablaggio', norm: 'Norma', info: 'Info', exercise: 'Esercizio' } as const;
+
+export function PropertiesPanel() {
+  const selection = useStore((s) => s.selection);
+  const project = useStore((s) => s.project);
+  const tab = useStore((s) => s.rightTab);
+  const exerciseActive = useStore((s) => !!s.exercise);
+  const setTab = useStore((s) => s.setRightTab);
+  const errors = useStore((s) => s.issues.filter((i) => i.severity === 'errore').length);
+  const comp = selection?.type === 'component' ? project.components.find((c) => c.id === selection.id) : undefined;
+  const wire = selection?.type === 'wire' ? project.wires.find((w) => w.id === selection.id) : undefined;
+
+  return (
+    <aside className="flex h-full w-[330px] shrink-0 flex-col border-l border-slate-800 bg-slate-900/80">
+      <div className="flex border-b border-slate-800 text-[12px]">
+        {(exerciseActive ? (['exercise', 'props', 'checks', 'norm', 'info'] as const) : (['props', 'checks', 'norm', 'info'] as const)).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-2.5 text-[11.5px] font-semibold ${tab === t ? 'border-b-2 border-sky-400 text-slate-100' : 'text-slate-500 hover:text-slate-300'}`}
+          >
+            {TAB_LABEL[t]}
+            {t === 'checks' && errors > 0 && <span className="ml-1.5 rounded-full bg-red-500/20 px-1.5 font-mono text-[10px] text-red-300">{errors}</span>}
+          </button>
+        ))}
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {tab === 'exercise' && exerciseActive ? <ExercisePanel /> : tab === 'norm' ? <NormPanel /> : tab === 'info' ? <InfoTab /> : tab === 'checks' ? <ChecksTab /> : comp ? <ComponentProps key={comp.id} comp={comp} /> : wire ? <WireProps key={wire.id} wire={wire} /> : <ProjectProps />}
+      </div>
+    </aside>
+  );
+}
