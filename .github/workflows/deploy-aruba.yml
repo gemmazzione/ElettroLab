@@ -1,0 +1,65 @@
+# Pubblicazione automatica su hosting Aruba via FTP.
+# A ogni push su main: test → build → caricamento dei soli file cambiati.
+#
+# Configurazione (una volta sola) in GitHub → Settings → Secrets and variables → Actions:
+#   Secrets:   FTP_SERVER     es. ftp.tuodominio.it
+#              FTP_USERNAME   utente FTP di Aruba
+#              FTP_PASSWORD   password FTP di Aruba
+#   Variables: FTP_SERVER_DIR cartella di destinazione, con "/" finale,
+#                             es. /www.tuodominio.it/electrolab/
+#              FTP_PROTOCOL   facoltativa: ftps (predefinita, cifrato) oppure ftp
+# Senza questi dati il workflow esegue test e build ma salta la pubblicazione.
+
+name: Pubblica su Aruba
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-aruba
+  cancel-in-progress: true
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scarica il codice
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Installa le dipendenze
+        run: npm ci
+
+      - name: Test automatici
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Pubblica via FTP
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR }}
+        if: env.FTP_SERVER != '' && env.FTP_SERVER_DIR != ''
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ${{ vars.FTP_PROTOCOL || 'ftps' }}
+          local-dir: ./dist/
+          server-dir: ${{ vars.FTP_SERVER_DIR }}
+
+      - name: Pubblicazione non configurata
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_SERVER_DIR: ${{ vars.FTP_SERVER_DIR }}
+        if: env.FTP_SERVER == '' || env.FTP_SERVER_DIR == ''
+        run: echo "::notice::Build completata. Pubblicazione saltata - imposta i secrets FTP_SERVER, FTP_USERNAME, FTP_PASSWORD e la variabile FTP_SERVER_DIR."

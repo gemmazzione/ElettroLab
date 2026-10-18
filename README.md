@@ -41,3 +41,24 @@ Le approssimazioni del modello sono elencate in `src/model/constants.ts` (`MODEL
 **Aggiornamenti successivi:** quadri multipli (quadro generale e sottoquadri affiancati, ciascuno con le proprie guide; i progetti a quadro singolo vengono convertiti automaticamente), guasto «sovraccarico» (apparecchi aggiuntivi su una linea), registro eventi che riporta lo stato dopo gli interventi istantanei invece dei transitori di pochi millisecondi, progetto predefinito «Villetta con sottoquadro».
 
 Non implementati in questa versione (indicati con il lucchetto nel catalogo): SPD, contattori, relè, pettini, misuratori di energia, alimentatori.
+
+## Pubblicazione automatica su Aruba (FTP)
+
+A ogni `git push` su `main` la GitHub Action `.github/workflows/deploy-aruba.yml` esegue i test, compila l'app e carica via FTP **solo i file cambiati** sul tuo spazio Aruba. Se un test fallisce, non pubblica nulla.
+
+Configurazione, una volta sola, in GitHub → repository → **Settings → Secrets and variables → Actions**:
+
+| Tipo | Nome | Valore |
+|---|---|---|
+| Secret | `FTP_SERVER` | server FTP Aruba, es. `ftp.tuodominio.it` |
+| Secret | `FTP_USERNAME` | utente FTP (pannello Aruba → Hosting Linux → Gestione FTP) |
+| Secret | `FTP_PASSWORD` | password FTP |
+| Variable | `FTP_SERVER_DIR` | cartella di destinazione con `/` finale, es. `/www.tuodominio.it/electrolab/` (oppure `/www.tuodominio.it/` per la radice del sito) |
+| Variable (facoltativa) | `FTP_PROTOCOL` | `ftps` (predefinito, cifrato) oppure `ftp` se il piano non supporta FTPS |
+
+Poi avvia una pubblicazione da **Actions → Pubblica su Aruba → Run workflow** (o fai un push). Lo stato di ogni pubblicazione è visibile nella scheda Actions.
+
+Note:
+- L'app è statica (HTML, JS, CSS): non servono PHP né database. I percorsi sono relativi, quindi funziona sia nella radice del sito sia in una sottocartella.
+- Il file `public/.htaccess` (copiato nella build) imposta compressione e cache su Apache.
+- I progetti degli utenti restano salvati nel loro browser (memoria locale); usa «Esporta tutta la libreria» per trasferirli.
