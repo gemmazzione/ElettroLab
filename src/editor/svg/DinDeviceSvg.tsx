@@ -48,6 +48,7 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
 
 export function DinDeviceSvg({ comp, width: w, terminals, showLabels, onToggle, onTest, tripped }: Props) {
   if (comp.params.kind === 'bar') return <BarSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} />;
+  if (comp.params.kind === 'spd') return <SpdSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} tripped={tripped} />;
   const r = rating(comp);
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
   const leverW = Math.min(w - 12, 22 + (w > 40 ? 14 : 0));
@@ -171,6 +172,46 @@ function BarSvg({ comp, width: w, terminals, showLabels }: Omit<Props, 'onToggle
         ))}
       <text x={w / 2} y={49} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#e2e8f0" fontFamily="ui-monospace, monospace">
         {comp.label} · {fn}
+      </text>
+    </svg>
+  );
+}
+
+/** Scaricatore di sovratensione: finestra verde = efficiente, rossa = sovratensione oltre Uc. */
+function SpdSvg({ comp, width: w, terminals, showLabels, tripped }: Omit<Props, 'onToggle' | 'onTest'>) {
+  if (comp.params.kind !== 'spd') return null;
+  const p = comp.params.p;
+  return (
+    <svg width={w} height={DEVICE_H} viewBox={`0 0 ${w} ${DEVICE_H}`} className="block">
+      <rect x={0.5} y={0.5} width={w - 1} height={DEVICE_H - 1} rx={3} fill="#e8e6dc" stroke={BODY_EDGE} />
+      <rect x={1} y={1} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      <rect x={1} y={DEVICE_H - 28} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      {terminals.map((t) => (
+        <Screw key={t.key} x={t.x} y={t.side === 'top' ? TERMINAL_Y_TOP : TERMINAL_Y_BOTTOM} />
+      ))}
+      {showLabels &&
+        terminals.map((t) => (
+          <text key={`l-${t.key}`} x={t.x} y={t.side === 'top' ? 37 : DEVICE_H - 33} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#39414b" fontFamily="ui-monospace, monospace">
+            {t.label}
+          </text>
+        ))}
+      <text x={w / 2} y={54} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1f2630" fontFamily="ui-sans-serif, system-ui">
+        SPD
+      </text>
+      <text x={w / 2} y={65} textAnchor="middle" fontSize={7.5} fill="#4a525c" fontFamily="ui-sans-serif, system-ui">
+        Tipo {p.spdType}
+      </text>
+      {/* simbolo del varistore */}
+      <rect x={w / 2 - 7} y={70} width={14} height={24} fill="none" stroke="#1f2630" strokeWidth={1.4} />
+      <line x1={w / 2 - 11} y1={96} x2={w / 2 + 11} y2={68} stroke="#1f2630" strokeWidth={1.2} />
+      <text x={w / 2} y={106} textAnchor="middle" fontSize={7} fill="#4a525c" fontFamily="ui-sans-serif, system-ui">
+        Uc {p.uc} V
+      </text>
+      <rect x={w / 2 - 8} y={110} width={16} height={6} rx={1} fill={tripped ? '#dc2626' : '#16a34a'} stroke="#3a4048" strokeWidth={0.5}>
+        <title>{tripped ? 'Sovratensione oltre Uc' : 'Efficiente'}</title>
+      </rect>
+      <text x={w / 2} y={127} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
+        {comp.label}
       </text>
     </svg>
   );

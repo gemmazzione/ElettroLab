@@ -1,5 +1,5 @@
 import type { NodeProps } from '@xyflow/react';
-import { Activity, CookingPot, Droplets, Lightbulb, Plug, Power, Snowflake, Zap } from 'lucide-react';
+import { Activity, AirVent, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { deviceCurrent } from '../../engine/simulate';
 import { TERMINAL_Y_BOTTOM, TERMINAL_Y_TOP } from '../../model/geometry';
@@ -52,6 +52,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const running = useStore((s) => s.running);
   const issue = useHasIssue(id);
   const tripped = useStore((s) => s.prot[id]?.tripped);
+  const spdOver = useStore((s) => !!(s.result && s.result.ok && s.result.alerts.some((a) => a.code === 'SPD_TOV' && a.componentIds.includes(id))));
   const heat = useStore((s) => s.prot[id]?.heat ?? 0);
   const testRcd = useStore((s) => s.testRcd);
   if (!comp) return null;
@@ -59,7 +60,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
   const heatPct = Math.min(100, (heat / H_TRIP) * 100);
   const terms = getTerminals(comp);
-  const hasLever = comp.params.kind !== 'bar';
+  const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd';
   return (
     <div className={`relative rounded-[3px] ${selected ? 'node-selected' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
       <IssueDot level={issue} />
@@ -68,7 +69,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         width={w}
         terminals={terms}
         showLabels={showLabels}
-        tripped={!!tripped}
+        tripped={!!tripped || spdOver}
         onToggle={hasLever ? () => toggle(id) : undefined}
         onTest={residual ? () => testRcd(id) : undefined}
       />
@@ -195,7 +196,9 @@ const LOAD_ICON: Record<LoadCategory, typeof Plug> = {
   prese: Plug,
   cucina: CookingPot,
   scaldabagno: Droplets,
-  climatizzazione: Snowflake,
+  climatizzazione: AirVent,
+  refrigerazione: Refrigerator,
+  riscaldamento: Flame,
   generico: Activity,
 };
 
@@ -243,6 +246,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
           <div className="truncate text-[11px] font-semibold text-slate-100">{p.name}</div>
           <div className="font-mono text-[10px] text-slate-400">
             {comp.label} · {p.phases === 3 ? '3F · ' : ''}
+            {(p.cosPhi ?? 1) < 1 ? `cos φ ${fmt(p.cosPhi ?? 1, 2)} · ` : ''}
             {fmtPower(p.powerW)} · {p.cableSection} mm² · {p.cableLength} m
           </div>
         </div>

@@ -25,6 +25,7 @@ export type ComponentKind =
   | 'rcd'
   | 'rcbo'
   | 'bar'
+  | 'spd'
   | 'load';
 
 export type MountType = 'din' | 'free';
@@ -37,6 +38,8 @@ export type Phase = 1 | 2 | 3;
 export type TripCurve = 'B' | 'C' | 'D';
 export type RcdType = 'AC' | 'A' | 'F' | 'B';
 export type LoadCategory =
+  | 'refrigerazione'
+  | 'riscaldamento'
   | 'illuminazione'
   | 'prese'
   | 'cucina'
@@ -112,6 +115,20 @@ export interface RcboParams {
   rcdType: RcdType;
 }
 
+/** Scaricatore di sovratensione (SPD) */
+export interface SpdParams {
+  /** '1P+N' (L, N, PE) oppure '3P+N' (L1, L2, L3, N, PE) */
+  poles: '1P+N' | '3P+N';
+  /** Tipo di prova secondo la norma di prodotto: 1, 2 o 3 */
+  spdType: 1 | 2 | 3;
+  /** Tensione massima continuativa Uc [V] */
+  uc: number;
+  /** Livello di protezione Up [kV] */
+  up: number;
+  /** Corrente nominale di scarica In [kA] */
+  inKA: number;
+}
+
 export interface BarParams {
   barFn: TerminalFunction;
   ways: number;
@@ -138,6 +155,8 @@ export interface LoadParams {
   phases?: 1 | 3;
   /** Solo trifase: centro stella collegato al neutro */
   withNeutral?: boolean;
+  /** Fattore di potenza (carico ohmico-induttivo); 1 = resistivo (default) */
+  cosPhi?: number;
 }
 
 export type ComponentParams =
@@ -148,6 +167,7 @@ export type ComponentParams =
   | { kind: 'rcd'; p: RcdParams }
   | { kind: 'rcbo'; p: RcboParams }
   | { kind: 'bar'; p: BarParams }
+  | { kind: 'spd'; p: SpdParams }
   | { kind: 'load'; p: LoadParams };
 
 export interface RailPlacement {

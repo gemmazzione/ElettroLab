@@ -17,6 +17,9 @@ export const TERMINAL_Y_TOP = 13;
 export const TERMINAL_Y_BOTTOM = DEVICE_H - 13;
 
 export const PANEL_SIZES: { modules: number; config: PanelConfig }[] = [
+  { modules: 4, config: { modulesPerRow: 4, rows: 1 } },
+  { modules: 6, config: { modulesPerRow: 6, rows: 1 } },
+  { modules: 8, config: { modulesPerRow: 8, rows: 1 } },
   { modules: 12, config: { modulesPerRow: 12, rows: 1 } },
   { modules: 24, config: { modulesPerRow: 12, rows: 2 } },
   { modules: 36, config: { modulesPerRow: 12, rows: 3 } },

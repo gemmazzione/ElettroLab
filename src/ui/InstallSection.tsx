@@ -69,7 +69,10 @@ export function InstallSection({ comp }: { comp: ComponentInstance }) {
           </button>
         </>
       )}
-      <Row k="Corrente d'impiego IB = P / 230 V" v={`${fmt(p.powerW / 230, 2)} A`} />
+      <Row
+        k={`Corrente d'impiego IB = P / (${p.phases === 3 ? '3 × ' : ''}230 V${(p.cosPhi ?? 1) < 1 ? ' × cos φ' : ''})`}
+        v={`${fmt(p.powerW / (230 * (p.phases === 3 ? 3 : 1) * (p.cosPhi ?? 1)), 2)} A`}
+      />
       <label className="flex items-center gap-2 text-[12px] text-slate-300">
         <input type="checkbox" checked={hasSockets} onChange={(e) => update(comp.id, { kind: 'load', p: { ...p, hasSockets: e.target.checked } })} />
         Il circuito alimenta prese a spina

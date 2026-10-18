@@ -85,10 +85,11 @@ export function buildReport(project: Project, now = new Date()): ReportData {
         if (pr.kind === 'rcd') car = `${pr.p.poles} ${pr.p.in} A · IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`;
         if (pr.kind === 'switch') car = `${pr.p.poles} ${pr.p.in} A`;
         if (pr.kind === 'bar') car = `${pr.p.barFn}, ${pr.p.ways} vie`;
+        if (pr.kind === 'spd') car = `${pr.p.poles} tipo ${pr.p.spdType} · Uc ${pr.p.uc} V · Up ${f(pr.p.up, 1)} kV · In ${pr.p.inKA} kA`;
         const m = catalogItem(c.catalogId).modules;
         const pn = project.panels.length > 1 ? `${panelOf(project, c.rail!.panelId).name}, ` : '';
         const pos = `${pn}guida ${c.rail!.row + 1}, mod. ${c.rail!.slot + 1}${m > 1 ? `-${c.rail!.slot + m}` : ''}`;
-        const stato = pr.kind === 'bar' ? '—' : c.closed ? 'chiuso' : 'aperto';
+        const stato = pr.kind === 'bar' || pr.kind === 'spd' ? '—' : c.closed ? 'chiuso' : 'aperto';
         return [c.label, catalogItem(c.catalogId).name, car, pos, stato];
       }),
   };

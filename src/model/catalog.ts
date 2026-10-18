@@ -9,6 +9,7 @@ export type CatalogCategory =
   | 'Magnetotermici differenziali'
   | 'Distribuzione'
   | 'Utilizzatori'
+  | 'Protezione dalle sovratensioni'
   | 'Altri dispositivi';
 
 export interface CatalogItem {
@@ -36,6 +37,7 @@ const load = (
   powerW: number,
   cableSection: 1.5 | 2.5 | 4 | 6,
   description: string,
+  cosPhi = 1,
 ): CatalogItem => ({
   id,
   kind: 'load',
@@ -47,7 +49,7 @@ const load = (
   labelPrefix: 'U',
   defaults: {
     kind: 'load',
-    p: { name, category, powerW, on: true, cableLength: 15, cableSection },
+    p: { name, category, powerW, on: true, cableLength: 15, cableSection, ...(cosPhi < 1 ? { cosPhi } : {}) },
   },
 });
 
@@ -276,6 +278,33 @@ export const CATALOG: CatalogItem[] = [
   load('load-forno', 'Forno elettrico', 'cucina', 2000, 2.5, 'Forno a resistenza: carico puramente resistivo.'),
   load('load-boiler', 'Scaldabagno', 'scaldabagno', 1200, 2.5, 'Scaldacqua elettrico a resistenza.'),
   load('load-generico', 'Carico generico', 'generico', 1000, 2.5, 'Carico resistivo con potenza configurabile.'),
+  load(
+    'load-clima',
+    'Climatizzatore',
+    'climatizzazione',
+    1000,
+    2.5,
+    'Climatizzatore con compressore: carico ohmico-induttivo. Potenza e cos φ sono valori tipici indicativi: usa i dati di targa dell\'apparecchio.',
+    0.95,
+  ),
+  load(
+    'load-frigo',
+    'Frigorifero',
+    'refrigerazione',
+    150,
+    2.5,
+    'Frigorifero con compressore a funzionamento ciclico: carico ohmico-induttivo con cos φ basso. Valori tipici indicativi, modificabili.',
+    0.7,
+  ),
+  load(
+    'load-caldaia',
+    'Caldaia a gas',
+    'riscaldamento',
+    120,
+    1.5,
+    'Parte elettrica di una caldaia a gas (scheda elettronica, ventilatore, circolatore). Valori tipici indicativi, modificabili.',
+    0.9,
+  ),
   {
     id: 'load-tri',
     kind: 'load',
@@ -290,7 +319,29 @@ export const CATALOG: CatalogItem[] = [
       p: { name: 'Carico trifase', category: 'generico', powerW: 6000, on: true, cableLength: 15, cableSection: 2.5, phases: 3, withNeutral: false },
     },
   },
-  unavailable('spd', 'Scaricatore di sovratensione SPD', 'Altri dispositivi', 'richiede la valutazione del rischio di sovratensione'),
+  {
+    id: 'spd-1pn',
+    kind: 'spd',
+    name: 'Scaricatore di sovratensione 1P+N',
+    category: 'Protezione dalle sovratensioni',
+    description:
+      'SPD per impianti monofase: limita le sovratensioni impulsive (fulmini, manovre) scaricandole verso il PE. In servizio ordinario non conduce. Valori di targa tipici di un tipo 2, modificabili.',
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'F',
+    defaults: { kind: 'spd', p: { poles: '1P+N', spdType: 2, uc: 275, up: 1.5, inKA: 20 } },
+  },
+  {
+    id: 'spd-3pn',
+    kind: 'spd',
+    name: 'Scaricatore di sovratensione 3P+N',
+    category: 'Protezione dalle sovratensioni',
+    description: 'SPD per impianti trifase con neutro. Valori di targa tipici di un tipo 2, modificabili.',
+    mount: 'din',
+    modules: 4,
+    labelPrefix: 'F',
+    defaults: { kind: 'spd', p: { poles: '3P+N', spdType: 2, uc: 275, up: 1.5, inKA: 20 } },
+  },
   unavailable('contactor', 'Contattore modulare', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
   unavailable('step-relay', 'Relè passo-passo', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
   unavailable('voltage-relay', 'Relè di controllo tensione', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
@@ -314,6 +365,7 @@ export const KIND_LABEL: Record<ComponentKind, string> = {
   rcd: 'Interruttore differenziale puro',
   rcbo: 'Magnetotermico differenziale',
   bar: 'Morsettiera',
+  spd: 'Scaricatore di sovratensione (SPD)',
   load: 'Utilizzatore',
 };
 

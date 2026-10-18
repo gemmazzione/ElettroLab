@@ -9,7 +9,7 @@ import type { ComponentInstance, Project } from '../model/types';
  * topologica usata dalle verifiche): lo schema è sempre coerente con i collegamenti reali.
  */
 
-export type SLKind = 'supply' | 'device' | 'load';
+export type SLKind = 'supply' | 'device' | 'load' | 'spd';
 
 export interface SLNode {
   id: string;
@@ -110,12 +110,26 @@ export function buildSingleLine(project: Project): SingleLine | null {
     });
   }
 
+  // Scaricatori: derivazione dal dispositivo che alimenta il loro morsetto di fase.
+  for (const c of project.components) {
+    if (c.params.kind !== 'spd') continue;
+    const lKey = c.params.p.poles === '3P+N' ? 'L1' : 'L';
+    const net = g.netOf(terminalId(c.id, lKey));
+    if (phaseOfNet(g, net) === null) {
+      orphans.push(c);
+      continue;
+    }
+    const chain = seriesDevices(g, net, 'L');
+    parentOf.set(c.id, chain[chain.length - 1] ?? supply.id);
+    byId.set(c.id, { id: c.id, kind: 'spd', comp: c, children: [], conductors: c.params.p.poles === '3P+N' ? 4 : 2, depth: 0, x: 0, y: 0 });
+  }
+
   for (const [child, parent] of parentOf) {
     const p = byId.get(parent) ?? root;
     p.children.push(byId.get(child)!);
   }
   // Prima i dispositivi (in ordine di guida), poi gli utilizzatori diretti.
-  const order = (n: SLNode) => (n.kind === 'device' ? railKey(n.comp) : 1e7 + n.comp.position.x);
+  const order = (n: SLNode) => (n.kind === 'device' || n.kind === 'spd' ? railKey(n.comp) : 1e7 + n.comp.position.x);
   const sortRec = (n: SLNode) => {
     n.children.sort((a, b) => order(a) - order(b));
     n.children.forEach(sortRec);
@@ -137,7 +151,7 @@ export function buildSingleLine(project: Project): SingleLine | null {
   let maxDeviceDepth = 0;
   const setDepth = (n: SLNode, d: number) => {
     n.depth = d;
-    if (n.kind !== 'load') maxDeviceDepth = Math.max(maxDeviceDepth, d);
+    if (n.kind === 'device' || n.kind === 'supply') maxDeviceDepth = Math.max(maxDeviceDepth, d);
     n.children.forEach((c) => setDepth(c, d + 1));
   };
   setDepth(root, 0);
@@ -147,7 +161,7 @@ export function buildSingleLine(project: Project): SingleLine | null {
     n.children.forEach(collect);
   };
   collect(root);
-  for (const n of nodes) if (n.kind === 'load') n.depth = maxDeviceDepth + 1;
+  for (const n of nodes) if (n.kind === 'load' || n.kind === 'spd') n.depth = maxDeviceDepth + 1;
 
   // x: una colonna per ogni foglia; i nodi interni al centro dei figli.
   let leaf = 0;

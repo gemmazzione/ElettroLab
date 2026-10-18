@@ -60,6 +60,16 @@ export interface NetlistOptions {
   ignoreFaults?: boolean;
 }
 
+/**
+ * Impedenza costante di un ramo di carico: potenza attiva P alla tensione nominale con fattore
+ * di potenza cos φ (ohmico-induttivo): |Z| = U² · cos φ / P, Z = |Z| (cos φ + j sin φ).
+ */
+export function loadBranchImpedance(powerW: number, cosPhi: number): Complex {
+  const pf = Math.min(1, Math.max(0.1, cosPhi));
+  const zMag = (LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE * pf) / powerW;
+  return C(zMag * pf, zMag * Math.sqrt(1 - pf * pf));
+}
+
 export function wireResistance(length: number, section: number): number {
   return (RHO_CU_70 * Math.max(length, MIN_WIRE_LENGTH)) / section;
 }
@@ -160,11 +170,10 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         if (pr.p.on && pr.p.powerW > 0 && !opts.loadsOff) {
           // Potenza di targa riferita alla tensione nominale degli apparecchi (230 V fase-neutro).
           // Trifase a stella: ogni ramo assorbe P/3 sotto 230 V.
-          const perBranch = pr.p.powerW / phaseKeys.length;
-          const r = (LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE) / perBranch;
+          const z = loadBranchImpedance(pr.p.powerW / phaseKeys.length, pr.p.cosPhi ?? 1);
           const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
           for (const k of phaseKeys) {
-            elements.push({ a: innerNode(c.id, k), b: star, z: C(r), tag: { t: 'load', componentId: c.id, key: k } });
+            elements.push({ a: innerNode(c.id, k), b: star, z, tag: { t: 'load', componentId: c.id, key: k } });
           }
         }
         for (const f of fs) {

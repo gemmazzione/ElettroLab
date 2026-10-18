@@ -285,6 +285,22 @@ export function checkWiring(project: Project): Issue[] {
     }
   }
 
+  // Scaricatori di sovratensione: il morsetto PE deve raggiungere l'impianto di terra.
+  for (const c of project.components) {
+    if (c.params.kind !== 'spd') continue;
+    if (!g.earthNets.has(g.netOf(terminalId(c.id, 'PE')))) {
+      push({
+        code: 'SPD_NO_EARTH',
+        severity: 'errore',
+        title: 'Scaricatore senza collegamento a terra',
+        message: `${lbl(c)}: il morsetto PE non è collegato all'impianto di terra.`,
+        explanation:
+          'Lo scaricatore limita le sovratensioni deviando la corrente impulsiva verso terra: senza collegamento al PE non può svolgere la sua funzione. Il collegamento va fatto con conduttori il più corti possibile.',
+        componentIds: [c.id],
+      });
+    }
+  }
+
   // Circuiti utilizzatori.
   for (const info of analyzeCircuits(project, g)) {
     const load = byId.get(info.loadId)!;

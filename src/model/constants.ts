@@ -45,7 +45,7 @@ export const MODEL_ASSUMPTIONS: { title: string; text: string }[] = [
   },
   {
     title: 'Carichi',
-    text: 'Gli utilizzatori sono resistenze costanti R = Un²/Pn: la potenza assorbita varia con il quadrato della tensione effettiva.',
+    text: 'Gli utilizzatori sono impedenze costanti ricavate da potenza nominale e cos φ alla tensione nominale (R = Un²/Pn per i carichi resistivi, R + jX per motori e compressori): la potenza assorbita varia con il quadrato della tensione effettiva. Correnti di spunto e funzionamento ciclico non sono simulati.',
   },
   {
     title: 'Nodi isolati',

@@ -85,6 +85,17 @@ function LoadSymbol({ node, p }: { node: SLNode; p: DiagramPalette }) {
       </g>
     );
   }
+  if ((pr.p.cosPhi ?? 1) < 1) {
+    // carico a motore/compressore
+    return (
+      <g>
+        <circle cx={0} cy={11} r={11} fill="none" stroke={p.line} strokeWidth={1.5} />
+        <text x={0} y={15} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={p.text} fontFamily="Arial, sans-serif">
+          M~
+        </text>
+      </g>
+    );
+  }
   if (pr.p.category === 'illuminazione') {
     return (
       <g stroke={p.line} strokeWidth={1.5} fill="none">
@@ -124,7 +135,7 @@ function Slashes({ x, y, n, p }: { x: number; y: number; n: number; p: DiagramPa
   return <g>{items}</g>;
 }
 
-const bottomOf = (n: SLNode) => n.y + (n.kind === 'supply' ? SUPPLY_H : n.kind === 'device' ? SL.symbolH : 22);
+const bottomOf = (n: SLNode) => n.y + (n.kind === 'supply' ? SUPPLY_H : n.kind === 'device' ? SL.symbolH : n.kind === 'spd' ? 36 : 22);
 
 export interface SingleLineSvgProps {
   sl: SingleLine;
@@ -222,6 +233,26 @@ export function SingleLineSvg({ sl, project, palette: p, live, selectedId, onSel
               {l}
             </text>
           ))}
+        </g>,
+      );
+    } else if (n.kind === 'spd' && n.comp.params.kind === 'spd') {
+      const sp = n.comp.params.p;
+      labels.push(
+        <g key={n.id} transform={`translate(${n.x} ${n.y})`} {...click}>
+          {sel && <rect x={-60} y={-6} width={120} height={SL.loadH} rx={4} fill="none" stroke={p.select} strokeWidth={2} />}
+          <rect x={-60} y={-4} width={120} height={SL.loadH - 4} fill="transparent" />
+          <rect x={-8} y={0} width={16} height={24} fill="none" stroke={p.line} strokeWidth={1.5} />
+          <line x1={-11} y1={26} x2={11} y2={-2} stroke={p.line} strokeWidth={1.2} />
+          <line x1={0} y1={24} x2={0} y2={30} stroke={p.line} strokeWidth={1.5} />
+          <line x1={-8} y1={30} x2={8} y2={30} stroke={p.line} strokeWidth={1.5} />
+          <line x1={-5} y1={33} x2={5} y2={33} stroke={p.line} strokeWidth={1.5} />
+          <line x1={-2} y1={36} x2={2} y2={36} stroke={p.line} strokeWidth={1.5} />
+          <text x={0} y={50} textAnchor="middle" fontSize={10} fontWeight={700} fill={p.text} fontFamily={font}>
+            {n.comp.label} SPD tipo {sp.spdType}
+          </text>
+          <text x={0} y={62} textAnchor="middle" fontSize={9} fill={p.muted} fontFamily={font}>
+            Uc {sp.uc} V · Up {n1(sp.up, 1)} kV
+          </text>
         </g>,
       );
     } else if (n.kind === 'load' && n.comp.params.kind === 'load') {

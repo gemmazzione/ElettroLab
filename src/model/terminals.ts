@@ -137,6 +137,20 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'N', label: 'N', fn: 'N', role: 'in', side: 'top', x: 88 },
         { key: 'PE', label: 'PE', fn: 'PE', role: 'in', side: 'top', x: 132 },
       ];
+    case 'spd': {
+      const keys = pr.p.poles === '3P+N' ? ['L1', 'L2', 'L3', 'N'] : ['L', 'N'];
+      const pitch = w / keys.length;
+      const defs: TerminalDef[] = keys.map((k, i) => ({
+        key: k,
+        label: k,
+        fn: k === 'N' ? 'N' : 'L',
+        role: 'bus',
+        side: 'top',
+        x: (i + 0.5) * pitch,
+      }));
+      defs.push({ key: 'PE', label: 'PE', fn: 'PE', role: 'bus', side: 'bottom', x: w / 2 });
+      return defs;
+    }
     case 'bar': {
       const defs: TerminalDef[] = [];
       const pitch = w / pr.p.ways;

@@ -1,6 +1,6 @@
 import { AlertOctagon, AlertTriangle, Info, Minus, Plus, Trash2 } from 'lucide-react';
 import { abs, sub } from '../engine/complex';
-import { wireResistance } from '../engine/netlist';
+import { loadBranchImpedance, wireResistance } from '../engine/netlist';
 import { deviceCurrent } from '../engine/simulate';
 import { issuesFor, type Issue } from '../graph/erc';
 import { analyzeCircuits } from '../graph/netGraph';
@@ -34,7 +34,7 @@ import { fmt, fmtCurrent, fmtPower } from './format';
 
 const CONDUCTORS: Conductor[] = ['L1', 'L2', 'L3', 'N', 'PE'];
 const COLORS: WireColor[] = ['marrone', 'nero', 'grigio', 'blu', 'giallo-verde'];
-const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'generico'];
+const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'refrigerazione', 'riscaldamento', 'generico'];
 
 export function SeverityIcon({ s, size = 14 }: { s: Issue['severity']; size?: number }) {
   if (s === 'errore') return <AlertOctagon size={size} className="shrink-0 text-red-400" />;
@@ -123,7 +123,7 @@ function PanelEditor({ panel, main, canRemove }: { panel: PanelDef; main: boolea
         </div>
       </div>
       <Field label="Moduli per guida">
-        <Select value={panel.modulesPerRow} options={[12, 18, 24]} onChange={(m) => setPanel(panel.id, { modulesPerRow: m, rows: panel.rows })} />
+        <Select value={panel.modulesPerRow} options={[4, 6, 8, 12, 18, 24]} onChange={(m) => setPanel(panel.id, { modulesPerRow: m, rows: panel.rows })} />
       </Field>
       <Row k="Moduli occupati" v={`${used} / ${total}`} />
     </div>
@@ -303,6 +303,28 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             <Select value={pr.p.in} options={IN_VALUES_SWITCH} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'switch', p: { ...pr.p, in: v } })} />
           </Field>
         )}
+        {pr.kind === 'spd' && (
+          <>
+            <Row k="Configurazione" v={pr.p.poles} />
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tipo (classe di prova)" hint="Tipo 1: correnti da fulminazione diretta; tipo 2: quadri di distribuzione; tipo 3: vicino agli apparecchi">
+                <Select value={pr.p.spdType} options={[1, 2, 3] as const} format={(v) => `Tipo ${v}`} onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, spdType: v } })} />
+              </Field>
+              <Field label="Uc (tensione max continuativa)">
+                <NumberInput value={pr.p.uc} min={150} max={760} step={5} suffix="V" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, uc: v } })} />
+              </Field>
+              <Field label="Up (livello di protezione)">
+                <NumberInput value={pr.p.up} min={0.5} max={6} step={0.1} suffix="kV" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, up: v } })} />
+              </Field>
+              <Field label="In (corrente di scarica)">
+                <NumberInput value={pr.p.inKA} min={1} max={100} step={1} suffix="kA" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, inKA: v } })} />
+              </Field>
+            </div>
+            <p className="text-[11px] leading-snug text-slate-500">
+              A 50 Hz lo scaricatore non conduce: gli impulsi da fulmine non sono simulabili in regime sinusoidale. Il simulatore segnala le sovratensioni temporanee oltre Uc.
+            </p>
+          </>
+        )}
         {pr.kind === 'bar' && (
           <>
             <Row k="Funzione" v={pr.p.barFn} />
@@ -356,6 +378,9 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
               <Field label="Potenza nominale">
                 <NumberInput value={pr.p.powerW} min={0} max={20000} step={50} suffix="W" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, powerW: v } })} />
               </Field>
+              <Field label="Fattore di potenza cos φ" hint="1 = carico resistivo; motori e compressori hanno cos φ minore di 1 (dato di targa)">
+                <NumberInput value={pr.p.cosPhi ?? 1} min={0.3} max={1} step={0.01} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cosPhi: v } })} />
+              </Field>
               <Field label="Lunghezza linea">
                 <NumberInput value={pr.p.cableLength} min={0.1} max={500} step={1} suffix="m" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cableLength: v } })} />
               </Field>
@@ -373,10 +398,15 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
                 Centro stella collegato al neutro
               </label>
             )}
-            <Row
-              k={pr.p.phases === 3 ? 'Resistenza per ramo della stella' : 'Resistenza equivalente'}
-              v={pr.p.powerW > 0 ? `${fmt((230 * 230) / (pr.p.powerW / (pr.p.phases === 3 ? 3 : 1)), 2)} Ω` : '—'}
-            />
+            {(() => {
+              if (pr.p.powerW <= 0) return <Row k="Impedenza equivalente" v="—" />;
+              const z = loadBranchImpedance(pr.p.powerW / (pr.p.phases === 3 ? 3 : 1), pr.p.cosPhi ?? 1);
+              const lbl = pr.p.phases === 3 ? 'Impedenza per ramo della stella' : 'Impedenza equivalente';
+              return <Row k={lbl} v={z.im > 0.001 ? `${fmt(z.re, 2)} + j${fmt(z.im, 2)} Ω` : `${fmt(z.re, 2)} Ω`} />;
+            })()}
+            {(pr.p.cosPhi ?? 1) < 1 && (
+              <Row k="Potenza apparente / reattiva" v={`${fmt(pr.p.powerW / (pr.p.cosPhi ?? 1), 0)} VA · ${fmt(pr.p.powerW * Math.tan(Math.acos(pr.p.cosPhi ?? 1)), 0)} var`} />
+            )}
             <Row k="R di un conduttore di linea" v={`${fmt(wireResistance(pr.p.cableLength, pr.p.cableSection) * 1000, 1)} mΩ`} />
             <p className="text-[11px] text-slate-500">Metodo di posa e portata Iz saranno richiesti dalle verifiche di dimensionamento (Fase 3).</p>
           </>

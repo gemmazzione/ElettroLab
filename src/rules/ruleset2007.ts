@@ -258,7 +258,7 @@ const sovraccarico: R = {
       const c1b = p.in <= iz;
       const c2 = iF <= 1.45 * iz;
       const details = [
-        c.p.phases === 3 ? `IB = P / (3 × U0) = ${f(c.p.powerW, 0)} W / 690 V = ${fA(c.ib)} (carico trifase equilibrato)` : `IB = P / U0 = ${f(c.p.powerW, 0)} W / 230 V = ${fA(c.ib)}`,
+        `IB = P / (${c.p.phases === 3 ? '3 × ' : ''}U0${(c.p.cosPhi ?? 1) < 1 ? ' × cos φ' : ''}) = ${f(c.p.powerW, 0)} W / (${c.p.phases === 3 ? '3 × ' : ''}230 V${(c.p.cosPhi ?? 1) < 1 ? ` × ${f(c.p.cosPhi ?? 1, 2)}` : ''}) = ${fA(c.ib)}`,
         `In = ${p.in} A (${c.ocp.label}, curva ${p.curve})`,
         c.iz.source === 'utente'
           ? `Iz = ${f(iz, 1)} A (inserita dall'utente)`
@@ -592,16 +592,21 @@ const sovratensioni: R = {
     'La necessità di SPD dipende dalla rete di alimentazione (aerea o interrata), dal livello ceraunico, dal luogo e dalla tenuta a impulso dei componenti (443.1, 443.2). Senza questi dati la verifica non è possibile. La scelta degli SPD (534) non è ancora simulata.',
   refs: [r07('443.1'), r07('443.4'), r07('534'), rIX('443')],
   requiredData: ['Tipo di linea di alimentazione', 'Livello ceraunico', 'Valutazione del rischio', 'Categorie di tenuta a impulso'],
-  evaluate: () => [
-    {
-      ruleId: 'SPD-443',
-      status: 'dati-insufficienti',
-      subject: 'Impianto',
-      message: 'Dati per la valutazione delle sovratensioni non disponibili nel progetto; scelta degli SPD: funzionalità non implementata.',
-      missingData: ['linea aerea o interrata', 'livello ceraunico', 'valutazione del rischio'],
-      componentIds: [],
-    },
-  ],
+  evaluate: (ctx) => {
+    const spds = ctx.project.components.filter((c) => c.params.kind === 'spd');
+    return [
+      {
+        ruleId: 'SPD-443',
+        status: 'dati-insufficienti',
+        subject: 'Impianto',
+        message: spds.length
+          ? `Installati: ${spds.map((c) => (c.params.kind === 'spd' ? `${c.label} tipo ${c.params.p.spdType}, Up ${c.params.p.up} kV` : c.label)).join('; ')}. La necessità e il coordinamento (Up rispetto alla tenuta a impulso dei componenti) richiedono i dati sul luogo e sulla rete e i dati del costruttore.`
+          : 'Nessuno scaricatore installato. Dati per la valutazione delle sovratensioni non disponibili nel progetto.',
+        missingData: ['linea aerea o interrata', 'livello ceraunico', 'valutazione del rischio', 'tenuta a impulso dei componenti'],
+        componentIds: spds.map((c) => c.id),
+      },
+    ];
+  },
 };
 
 // ------------------------------------------------------------------ 10. residenziale

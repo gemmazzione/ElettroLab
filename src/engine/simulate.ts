@@ -10,7 +10,7 @@ import { buildNetlist, innerNode, NODE_EARTH, NODE_STAR, starNode, type LineKey,
 export type AlertSeverity = 'errore' | 'attenzione' | 'info';
 
 export interface SimAlert {
-  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE';
+  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE' | 'SPD_TOV';
   severity: AlertSeverity;
   message: string;
   componentIds: string[];
@@ -203,9 +203,9 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
     const keys = loadPhaseKeys(c);
     const star = loadHasNeutral(c) ? innerNode(c.id, 'N') : starNode(c.id);
     const vs = V.get(star);
-    const branchR = (k: string) => {
+    const branchZ = (k: string) => {
       const el = net.elements.find((e) => e.tag.t === 'load' && e.tag.componentId === c.id && e.tag.key === k);
-      return el ? el.z.re : null;
+      return el ? el.z : null;
     };
     const phaseV: number[] = [];
     const phaseI: number[] = [];
@@ -213,10 +213,11 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
     for (const k of keys) {
       const vk = V.get(innerNode(c.id, k));
       const vb = vk && vs ? abs(sub(vk, vs)) : 0;
-      const r = branchR(k);
+      const z = branchZ(k);
+      const ib = z ? vb / abs(z) : 0;
       phaseV.push(vb);
-      phaseI.push(r ? vb / r : 0);
-      p += r ? (vb * vb) / r : 0;
+      phaseI.push(ib);
+      p += z ? ib * ib * z.re : 0;
     }
     const vAvg = phaseV.reduce((a, b) => a + b, 0) / phaseV.length;
     loads.set(c.id, {
@@ -349,6 +350,30 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
         code: 'NEUTRAL_LIVE',
         severity: 'errore',
         message: `${c.label}: il morsetto di neutro dell'apparecchio è a ${n(abs(sub(vn, vEarth)), 0)} V verso terra: le parti dell'apparecchio collegate al neutro sono in tensione.`,
+        componentIds: [c.id],
+      });
+    }
+  }
+
+  // Scaricatori: sovratensione temporanea a 50 Hz oltre la tensione massima continuativa Uc.
+  for (const c of project.components) {
+    if (c.params.kind !== 'spd') continue;
+    const uc = c.params.p.uc;
+    const at = (k: string) => V.get(net.terminalNode.get(`${c.id}:${k}`) ?? '');
+    const vN = at('N');
+    const vPE = at('PE');
+    let worst = 0;
+    for (const k of c.params.p.poles === '3P+N' ? ['L1', 'L2', 'L3'] : ['L']) {
+      const vL = at(k);
+      if (!vL) continue;
+      if (vN) worst = Math.max(worst, abs(sub(vL, vN)));
+      if (vPE) worst = Math.max(worst, abs(sub(vL, vPE)));
+    }
+    if (worst > uc) {
+      alerts.push({
+        code: 'SPD_TOV',
+        severity: 'attenzione',
+        message: `${c.label}: tensione di ${n(worst, 0)} V oltre Uc = ${uc} V. Una sovratensione temporanea a 50 Hz (es. neutro interrotto) può far condurre e danneggiare lo scaricatore.`,
         componentIds: [c.id],
       });
     }
