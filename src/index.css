@@ -30,6 +30,9 @@ body {
 
 /* morsetti */
 .react-flow__handle.terminal {
+  /* XyFlow rende cliccabili solo i morsetti collegabili: i nostri devono esserlo sempre
+     (puntali del multimetro, suggerimenti con la tensione). */
+  pointer-events: all;
   width: 11px;
   height: 11px;
   min-width: 0;
