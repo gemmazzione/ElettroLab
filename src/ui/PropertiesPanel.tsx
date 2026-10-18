@@ -24,6 +24,7 @@ import { modulesUsed } from '../model/placement';
 import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { InstallSection } from './InstallSection';
+import { TripCurveSection } from './TripCurveSection';
 import { InfoTab } from './InfoPanel';
 import { ExercisePanel } from './Academy';
 import { NormPanel } from './NormPanel';
@@ -384,6 +385,7 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
 
       {running && result && result.ok && <LiveValues comp={comp} />}
       <ProtectionSection comp={comp} />
+      <TripCurveSection comp={comp} />
       {pr.kind === 'load' && (
         <>
           <InstallSection comp={comp} />
