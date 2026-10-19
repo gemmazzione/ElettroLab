@@ -48,6 +48,7 @@ export type LoadCategory =
   | 'cucina'
   | 'scaldabagno'
   | 'climatizzazione'
+  | 'lavaggio'
   | 'generico';
 
 // ---------------------------------------------------------------- parametri

@@ -35,7 +35,7 @@ import { fmt, fmtCurrent, fmtPower } from './format';
 
 const CONDUCTORS: Conductor[] = ['L1', 'L2', 'L3', 'N', 'PE'];
 const COLORS: WireColor[] = ['marrone', 'nero', 'grigio', 'blu', 'giallo-verde'];
-const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'refrigerazione', 'riscaldamento', 'generico'];
+const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'lavaggio', 'refrigerazione', 'riscaldamento', 'generico'];
 
 export function SeverityIcon({ s, size = 14 }: { s: Issue['severity']; size?: number }) {
   if (s === 'errore') return <AlertOctagon size={size} className="shrink-0 text-red-400" />;

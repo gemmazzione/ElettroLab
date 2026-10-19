@@ -40,6 +40,8 @@ const load = (
   cableSection: 1.5 | 2.5 | 4 | 6,
   description: string,
   cosPhi = 1,
+  /** Apparecchio collegato con presa a spina di questa corrente nominale [A] */
+  socketRating?: number,
 ): CatalogItem => ({
   id,
   kind: 'load',
@@ -51,7 +53,7 @@ const load = (
   labelPrefix: 'U',
   defaults: {
     kind: 'load',
-    p: { name, category, powerW, on: true, cableLength: 15, cableSection, ...(cosPhi < 1 ? { cosPhi } : {}) },
+    p: { name, category, powerW, on: true, cableLength: 15, cableSection, ...(cosPhi < 1 ? { cosPhi } : {}), ...(socketRating ? { hasSockets: true, socketRating } : {}) },
   },
 });
 
@@ -345,6 +347,26 @@ export const CATALOG: CatalogItem[] = [
     2.5,
     'Frigorifero con compressore a funzionamento ciclico: carico ohmico-induttivo con cos φ basso. Valori tipici indicativi, modificabili.',
     0.7,
+  ),
+  load(
+    'load-lavatrice',
+    'Lavatrice',
+    'lavaggio',
+    2000,
+    2.5,
+    'Lavatrice: la potenza massima è quella della resistenza che scalda l\'acqua (circa 2 kW), a cui si somma il motore del cestello. Valori tipici indicativi, modificabili.',
+    0.95,
+    16,
+  ),
+  load(
+    'load-lavastoviglie',
+    'Lavastoviglie',
+    'lavaggio',
+    1900,
+    2.5,
+    'Lavastoviglie: resistenza di riscaldamento dell\'acqua (circa 1,8–2 kW) più la pompa di lavaggio. Valori tipici indicativi, modificabili.',
+    0.95,
+    16,
   ),
   load(
     'load-caldaia',

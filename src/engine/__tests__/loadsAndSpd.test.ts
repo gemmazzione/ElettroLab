@@ -48,13 +48,25 @@ describe('utilizzatori con fattore di potenza', () => {
   });
 
   it('i nuovi utilizzatori sono nel catalogo con cos φ < 1', () => {
-    for (const id of ['load-clima', 'load-frigo', 'load-caldaia']) {
+    for (const id of ['load-clima', 'load-frigo', 'load-caldaia', 'load-lavatrice', 'load-lavastoviglie']) {
       const { project, u } = oneLoad(id);
       const c = project.components.find((x) => x.id === u.id)!;
       expect(c.params.kind === 'load' && (c.params.p.cosPhi ?? 1) < 1).toBe(true);
       const r = simulate(project);
       if (!r.ok) throw new Error(r.reason);
       expect(r.loads.get(u.id)!.energized).toBe(true);
+    }
+  });
+
+  it('lavatrice e lavastoviglie: circa 2 kW, collegate con presa a spina 16 A', () => {
+    for (const id of ['load-lavatrice', 'load-lavastoviglie']) {
+      const { project, u } = oneLoad(id);
+      const p = project.components.find((x) => x.id === u.id)!.params;
+      if (p.kind !== 'load') throw new Error('kind');
+      expect(p.p.category).toBe('lavaggio');
+      expect(p.p.hasSockets).toBe(true);
+      expect(p.p.socketRating).toBe(16);
+      expect(p.p.powerW).toBeGreaterThanOrEqual(1800);
     }
   });
 });

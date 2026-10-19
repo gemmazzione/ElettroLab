@@ -309,6 +309,25 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Impedenza costante R + jX con il cos φ impostato; il funzionamento ciclico e lo spunto non sono simulati.'),
     ],
   },
+  'load-lavatrice': {
+    title: 'Utilizzatore: lavatrice',
+    summary: 'Elettrodomestico con resistenza di riscaldamento e motore: assorbe la potenza massima nella fase di riscaldamento dell\'acqua.',
+    sections: [
+      S('Caratteristiche', 'La resistenza (circa 2 kW) lavora per alcuni minuti all\'inizio del ciclo; il motore del cestello assorbe molto meno ma ha un cos φ più basso. La centrifuga dura poco e ha potenze di qualche centinaio di watt.'),
+      S('Collegamento', 'Di solito con presa a spina 16 A adatta alla spina dell\'apparecchio (spesso Schuko) su una linea adeguata, spesso dedicata ai grandi elettrodomestici. L\'involucro metallico è una massa: va collegato al PE e protetto da differenziale. Le lavatrici con elettronica possono richiedere un differenziale di tipo A o F secondo le indicazioni del costruttore.'),
+      S('Attenzione', 'Con forno, lavastoviglie e lavatrice accesi insieme si superano facilmente i 3 kW di un contratto domestico: è il caso tipico di intervento del limitatore del contatore.'),
+      S('Nel simulatore', 'Impedenza costante R + jX con potenza e cos φ impostati (valori di picco tipici, indicativi). Il ciclo di lavaggio non è simulato: l\'apparecchio assorbe sempre la potenza impostata.'),
+    ],
+  },
+  'load-lavastoviglie': {
+    title: 'Utilizzatore: lavastoviglie',
+    summary: 'Resistenza per scaldare l\'acqua e pompa di lavaggio: carico quasi resistivo durante il riscaldamento.',
+    sections: [
+      S('Caratteristiche', 'La potenza massima (circa 1,8–2 kW) si ha durante il riscaldamento dell\'acqua e l\'asciugatura; la pompa assorbe poche decine di watt.'),
+      S('Collegamento', 'Presa a spina 16 A su una linea adeguata, spesso in cucina insieme al forno: occhio alla somma delle potenze sulla stessa linea. Massa al PE e protezione differenziale.'),
+      S('Nel simulatore', 'Impedenza costante R + jX con potenza e cos φ impostati (valori tipici, indicativi). Il ciclo non è simulato.'),
+    ],
+  },
   'load-caldaia': {
     title: 'Utilizzatore: caldaia a gas',
     summary: 'La parte elettrica di una caldaia: elettronica di controllo, ventilatore e circolatore.',

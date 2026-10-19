@@ -11,6 +11,7 @@ import {
   Info,
   Play,
   Redo2,
+  Ruler,
   Save,
   Square,
   Tags,
@@ -115,6 +116,13 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
         title="In modalità cablaggio i componenti restano fermi e i morsetti sono evidenziati"
       />
       <Btn icon={<Tags size={15} />} label="Etichette" active={s.showLabels} onClick={() => s.setShowLabels(!s.showLabels)} />
+      <Btn
+        icon={<Ruler size={15} />}
+        label="Lunghezze"
+        active={s.showLengths}
+        onClick={() => s.setShowLengths(!s.showLengths)}
+        title="Mostra sezione e lunghezza di ogni conduttore e della conduttura di ogni utilizzatore"
+      />
       <Sep />
       <Btn icon={<MousePointer2 size={15} />} title="Selezione e cablaggio" active={s.tool === 'select'} onClick={() => s.setTool('select')} />
       <Btn icon={<Gauge size={15} />} label="Multimetro" active={s.tool === 'multimeter'} onClick={() => s.setTool('multimeter')} title="Multimetro: clic su due morsetti" />

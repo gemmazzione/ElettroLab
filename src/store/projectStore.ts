@@ -60,6 +60,9 @@ interface State {
   future: Project[];
   selection: Selection;
   showLabels: boolean;
+  /** Mostra sezione e lunghezza dei conduttori sulle etichette */
+  showLengths: boolean;
+  setShowLengths: (v: boolean) => void;
   wiringMode: boolean;
   wirePreset: WirePreset;
   running: boolean;
@@ -263,6 +266,7 @@ export const useStore = create<State>((set, get) => {
     future: [],
     selection: null,
     showLabels: true,
+    showLengths: false,
     wiringMode: false,
     wirePreset: { conductor: 'auto', section: 2.5, length: 0.25 },
     running: false,
@@ -708,6 +712,7 @@ export const useStore = create<State>((set, get) => {
 
     select: (s) => set({ selection: s }),
     setShowLabels: (v) => set({ showLabels: v }),
+    setShowLengths: (v) => set({ showLengths: v }),
     setWiringMode: (v) => set({ wiringMode: v }),
     setWirePreset: (patch) => set({ wirePreset: { ...get().wirePreset, ...patch } }),
 

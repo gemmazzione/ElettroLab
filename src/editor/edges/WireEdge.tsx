@@ -3,7 +3,7 @@ import { memo } from 'react';
 import { abs } from '../../engine/complex';
 import { WIRE_COLOR_HEX, WIRE_STROKE_FOR_SECTION } from '../../model/constants';
 import { useStore } from '../../store/projectStore';
-import { fmtCurrent } from '../../ui/format';
+import { fmt, fmtCurrent } from '../../ui/format';
 
 export type WireEdgeData = { wireId: string };
 
@@ -18,6 +18,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
     return i ? abs(i) : 0;
   });
   const showLabels = useStore((s) => s.showLabels);
+  const showLengths = useStore((s) => s.showLengths);
   const running = useStore((s) => s.running);
   const hasError = useStore((s) => s.issues.some((i) => i.severity === 'errore' && i.wireIds.includes(wireId)));
   const broken = useStore((s) => (s.project.faults ?? []).some((f) => f.type === 'open-wire' && f.targetId === wireId && !f.hidden));
@@ -66,13 +67,19 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
           </div>
         </EdgeLabelRenderer>
       )}
-      {showLabels && flowing && !broken && (
+      {!broken && ((showLabels && flowing) || showLengths) && (
         <EdgeLabelRenderer>
           <div
-            className="pointer-events-none absolute rounded bg-slate-950/90 px-1 font-mono text-[9px] leading-[13px] text-amber-200 ring-1 ring-slate-700"
+            className="pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[9px] leading-[13px] ring-1 ring-slate-700"
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
           >
-            {fmtCurrent(current)}
+            {showLengths && (
+              <span className="text-sky-200" title="Sezione e lunghezza del conduttore">
+                {wire.section} mm² · {fmt(wire.length, wire.length < 1 ? 2 : wire.length % 1 ? 1 : 0)} m
+              </span>
+            )}
+            {showLengths && showLabels && flowing && <span className="text-slate-500"> · </span>}
+            {showLabels && flowing && <span className="text-amber-200">{fmtCurrent(current)}</span>}
           </div>
         </EdgeLabelRenderer>
       )}
