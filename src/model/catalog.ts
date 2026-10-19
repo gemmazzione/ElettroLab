@@ -1,4 +1,4 @@
-import type { ComponentKind, ComponentParams, LoadCategory, MountType } from './types';
+import type { CombType, ComponentKind, ComponentParams, LoadCategory, MountType } from './types';
 
 export type CatalogCategory =
   | 'Alimentazione'
@@ -16,7 +16,10 @@ export type CatalogCategory =
 
 export interface CatalogItem {
   id: string;
-  kind: ComponentKind | 'unavailable';
+  /** 'comb' = pettine: non è un componente, crea tratti di barra tra dispositivi affiancati */
+  kind: ComponentKind | 'unavailable' | 'comb';
+  /** Solo pettini: conduttori portati */
+  combType?: CombType;
   name: string;
   category: CatalogCategory;
   description: string;
@@ -324,7 +327,54 @@ export const CATALOG: CatalogItem[] = [
     labelPrefix: 'XL',
     defaults: { kind: 'bar', p: { barFn: 'L', ways: 4 } },
   },
-  unavailable('comb', 'Pettine di alimentazione', 'Distribuzione', 'usa ponticelli in conduttore'),
+  {
+    id: 'comb-1p',
+    kind: 'comb',
+    combType: '1P',
+    name: 'Pettine 1P',
+    category: 'Distribuzione',
+    description:
+      'Barra in rame isolata che porta la fase a più dispositivi affiancati. Trascinalo sul primo dispositivo della fila: collega gli ingressi di tutti i dispositivi adiacenti compatibili.',
+    mount: 'din',
+    modules: 0,
+    labelPrefix: 'W',
+  },
+  {
+    id: 'comb-1pn',
+    kind: 'comb',
+    combType: '1P+N',
+    name: 'Pettine 1P+N',
+    category: 'Distribuzione',
+    description:
+      'Porta fase e neutro agli ingressi di più magnetotermici 1P+N affiancati, al posto dei ponticelli in cavo. Trascinalo sul primo dispositivo della fila.',
+    mount: 'din',
+    modules: 0,
+    labelPrefix: 'W',
+  },
+  {
+    id: 'comb-3p',
+    kind: 'comb',
+    combType: '3P',
+    name: 'Pettine 3P',
+    category: 'Distribuzione',
+    description:
+      'Porta L1, L2, L3 agli ingressi di più dispositivi tripolari affiancati.',
+    mount: 'din',
+    modules: 0,
+    labelPrefix: 'W',
+  },
+  {
+    id: 'comb-3pn',
+    kind: 'comb',
+    combType: '3P+N',
+    name: 'Pettine 3P+N',
+    category: 'Distribuzione',
+    description:
+      'Porta L1, L2, L3 e N agli ingressi di più dispositivi 3P+N o 4P affiancati.',
+    mount: 'din',
+    modules: 0,
+    labelPrefix: 'W',
+  },
   load('load-luce', 'Illuminazione', 'illuminazione', 300, 1.5, 'Circuito luci: carico resistivo equivalente.'),
   load('load-prese', 'Prese', 'prese', 1500, 2.5, 'Circuito prese con un carico resistivo equivalente (es. stufetta, ferro da stiro).'),
   load('load-forno', 'Forno elettrico', 'cucina', 2000, 2.5, 'Forno a resistenza: carico puramente resistivo.'),

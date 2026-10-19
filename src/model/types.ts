@@ -224,6 +224,9 @@ export interface ComponentInstance {
   blown?: number[];
 }
 
+/** Pettine di collegamento: conduttori portati dai denti */
+export type CombType = '1P' | '1P+N' | '3P' | '3P+N';
+
 export interface Wire {
   id: string;
   /** Identificativo del morsetto di partenza "<compId>:<key>" */
@@ -234,6 +237,8 @@ export interface Wire {
   section: WireSection;
   /** Lunghezza [m] */
   length: number;
+  /** Tratto di un pettine di collegamento (barra in rame) invece di un cavo */
+  comb?: { id: string; type: CombType; pin: number };
 }
 
 /**

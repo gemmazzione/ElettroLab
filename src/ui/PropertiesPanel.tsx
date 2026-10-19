@@ -22,6 +22,7 @@ import { CONDUCTOR_LABEL, WIRE_COLOR_HEX, WIRE_COLOR_LABEL } from '../model/cons
 import { PANEL_SIZES } from '../model/geometry';
 import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId } from '../model/terminals';
 import { modulesUsed } from '../model/placement';
+import { COMB_LABEL, COMB_RATED_A, COMB_SECTION, combDevices } from '../model/comb';
 import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { InstallSection } from './InstallSection';
@@ -578,6 +579,37 @@ function LiveValues({ comp }: { comp: ComponentInstance }) {
 
 // ------------------------------------------------------------------ conduttore
 
+/** Pettine di collegamento selezionato (uno qualsiasi dei suoi tratti). */
+function CombSection({ wire }: { wire: Wire }) {
+  const project = useStore((s) => s.project);
+  const result = useStore((s) => s.result);
+  const remove = useStore((s) => s.removeWire);
+  if (!wire.comb) return null;
+  const devs = combDevices(project, wire.comb.id);
+  const segs = project.wires.filter((w) => w.comb?.id === wire.comb!.id);
+  const imax = result && result.ok ? Math.max(0, ...segs.map((w) => abs(result.wireI.get(w.id) ?? { re: 0, im: 0 }))) : null;
+  return (
+    <Section title="Pettine di collegamento">
+      <div className="text-[12px] text-slate-300">{COMB_LABEL[wire.comb.type]}</div>
+      <Row k="Dispositivi collegati" v={devs.map((d) => d.label).join(' · ')} mono={false} />
+      <Row k="Tratto selezionato" v={`dente ${wire.conductor}, ${fmt(wire.length * 1000, 1)} mm`} />
+      <Row k="Sezione equivalente / In tipica" v={`${COMB_SECTION} mm² · ${COMB_RATED_A} A`} />
+      {imax !== null && <Row k="Corrente massima nella barra" v={fmtCurrent(imax)} />}
+      {imax !== null && imax > COMB_RATED_A && (
+        <p className="rounded bg-red-500/15 px-2 py-1 text-[11.5px] text-red-200 ring-1 ring-red-500/40">
+          La corrente supera la portata tipica del pettine ({COMB_RATED_A} A): usa il dato del costruttore e alimenta la barra al centro o con un pettine di sezione maggiore.
+        </p>
+      )}
+      <p className="text-[11px] leading-snug text-slate-500">
+        Barra in rame isolata che collega gli ingressi dei dispositivi affiancati. La corrente nominale vale per il pettine alimentato a un estremo: i dati reali sono quelli del costruttore.
+      </p>
+      <button className="flex items-center gap-1.5 rounded-md bg-red-600/15 px-2 py-1 text-[12px] text-red-300 ring-1 ring-red-500/40 hover:bg-red-600/25" onClick={() => remove(wire.id)}>
+        <Trash2 size={13} /> Rimuovi il pettine
+      </button>
+    </Section>
+  );
+}
+
 function WireProps({ wire }: { wire: Wire }) {
   const project = useStore((s) => s.project);
   const update = useStore((s) => s.updateWire);
@@ -595,6 +627,23 @@ function WireProps({ wire }: { wire: Wire }) {
   const i = result && result.ok ? result.wireI.get(wire.id) : undefined;
   const va = result && result.ok ? result.terminalV.get(wire.from) : undefined;
   const vb = result && result.ok ? result.terminalV.get(wire.to) : undefined;
+  if (wire.comb) {
+    return (
+      <>
+        <CombSection wire={wire} />
+        <Section title="Tratto di barra">
+          <Row k="Da" v={name(wire.from)} mono={false} />
+          <Row k="A" v={name(wire.to)} mono={false} />
+          <Row k="Resistenza R = ρL/S" v={`${fmt(r * 1000, 3)} mΩ`} />
+          {result && result.ok && <Row k="Corrente" v={fmtCurrent(i ? abs(i) : 0)} />}
+        </Section>
+        <WireFaultToggle wire={wire} />
+        <Section title={`Problemi rilevati (${issues.length})`}>
+          {issues.length === 0 ? <p className="text-[12px] text-slate-500">Nessun problema rilevato su questo tratto.</p> : issues.map((x) => <IssueCard key={x.id} issue={x} />)}
+        </Section>
+      </>
+    );
+  }
   return (
     <>
       <Section title="Conduttore">

@@ -4,14 +4,15 @@ import { simulate, type SimResult } from '../engine/simulate';
 import { catalogItem } from '../model/catalog';
 import { DEFAULT_COLOR_FOR } from '../model/constants';
 import { createComponent, createWire, emptyProject, inferConductor } from '../model/factory';
-import { nextPanelOrigin, PANEL_GAP, panelSize, positionToRail, railToPosition } from '../model/geometry';
+import { MODULE_W, nextPanelOrigin, PANEL_GAP, panelSize, positionToRail, railToPosition } from '../model/geometry';
+import { buildComb } from '../model/comb';
 import { canPlace, nearestFreeSlot, panelFits, panelOf } from '../model/placement';
 import { getTerminals, parseTerminalId } from '../model/terminals';
 import { DEFAULT_NORM } from '../rules/context';
 import { buildCtx, evaluate, loadProgress, saveProgress, type Progress } from '../academy/evaluate';
 import { exerciseById } from '../academy/exercises';
 import type { Evaluation } from '../academy/types';
-import type { ComponentInstance, ComponentParams, FaultType, NormSettings, Conductor, PanelConfig, Project, Wire, WireSection, XY } from '../model/types';
+import type { ComponentInstance, ComponentParams, FaultType, NormSettings, Conductor, PanelConfig, Project, RailPlacement, Wire, WireSection, XY } from '../model/types';
 import { loadCurrent, saveCurrent } from '../persistence/storage';
 import { FAULT_INFO } from '../model/faults';
 import { newId } from '../model/factory';
@@ -127,6 +128,8 @@ interface State {
   removeSelection: () => void;
   removeComponent: (id: string) => void;
   removeWire: (id: string) => void;
+  /** Inserisce un pettine di collegamento a partire dalla posizione indicata sulla guida */
+  addComb: (catalogId: string, at: RailPlacement) => boolean;
   toggleComponent: (id: string) => void;
   toggleLoad: (id: string) => void;
   updateParams: (id: string, params: ComponentParams) => void;
@@ -511,6 +514,18 @@ export const useStore = create<State>((set, get) => {
     addComponent: (catalogId, at) => {
       const item = catalogItem(catalogId);
       const { project } = get();
+      if (item.kind === 'comb') {
+        // Il punto di rilascio indica il dispositivo su cui agganciare il primo dente.
+        const sel = get().selection;
+        const selected = sel?.type === 'component' ? project.components.find((c) => c.id === sel.id) : undefined;
+        const rail = at ? positionToRail({ x: at.x - MODULE_W / 2, y: at.y }, project.panels) : selected?.rail;
+        if (!rail) {
+          get().toast('info', `${item.name}: trascinalo sul primo dispositivo della fila, oppure seleziona il dispositivo e fai doppio clic.`);
+          return null;
+        }
+        get().addComb(catalogId, rail);
+        return null;
+      }
       if (!item.defaults) {
         get().toast('errore', `${item.name}: ${item.unavailableReason}`);
         return null;
@@ -581,11 +596,34 @@ export const useStore = create<State>((set, get) => {
     },
 
     removeWire: (id) => {
+      // Un tratto di pettine non si toglie da solo: si rimuove l'intera barra.
+      const combId = get().project.wires.find((w) => w.id === id)?.comb?.id;
+      const gone = new Set(get().project.wires.filter((w) => w.id === id || (combId && w.comb?.id === combId)).map((w) => w.id));
       get().commit((p) => {
-        p.wires = p.wires.filter((w) => w.id !== id);
-        p.faults = (p.faults ?? []).filter((f) => f.targetId !== id);
+        p.wires = p.wires.filter((w) => !gone.has(w.id));
+        p.faults = (p.faults ?? []).filter((f) => !gone.has(f.targetId));
       });
       set({ selection: null });
+    },
+
+    addComb: (catalogId, at) => {
+      const item = catalogItem(catalogId);
+      if (item.kind !== 'comb' || !item.combType) return false;
+      const { project } = get();
+      const r = buildComb(project, item.combType, at);
+      if (!r.ok) {
+        get().toast('errore', `${item.name}: ${r.reason}`);
+        return false;
+      }
+      const taken = r.wires.find((w) => project.wires.some((x) => x.comb && (x.from === w.from || x.to === w.from || x.from === w.to || x.to === w.to) && x.comb.pin === w.comb!.pin));
+      if (taken) {
+        get().toast('errore', `${item.name}: questi morsetti hanno già un pettine.`);
+        return false;
+      }
+      get().commit((p) => p.wires.push(...r.wires));
+      set({ selection: { type: 'wire', id: r.wires[0]!.id } });
+      get().log('info', `${item.name} inserito su ${r.devices.map((d) => d.label).join(', ')} (${r.devices.length} dispositivi).`);
+      return true;
     },
 
     toggleComponent: (id) => {

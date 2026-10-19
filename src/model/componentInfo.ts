@@ -268,10 +268,45 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
     summary: 'Ripartisce una fase su più conduttori.',
     sections: [S('Attenzione', 'Va protetta a monte e dimensionata per la corrente totale dei circuiti derivati.'), S('Nel simulatore', 'Unico nodo elettrico.')],
   },
-  comb: {
-    title: 'Pettine di alimentazione',
-    summary: 'Barra isolata che alimenta in parallelo i morsetti di più dispositivi affiancati, al posto dei ponticelli.',
-    sections: [S('Stato', 'Funzionalità non implementata in questa versione. Nel frattempo si usano ponticelli in conduttore.')],
+  'comb-1p': {
+    title: 'Pettine di collegamento 1P',
+    summary: 'Barra in rame isolata che porta la fase agli ingressi di più dispositivi affiancati.',
+    sections: [
+      S('A cosa serve', 'Sostituisce i ponticelli in cavo tra i morsetti d\'ingresso di dispositivi affiancati (tipicamente i magnetotermici a valle di un differenziale): un solo collegamento più ordinato, con morsetti meno affollati e meno rischio di serraggi difettosi.'),
+      S('Come si usa', 'Si alimenta un dispositivo (o un estremo della barra) con un cavo; i denti entrano nei morsetti d\'ingresso degli altri. I pettini si tagliano a misura e le estremità vanno chiuse con gli appositi tappi isolanti. Se si toglie un dispositivo in mezzo, il pettine va rifatto.'),
+      S('Attenzione', 'La corrente nominale del pettine (tipicamente 63 A con 10 mm² se alimentato a un estremo, dati del costruttore) deve essere maggiore della corrente totale dei circuiti derivati. Il passo dei denti deve corrispondere ai dispositivi: un pettine 1P+N va sui magnetotermici 1P+N, uno 3P+N sui quadripolari.'),
+      S('Nel simulatore', 'Trascina il pettine sul primo dispositivo della fila: collega gli ingressi di quel dispositivo e di quelli adiacenti compatibili, senza moduli liberi in mezzo. Ogni tratto è un conduttore in rame da 10 mm² lungo quanto il passo tra i dispositivi (17,5 mm per modulo). Selezionandolo puoi vedere la corrente nella barra, interromperlo come guasto o rimuoverlo.'),
+    ],
+  },
+  'comb-1pn': {
+    title: 'Pettine di collegamento 1P+N',
+    summary: 'Barra a due conduttori (fase e neutro) per alimentare in parallelo più magnetotermici 1P+N.',
+    sections: [
+      S('A cosa serve', 'Sostituisce i ponticelli in cavo tra i morsetti d\'ingresso di dispositivi affiancati (tipicamente i magnetotermici a valle di un differenziale): un solo collegamento più ordinato, con morsetti meno affollati e meno rischio di serraggi difettosi.'),
+      S('Come si usa', 'Si alimenta un dispositivo (o un estremo della barra) con un cavo; i denti entrano nei morsetti d\'ingresso degli altri. I pettini si tagliano a misura e le estremità vanno chiuse con gli appositi tappi isolanti. Se si toglie un dispositivo in mezzo, il pettine va rifatto.'),
+      S('Attenzione', 'La corrente nominale del pettine (tipicamente 63 A con 10 mm² se alimentato a un estremo, dati del costruttore) deve essere maggiore della corrente totale dei circuiti derivati. Il passo dei denti deve corrispondere ai dispositivi: un pettine 1P+N va sui magnetotermici 1P+N, uno 3P+N sui quadripolari.'),
+      S('Nel simulatore', 'Trascina il pettine sul primo dispositivo della fila: collega gli ingressi di quel dispositivo e di quelli adiacenti compatibili, senza moduli liberi in mezzo. Ogni tratto è un conduttore in rame da 10 mm² lungo quanto il passo tra i dispositivi (17,5 mm per modulo). Selezionandolo puoi vedere la corrente nella barra, interromperlo come guasto o rimuoverlo.'),
+    ],
+  },
+  'comb-3p': {
+    title: 'Pettine di collegamento 3P',
+    summary: 'Barra a tre conduttori (L1, L2, L3) per dispositivi tripolari affiancati.',
+    sections: [
+      S('A cosa serve', 'Sostituisce i ponticelli in cavo tra i morsetti d\'ingresso di dispositivi affiancati (tipicamente i magnetotermici a valle di un differenziale): un solo collegamento più ordinato, con morsetti meno affollati e meno rischio di serraggi difettosi.'),
+      S('Come si usa', 'Si alimenta un dispositivo (o un estremo della barra) con un cavo; i denti entrano nei morsetti d\'ingresso degli altri. I pettini si tagliano a misura e le estremità vanno chiuse con gli appositi tappi isolanti. Se si toglie un dispositivo in mezzo, il pettine va rifatto.'),
+      S('Attenzione', 'La corrente nominale del pettine (tipicamente 63 A con 10 mm² se alimentato a un estremo, dati del costruttore) deve essere maggiore della corrente totale dei circuiti derivati. Il passo dei denti deve corrispondere ai dispositivi: un pettine 1P+N va sui magnetotermici 1P+N, uno 3P+N sui quadripolari.'),
+      S('Nel simulatore', 'Trascina il pettine sul primo dispositivo della fila: collega gli ingressi di quel dispositivo e di quelli adiacenti compatibili, senza moduli liberi in mezzo. Ogni tratto è un conduttore in rame da 10 mm² lungo quanto il passo tra i dispositivi (17,5 mm per modulo). Selezionandolo puoi vedere la corrente nella barra, interromperlo come guasto o rimuoverlo.'),
+    ],
+  },
+  'comb-3pn': {
+    title: 'Pettine di collegamento 3P+N',
+    summary: 'Barra a quattro conduttori (L1, L2, L3, N) per dispositivi 3P+N o 4P affiancati.',
+    sections: [
+      S('A cosa serve', 'Sostituisce i ponticelli in cavo tra i morsetti d\'ingresso di dispositivi affiancati (tipicamente i magnetotermici a valle di un differenziale): un solo collegamento più ordinato, con morsetti meno affollati e meno rischio di serraggi difettosi.'),
+      S('Come si usa', 'Si alimenta un dispositivo (o un estremo della barra) con un cavo; i denti entrano nei morsetti d\'ingresso degli altri. I pettini si tagliano a misura e le estremità vanno chiuse con gli appositi tappi isolanti. Se si toglie un dispositivo in mezzo, il pettine va rifatto.'),
+      S('Attenzione', 'La corrente nominale del pettine (tipicamente 63 A con 10 mm² se alimentato a un estremo, dati del costruttore) deve essere maggiore della corrente totale dei circuiti derivati. Il passo dei denti deve corrispondere ai dispositivi: un pettine 1P+N va sui magnetotermici 1P+N, uno 3P+N sui quadripolari.'),
+      S('Nel simulatore', 'Trascina il pettine sul primo dispositivo della fila: collega gli ingressi di quel dispositivo e di quelli adiacenti compatibili, senza moduli liberi in mezzo. Ogni tratto è un conduttore in rame da 10 mm² lungo quanto il passo tra i dispositivi (17,5 mm per modulo). Selezionandolo puoi vedere la corrente nella barra, interromperlo come guasto o rimuoverlo.'),
+    ],
   },
   'load-luce': {
     title: 'Utilizzatore: illuminazione',

@@ -5,6 +5,8 @@ import { WIRE_COLOR_HEX, WIRE_STROKE_FOR_SECTION } from '../../model/constants';
 import { useStore } from '../../store/projectStore';
 import { fmt, fmtCurrent } from '../../ui/format';
 
+const flowingComb = (running: boolean, current: number) => running && current > 0.005;
+
 export type WireEdgeData = { wireId: string };
 
 /** Conduttore: il colore è l'identificazione reale del conduttore, lo spessore segue la sezione. */
@@ -35,6 +37,39 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
     borderRadius: 6,
     offset: 16,
   });
+  if (wire.comb) {
+    // Pettine: barra in rame sopra i morsetti d'ingresso, un livello per dente (fase sotto, neutro sopra).
+    const off = 10 + wire.comb.pin * 6;
+    const yb = Math.min(sourceY, targetY) - off;
+    const bar = `M${sourceX},${sourceY} V${yb} H${targetX} V${targetY}`;
+    const midX = (sourceX + targetX) / 2;
+    return (
+      <>
+        {selected && <path d={bar} fill="none" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={9} />}
+        {hasError && !selected && <path d={bar} fill="none" stroke="#ef4444" strokeOpacity={0.45} strokeWidth={8} />}
+        <path d={bar} fill="none" stroke="#7c3f12" strokeWidth={5} strokeLinejoin="round" />
+        <BaseEdge
+          id={props.id}
+          path={bar}
+          style={{ stroke: broken ? '#64748b' : '#d4824a', strokeWidth: 3, strokeDasharray: broken ? '4 5' : undefined, strokeLinejoin: 'round' }}
+          interactionWidth={10}
+        />
+        {flowingComb(running, current) && <path d={bar} fill="none" stroke="#fde68a" strokeOpacity={0.5} strokeWidth={1.2} strokeDasharray="2 8" className="wire-flow" pointerEvents="none" />}
+        {(showLengths || (showLabels && flowingComb(running, current))) && !broken && (
+          <EdgeLabelRenderer>
+            <div
+              className="pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[8.5px] leading-[12px] ring-1 ring-amber-800/60"
+              style={{ transform: `translate(-50%, -100%) translate(${midX}px, ${yb - 2}px)` }}
+            >
+              {showLengths && <span className="text-orange-200">pettine {wire.conductor}</span>}
+              {showLengths && showLabels && flowingComb(running, current) && <span className="text-slate-500"> · </span>}
+              {showLabels && flowingComb(running, current) && <span className="text-amber-200">{fmtCurrent(current)}</span>}
+            </div>
+          </EdgeLabelRenderer>
+        )}
+      </>
+    );
+  }
   const width = WIRE_STROKE_FOR_SECTION[wire.section];
   const color = WIRE_COLOR_HEX[wire.color];
   const flowing = running && current > 0.005;

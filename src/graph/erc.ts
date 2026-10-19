@@ -72,9 +72,17 @@ export function checkWiring(project: Project): Issue[] {
 
   // ------------------------------------------------------------ conduttori
   const wireCount = new Map<string, number>();
+  // Un pettine occupa il morsetto una volta sola, anche se ne partono due tratti.
+  const combAt = new Set<string>();
   for (const w of project.wires) {
-    wireCount.set(w.from, (wireCount.get(w.from) ?? 0) + 1);
-    wireCount.set(w.to, (wireCount.get(w.to) ?? 0) + 1);
+    for (const tid of [w.from, w.to]) {
+      if (w.comb) {
+        const key = `${tid}|${w.comb.id}`;
+        if (combAt.has(key)) continue;
+        combAt.add(key);
+      }
+      wireCount.set(tid, (wireCount.get(tid) ?? 0) + 1);
+    }
     const ta = terminals.get(w.from);
     const tb = terminals.get(w.to);
     if (!ta || !tb) {
@@ -103,6 +111,8 @@ export function checkWiring(project: Project): Issue[] {
         terminalIds: [w.from, w.to],
       });
     }
+    // Pettine: barra isolata, i colori dei cavi non si applicano.
+    if (w.comb) continue;
     const fn: TerminalFunction = ta.fn === tb.fn ? ta.fn : ta.fn === 'PE' || tb.fn === 'PE' ? 'PE' : 'L';
     if (w.color === 'giallo-verde' && fn !== 'PE') {
       push({

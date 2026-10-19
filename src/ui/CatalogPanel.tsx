@@ -8,7 +8,7 @@ import { useStore } from '../store/projectStore';
 function ItemRow({ item }: { item: CatalogItem }) {
   const add = useStore((s) => s.addComponent);
   const showInfo = useStore((s) => s.setInfoItem);
-  const disabled = !item.defaults;
+  const disabled = !item.defaults && item.kind !== 'comb';
   return (
     <div
       draggable={!disabled}
@@ -17,7 +17,7 @@ function ItemRow({ item }: { item: CatalogItem }) {
         e.dataTransfer.effectAllowed = 'copy';
       }}
       onDoubleClick={() => !disabled && add(item.id)}
-      title={disabled ? item.unavailableReason : `${item.description}\n\nTrascina sul quadro o fai doppio clic.`}
+      title={disabled ? item.unavailableReason : item.kind === 'comb' ? `${item.description}\n\nTrascinalo sul primo dispositivo della fila (oppure seleziona il dispositivo e fai doppio clic).` : `${item.description}\n\nTrascina sul quadro o fai doppio clic.`}
       className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-[12px] ${
         disabled ? 'cursor-default text-slate-600' : 'cursor-grab text-slate-200 hover:bg-slate-800 active:cursor-grabbing'
       }`}
@@ -37,7 +37,9 @@ function ItemRow({ item }: { item: CatalogItem }) {
         <Lock size={12} className="shrink-0" />
       ) : (
         <>
-          {item.mount === 'din' && <span className="shrink-0 font-mono text-[10px] text-slate-500">{item.modules}M</span>}
+          {item.mount === 'din' && (
+            <span className="shrink-0 font-mono text-[10px] text-slate-500">{item.kind === 'comb' ? 'barra' : `${item.modules}M`}</span>
+          )}
           <button
             className="shrink-0 rounded p-0.5 text-slate-500 opacity-0 hover:bg-slate-700 hover:text-sky-300 group-hover:opacity-100"
             onClick={() => add(item.id)}
