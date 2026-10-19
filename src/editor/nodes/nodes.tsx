@@ -20,6 +20,17 @@ function useComponent(id: string): ComponentInstance | undefined {
   return useStore((s) => s.project.components.find((c) => c.id === id));
 }
 
+/** Il componente è collegato con almeno un conduttore al componente selezionato. */
+function useLinkedToSelection(id: string): boolean {
+  return useStore((s) => {
+    const sel = s.selection?.type === 'component' ? s.selection.id : null;
+    if (!sel || sel === id) return false;
+    const a = `${sel}:`;
+    const b = `${id}:`;
+    return s.project.wires.some((w) => (w.from.startsWith(a) && w.to.startsWith(b)) || (w.from.startsWith(b) && w.to.startsWith(a)));
+  });
+}
+
 function useHasIssue(id: string): 'errore' | 'attenzione' | null {
   return useStore((s) => {
     let level: 'errore' | 'attenzione' | null = null;
@@ -51,6 +62,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const current = useStore((s) => (s.result ? deviceCurrent(s.result, id) : 0));
   const running = useStore((s) => s.running);
   const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
   const tripped = useStore((s) => s.prot[id]?.tripped);
   const spdOver = useStore((s) => !!(s.result && s.result.ok && s.result.alerts.some((a) => a.code === 'SPD_TOV' && a.componentIds.includes(id))));
   const heat = useStore((s) => s.prot[id]?.heat ?? 0);
@@ -65,7 +77,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const terms = getTerminals(comp);
   const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd';
   return (
-    <div className={`relative rounded-[3px] ${selected ? 'node-selected' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
+    <div className={`relative rounded-[3px] ${selected ? 'node-selected' : linked ? 'node-linked' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
       <IssueDot level={issue} />
       <DinDeviceSvg
         comp={comp}
@@ -110,13 +122,14 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
   const running = useStore((s) => s.running);
   const res = useStore((s) => (s.result && s.result.ok ? s.result.supply : null));
   const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
   if (!comp || comp.params.kind !== 'supply') return null;
   const p = comp.params.p;
   const terms = getTerminals(comp);
   const h = componentHeight(comp);
   return (
     <div
-      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : 'border-slate-600'}`}
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
       style={{ width: componentWidth(comp), height: h }}
     >
       <IssueDot level={issue} />
@@ -174,12 +187,13 @@ export const EarthNode = memo(function EarthNode({ data, selected }: NodeProps) 
   const id = (data as CompNodeData).componentId;
   const comp = useComponent(id);
   const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
   if (!comp || comp.params.kind !== 'earth') return null;
   const terms = getTerminals(comp);
   const w = componentWidth(comp);
   return (
     <div
-      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : 'border-slate-600'}`}
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
       style={{ width: w, height: componentHeight(comp) }}
     >
       <IssueDot level={issue} />
@@ -219,6 +233,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
   const res = useStore((s) => (s.result && s.result.ok ? s.result.loads.get(id) : undefined));
   const toggleLoad = useStore((s) => s.toggleLoad);
   const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
   const faultCount = useStore((s) => (s.project.faults ?? []).filter((f) => f.targetId === id && !f.hidden).length);
   const touch = useStore((s) => (s.result && s.result.ok ? (s.result.touchV.get(id) ?? null) : null));
   const clampOn = useStore((s) => s.clampTarget?.kind === 'line' && s.clampTarget.id === id);
@@ -229,7 +244,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
   const working = running && !!res && res.i > 0.001;
   return (
     <div
-      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : 'border-slate-600'}`}
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
       style={{ width: componentWidth(comp), height: componentHeight(comp) }}
     >
       <IssueDot level={issue} />
@@ -306,11 +321,12 @@ export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps
   const press = useStore((s) => s.pressButton);
   const running = useStore((s) => s.running);
   const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
   if (!comp || comp.params.kind !== 'button') return null;
   const terms = getTerminals(comp);
   return (
     <div
-      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : 'border-slate-600'}`}
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
       style={{ width: componentWidth(comp), height: componentHeight(comp) }}
     >
       <IssueDot level={issue} />

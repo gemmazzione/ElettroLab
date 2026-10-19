@@ -23,6 +23,22 @@ body {
   cursor: grabbing;
 }
 
+.node-linked {
+  outline: 2px solid rgba(251, 191, 36, 0.75);
+  outline-offset: 2px;
+}
+
+@keyframes wire-linked-pulse {
+  0%, 100% { stroke-opacity: 0.25; }
+  50% { stroke-opacity: 0.65; }
+}
+.wire-linked {
+  animation: wire-linked-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wire-linked { animation: none; }
+}
+
 .node-selected {
   outline: 2px solid #38bdf8;
   outline-offset: 2px;

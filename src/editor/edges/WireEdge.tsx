@@ -6,6 +6,9 @@ import { useStore } from '../../store/projectStore';
 import { fmt, fmtCurrent } from '../../ui/format';
 
 const flowingComb = (running: boolean, current: number) => running && current > 0.005;
+const ownerOf = (tid: string) => tid.slice(0, tid.lastIndexOf(':'));
+/** Colore dell'evidenziazione dei conduttori del componente selezionato */
+const LINK = '#fbbf24';
 
 export type WireEdgeData = { wireId: string };
 
@@ -25,7 +28,11 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
   const hasError = useStore((s) => s.issues.some((i) => i.severity === 'errore' && i.wireIds.includes(wireId)));
   const broken = useStore((s) => (s.project.faults ?? []).some((f) => f.type === 'open-wire' && f.targetId === wireId && !f.hidden));
   const clamped = useStore((s) => s.clampTarget?.kind === 'wire' && s.clampTarget.id === wireId);
+  // Componente selezionato: i suoi conduttori sono evidenziati, gli altri attenuati.
+  const focus = useStore((s) => (s.selection?.type === 'component' ? s.selection.id : null));
   if (!wire) return null;
+  const linked = !!focus && (ownerOf(wire.from) === focus || ownerOf(wire.to) === focus);
+  const dim = !!focus && !linked;
 
   const [path, lx, ly] = getSmoothStepPath({
     sourceX,
@@ -44,7 +51,8 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
     const bar = `M${sourceX},${sourceY} V${yb} H${targetX} V${targetY}`;
     const midX = (sourceX + targetX) / 2;
     return (
-      <>
+      <g opacity={dim ? 0.25 : 1}>
+        {linked && <path d={bar} fill="none" stroke={LINK} strokeOpacity={0.55} strokeWidth={10} className="wire-linked" pointerEvents="none" />}
         {selected && <path d={bar} fill="none" stroke="#38bdf8" strokeOpacity={0.6} strokeWidth={9} />}
         {hasError && !selected && <path d={bar} fill="none" stroke="#ef4444" strokeOpacity={0.45} strokeWidth={8} />}
         <path d={bar} fill="none" stroke="#7c3f12" strokeWidth={5} strokeLinejoin="round" />
@@ -58,7 +66,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
         {(showLengths || (showLabels && flowingComb(running, current))) && !broken && (
           <EdgeLabelRenderer>
             <div
-              className="pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[8.5px] leading-[12px] ring-1 ring-amber-800/60"
+              className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[8.5px] leading-[12px] ring-1 ring-amber-800/60 ${dim ? 'opacity-25' : ''}`}
               style={{ transform: `translate(-50%, -100%) translate(${midX}px, ${yb - 2}px)` }}
             >
               {showLengths && <span className="text-orange-200">pettine {wire.conductor}</span>}
@@ -67,7 +75,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
             </div>
           </EdgeLabelRenderer>
         )}
-      </>
+      </g>
     );
   }
   const width = WIRE_STROKE_FOR_SECTION[wire.section];
@@ -75,7 +83,8 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
   const flowing = running && current > 0.005;
 
   return (
-    <>
+    <g opacity={dim ? 0.22 : 1}>
+      {linked && <path d={path} fill="none" stroke={LINK} strokeOpacity={0.5} strokeWidth={width + 9} className="wire-linked" pointerEvents="none" />}
       {selected && <path d={path} fill="none" stroke="#38bdf8" strokeOpacity={0.55} strokeWidth={width + 7} />}
       {hasError && !selected && <path d={path} fill="none" stroke="#ef4444" strokeOpacity={0.45} strokeWidth={width + 6} />}
       <path d={path} fill="none" stroke="#e2e8f0" strokeOpacity={wire.color === 'nero' ? 0.45 : 0.18} strokeWidth={width + 1.6} />
@@ -105,7 +114,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
       {!broken && ((showLabels && flowing) || showLengths) && (
         <EdgeLabelRenderer>
           <div
-            className="pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[9px] leading-[13px] ring-1 ring-slate-700"
+            className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[9px] leading-[13px] ring-1 ${linked ? 'ring-amber-400/70' : 'ring-slate-700'} ${dim ? 'opacity-25' : ''}`}
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
           >
             {showLengths && (
@@ -118,7 +127,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
           </div>
         </EdgeLabelRenderer>
       )}
-    </>
+    </g>
   );
 });
 
