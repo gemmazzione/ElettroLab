@@ -5,7 +5,7 @@ import { analyzeCircuits } from '../graph/netGraph';
 import { FAULT_INFO, loadFaultsFor } from '../model/faults';
 import { isThreePhaseLoad, loadHasNeutral } from '../model/terminals';
 import type { ComponentInstance, Wire } from '../model/types';
-import { H_TRIP, MAGNETIC_BAND, magneticZone, residualTripTime, residualZone, thermalTripTime } from '../protection/curves';
+import { fuseConventional, fuseMeltTime, H_TRIP, MAGNETIC_BAND, magneticZone, residualTripTime, residualZone, thermalTripTime } from '../protection/curves';
 import { useStore } from '../store/projectStore';
 import { NumberInput, Row, Section } from './fields';
 import { fmt, fmtCurrent } from './format';
@@ -30,7 +30,63 @@ const TRIP_TEXT = {
   magnetico: 'intervenuto per cortocircuito (magnetico)',
   differenziale: 'intervenuto per corrente differenziale',
   prova: 'aperto con il pulsante di prova',
+  fusione: 'con una cartuccia fusa',
 } as const;
+
+const fTime = (t: number) => (t < 1 ? `${fmt(t * 1000, 0)} ms` : t < 120 ? `${fmt(t, 1)} s` : `${fmt(t / 60, 0)} min`);
+
+/** Portafusibili: stato delle cartucce, sostituzione, correnti convenzionali e potere di interruzione. */
+function FuseSection({ comp, ik }: { comp: ComponentInstance; ik: number | null }) {
+  const st = useStore((s) => s.prot[comp.id]);
+  const running = useStore((s) => s.running);
+  const replace = useStore((s) => s.replaceFuse);
+  if (comp.params.kind !== 'fuse') return null;
+  const p = comp.params.p;
+  const conv = fuseConventional(p.in);
+  const blown = comp.blown ?? [];
+  const melt = Math.max(0, ...(st?.melt ?? []).filter((m) => m < 1));
+  const poleName = (i: number) => (p.poles.startsWith('3P') ? `L${i + 1}` : 'L');
+  return (
+    <Section title="Fusibili e cortocircuito">
+      {blown.length > 0 ? (
+        <div className="space-y-1.5 rounded-md bg-red-500/15 px-2 py-1.5 text-[12px] text-red-200 ring-1 ring-red-500/40">
+          <div className="font-semibold">
+            Cartuccia fusa: {blown.map(poleName).join(', ')}. Il fusibile non si riarma: va sostituito.
+          </div>
+          <div className="text-[11px] leading-snug text-red-200/80">
+            {comp.closed ? 'Apri il portafusibili (sezionamento), elimina la causa, sostituisci la cartuccia e richiudi.' : 'Portafusibili aperto: puoi sostituire la cartuccia.'}
+          </div>
+          <button
+            onClick={() => replace(comp.id)}
+            disabled={comp.closed}
+            className="rounded bg-red-600 px-2 py-1 text-[11.5px] font-semibold text-white enabled:hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Sostituisci {blown.length === 1 ? 'la cartuccia' : 'le cartucce'} (gG {p.in} A)
+          </button>
+        </div>
+      ) : (
+        running && <Row k="Consumo della cartuccia più sollecitata" v={`${fmt(melt * 100, 0)} %`} />
+      )}
+      <Row k="Non fusione (Inf, 1 h)" v={`${fmt(conv.inf, 2)}·In = ${fmt(conv.inf * p.in, 1)} A`} />
+      <Row k="Fusione convenzionale (If, entro 1 h)" v={`${fmt(conv.if, 2)}·In = ${fmt(conv.if * p.in, 1)} A`} />
+      <Row k="Fusione a 5·In / 10·In (curva media)" v={`${fTime(fuseMeltTime(5, p.in))} / ${fTime(fuseMeltTime(10, p.in))}`} />
+      {ik === null ? (
+        <p className="text-[11.5px] text-slate-500">Icc presunta non calcolabile: il portafusibili non è collegato alla fornitura.</p>
+      ) : (
+        <>
+          <Row k="Icc presunta massima ai morsetti di valle" v={fkA(ik)} />
+          {ik <= p.icn * 1000 ? (
+            <Outcome v="ok">
+              Icc {fkA(ik)} ≤ potere di interruzione {fmt(p.icn, 0)} kA della cartuccia (valore tipico gG 10,3×38; verificare quello del costruttore).
+            </Outcome>
+          ) : (
+            <Outcome v="ko">Icc {fkA(ik)} supera il potere di interruzione {fmt(p.icn, 0)} kA della cartuccia.</Outcome>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
 
 /** Stato e calcoli di protezione di un dispositivo. */
 export function ProtectionSection({ comp }: { comp: ComponentInstance }) {
@@ -39,6 +95,7 @@ export function ProtectionSection({ comp }: { comp: ComponentInstance }) {
   const running = useStore((s) => s.running);
   const pr = comp.params;
   const ik = useMemo(() => deviceShortCircuit(project, comp), [project, comp]);
+  if (pr.kind === 'fuse') return <FuseSection comp={comp} ik={ik} />;
   if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'rcd' && pr.kind !== 'switch') return null;
   const overcurrent = pr.kind === 'mcb' || pr.kind === 'rcbo';
 
@@ -139,7 +196,7 @@ export function LoadFaultCurrents({ comp }: { comp: ComponentInstance }) {
     const currents = loadEndFaultCurrents(project, comp.id);
     const circuit = analyzeCircuits(project).find((c) => c.loadId === comp.id);
     const devs = (circuit?.lDevices ?? []).map((id) => project.components.find((c) => c.id === id)!);
-    const ocp = [...devs].reverse().find((d) => d.params.kind === 'mcb' || d.params.kind === 'rcbo');
+    const ocp = [...devs].reverse().find((d) => d.params.kind === 'mcb' || d.params.kind === 'rcbo' || d.params.kind === 'fuse');
     const rcd = [...devs].reverse().find((d) => d.params.kind === 'rcd' || d.params.kind === 'rcbo');
     return { currents, ocp, rcd };
   }, [project, comp.id]);
@@ -164,6 +221,23 @@ export function LoadFaultCurrents({ comp }: { comp: ComponentInstance }) {
       ) : (
         <Outcome v="ko">
           {ocp.label}: {fmt(ratio, 1)}·In è sotto la soglia magnetica: il cortocircuito a fondo linea verrebbe eliminato solo dal termico{Number.isFinite(tt) ? ` in circa ${fmt(tt, 0)} s` : ''}. Linea troppo lunga o sezione troppo piccola per questa protezione.
+        </Outcome>
+      );
+  } else if (currents.ln !== null && ocp && ocp.params.kind === 'fuse' && comp.params.kind === 'load') {
+    const p = ocp.params.p;
+    const ratio = currents.ln / p.in;
+    const tm = fuseMeltTime(ratio, p.in);
+    const s = comp.params.p.cableSection;
+    const k = comp.params.p.install?.insulation === 'EPR' ? 143 : 115;
+    const tAllowed = ((k * s) / currents.ln) ** 2;
+    shortVerdict =
+      Number.isFinite(tm) && tm <= 5 && tm <= tAllowed ? (
+        <Outcome v="ok">
+          {ocp.label} (gG {p.in} A): {fkA(currents.ln)} = {fmt(ratio, 1)}·In → fusione in circa {fTime(tm)} (curva media). Entro il tempo ammesso dal cavo (K²S²/I² = {fTime(tAllowed)}, K = {k}).
+        </Outcome>
+      ) : (
+        <Outcome v="ko">
+          {ocp.label} (gG {p.in} A): {fkA(currents.ln)} = {fmt(ratio, 1)}·In → {Number.isFinite(tm) ? `fusione in circa ${fTime(tm)}` : 'nessuna fusione'}, oltre {tm > 5 ? '5 s' : `il tempo ammesso dal cavo (${fTime(tAllowed)}, K = ${k})`}. Linea troppo lunga o sezione troppo piccola per questa cartuccia.
         </Outcome>
       );
   } else if (currents.ln !== null) {

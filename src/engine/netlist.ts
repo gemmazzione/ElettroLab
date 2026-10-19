@@ -19,7 +19,8 @@ export type ElementTag =
   | { t: 'rb'; componentId: string }
   | { t: 'ra'; componentId: string }
   | { t: 'fault'; faultId: string }
-  | { t: 'extra'; index: number };
+  | { t: 'extra'; index: number }
+  | { t: 'coil'; componentId: string };
 
 /**
  * Elemento a due morsetti: impedenza z in serie a una f.e.m. (con il "+" verso a).
@@ -69,6 +70,10 @@ export function loadBranchImpedance(powerW: number, cosPhi: number): Complex {
   const zMag = (LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE * pf) / powerW;
   return C(zMag * pf, zMag * Math.sqrt(1 - pf * pf));
 }
+
+/** Bobina di un relè passo-passo a 230 V: assorbimento tipico durante l'impulso (valore indicativo). */
+export const COIL_POWER_W = 4;
+export const COIL_COS_PHI = 0.5;
 
 export function wireResistance(length: number, section: number): number {
   return (RHO_CU_70 * Math.max(length, MIN_WIRE_LENGTH)) / section;
@@ -140,12 +145,27 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
       case 'earth':
         elements.push({ a: tid('PE'), b: NODE_EARTH, z: C(Math.max(pr.p.ra, 1e-3)), tag: { t: 'ra', componentId: c.id } });
         break;
+      case 'button':
+        // Contatto momentaneo: chiuso solo mentre il pulsante è premuto (mai forzato dalle opzioni).
+        if (c.closed) elements.push({ a: tid('in'), b: tid('out'), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: 0 } });
+        break;
+      case 'relay':
+        // Bobina sempre presente tra A1 e A2: impedenza costante dai dati tipici di assorbimento.
+        elements.push({ a: tid('A1'), b: tid('A2'), z: loadBranchImpedance(COIL_POWER_W, COIL_COS_PHI), tag: { t: 'coil', componentId: c.id } });
+        if (!(opts.closed ? opts.closed(c) : c.closed)) break;
+        for (const p of getPoles(c)) {
+          elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
+        }
+        break;
       case 'switch':
       case 'mcb':
+      case 'fuse':
       case 'rcd':
       case 'rcbo':
         if (!(opts.closed ? opts.closed(c) : c.closed)) break;
         for (const p of getPoles(c)) {
+          // Cartuccia fusa: il polo resta aperto anche a portafusibili chiuso.
+          if (c.blown?.includes(p.index)) continue;
           elements.push({
             a: tid(p.inKey),
             b: tid(p.outKey),

@@ -146,7 +146,13 @@ export function Dashboard() {
                       <td className="px-2 py-1 text-right text-amber-200">{fmtCurrent(i)}</td>
                       <td className={`px-2 py-1 text-right ${inom && i > inom ? 'text-red-300' : 'text-slate-400'}`}>{inom ? `${fmt((i / inom) * 100, 0)}%` : '—'}</td>
                       <td className="px-2 py-1 text-right text-slate-400">
-                        {d.params.kind === 'mcb' || d.params.kind === 'rcbo' ? `${fmt(Math.min(999, ((prot[d.id]?.heat ?? 0) / H_TRIP) * 100), 0)}%` : '—'}
+                        {d.params.kind === 'mcb' || d.params.kind === 'rcbo'
+                          ? `${fmt(Math.min(999, ((prot[d.id]?.heat ?? 0) / H_TRIP) * 100), 0)}%`
+                          : d.params.kind === 'fuse'
+                            ? d.blown?.length
+                              ? 'fuso'
+                              : `${fmt(Math.max(0, ...(prot[d.id]?.melt ?? [])) * 100, 0)}%`
+                            : '—'}
                       </td>
                     </tr>
                   );

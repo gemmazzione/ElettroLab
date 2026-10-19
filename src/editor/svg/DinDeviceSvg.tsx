@@ -41,6 +41,8 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
       return { main: `${pr.p.curve}${pr.p.in}`, sub: `${pr.p.idn}mA ${pr.p.rcdType}`, lever: '#22272e' };
     case 'switch':
       return { main: `${pr.p.in}A`, sub: 'I-0', lever: '#b42318' };
+    case 'relay':
+      return { main: 'PP', sub: `${pr.p.in}A ${pr.p.coilV}V~`, lever: '#475569' };
     default:
       return { main: '', sub: '', lever: '#22272e' };
   }
@@ -48,6 +50,7 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
 
 export function DinDeviceSvg({ comp, width: w, terminals, showLabels, onToggle, onTest, tripped }: Props) {
   if (comp.params.kind === 'bar') return <BarSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} />;
+  if (comp.params.kind === 'fuse') return <FuseSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} onToggle={onToggle} />;
   if (comp.params.kind === 'spd') return <SpdSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} tripped={tripped} />;
   const r = rating(comp);
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
@@ -211,6 +214,86 @@ function SpdSvg({ comp, width: w, terminals, showLabels, tripped }: Omit<Props, 
         <title>{tripped ? 'Sovratensione oltre Uc' : 'Efficiente'}</title>
       </rect>
       <text x={w / 2} y={127} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
+        {comp.label}
+      </text>
+    </svg>
+  );
+}
+
+/**
+ * Sezionatore portafusibili: ogni polo ha un cassetto apribile con la cartuccia 10,3×38.
+ * Cassetto alto = chiuso; abbassato = aperto (sezionato, cartuccia sostituibile).
+ * Spia rossa sul cassetto = cartuccia fusa.
+ */
+function FuseSvg({ comp, width: w, terminals, showLabels, onToggle }: Omit<Props, 'onTest' | 'tripped'>) {
+  if (comp.params.kind !== 'fuse') return null;
+  const p = comp.params.p;
+  const poles = terminals.filter((t) => t.side === 'top');
+  const pitch = w / Math.max(1, poles.length);
+  const drop = comp.closed ? 0 : 12;
+  return (
+    <svg width={w} height={DEVICE_H} viewBox={`0 0 ${w} ${DEVICE_H}`} className="block">
+      <rect x={0.5} y={0.5} width={w - 1} height={DEVICE_H - 1} rx={3} fill="#d9dce1" stroke={BODY_EDGE} />
+      <rect x={1} y={1} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      <rect x={1} y={DEVICE_H - 28} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      {terminals.map((t) => (
+        <Screw key={t.key} x={t.x} y={t.side === 'top' ? TERMINAL_Y_TOP : TERMINAL_Y_BOTTOM} />
+      ))}
+      {showLabels &&
+        terminals.map((t) => (
+          <text key={`l-${t.key}`} x={t.x} y={t.side === 'top' ? 37 : DEVICE_H - 33} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#39414b" fontFamily="ui-monospace, monospace">
+            {t.label}
+          </text>
+        ))}
+      {poles.map((t) => {
+        const isN = t.fn === 'N';
+        const blown = t.pole !== undefined && !!comp.blown?.includes(t.pole);
+        const cx = t.x;
+        const cw = pitch - 5;
+        const y0 = 42 + drop;
+        return (
+          <g key={`c-${t.key}`} opacity={comp.closed ? 1 : 0.92}>
+            {/* cassetto */}
+            <rect x={cx - cw / 2} y={y0} width={cw} height={70} rx={2.5} fill={isN ? '#3f5b8f' : '#3a414b'} stroke="#15181c" strokeWidth={0.7} />
+            <rect x={cx - cw / 2 + 2} y={y0 + 2} width={cw - 4} height={5} rx={1} fill="#59616c" />
+            {isN ? (
+              <text x={cx} y={y0 + 36} textAnchor="middle" fontSize={10} fontWeight={700} fill="#e2e8f0" fontFamily="ui-sans-serif, system-ui">
+                N
+              </text>
+            ) : (
+              <>
+                {/* finestra con la cartuccia */}
+                <rect x={cx - 4.5} y={y0 + 13} width={9} height={30} rx={2} fill={blown ? '#7f1d1d' : '#e5e7eb'} stroke="#111" strokeWidth={0.5} />
+                <rect x={cx - 4.5} y={y0 + 13} width={9} height={4} fill="#9ca3af" />
+                <rect x={cx - 4.5} y={y0 + 39} width={9} height={4} fill="#9ca3af" />
+                <text x={cx} y={y0 + 54} textAnchor="middle" fontSize={cw < 14 ? 6 : 7} fontWeight={700} fill="#f1f5f9" fontFamily="ui-sans-serif, system-ui">
+                  gG{p.in}
+                </text>
+                <circle cx={cx} cy={y0 + 63} r={2.6} fill={blown ? '#ef4444' : '#1f2937'} stroke="#000" strokeWidth={0.4}>
+                  <title>{blown ? 'Cartuccia fusa' : 'Spia di fusione spenta'}</title>
+                </circle>
+              </>
+            )}
+          </g>
+        );
+      })}
+      {onToggle && (
+        <rect
+          x={1}
+          y={40}
+          width={w - 2}
+          height={86}
+          fill="transparent"
+          className="nodrag nopan cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          <title>{comp.closed ? 'Clicca per aprire il portafusibili (sezionamento)' : 'Clicca per chiudere il portafusibili'}</title>
+        </rect>
+      )}
+      <text x={w / 2} y={142} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
         {comp.label}
       </text>
     </svg>

@@ -174,6 +174,50 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Tre resistenze R = 230² / (P/3) collegate a un nodo di centro stella interno (oppure al neutro, se l\'opzione è attiva) più le resistenze della linea.'),
     ],
   },
+  'fuse-1p': {
+    title: 'Sezionatore portafusibili 1P',
+    summary: 'Una cartuccia gG 10,3×38 sulla fase: protezione contro le sovracorrenti e sezionamento.',
+    sections: [
+      S('A cosa serve', 'Protegge la conduttura contro sovraccarico e cortocircuito come un magnetotermico, ma con un principio diverso: un elemento metallico calibrato dentro la cartuccia fonde quando la corrente è eccessiva. Il portafusibili serve anche da sezionatore: aprendo il cassetto il circuito è separato e la cartuccia si può sostituire in sicurezza.'),
+      S('Come funziona', 'Una cartuccia gG (uso generale) sopporta indefinitamente la corrente di non fusione (1,25·In per In ≥ 16 A, 1,5·In per le più piccole) e fonde entro un\'ora alla corrente convenzionale di fusione (1,6·In o 1,9·In). Con correnti alte fonde in pochi millisecondi. Dopo la fusione la cartuccia va SOSTITUITA con una identica: non si riarma.'),
+      S('Coordinamento con il cavo', 'Per il sovraccarico valgono IB ≤ In ≤ Iz e If ≤ 1,45·Iz. Con il fusibile If = 1,6·In, quindi la seconda condizione è più severa: serve In ≤ 0,9·Iz circa. Per il cortocircuito a fondo linea la fusione deve avvenire prima che il cavo superi K²S².'),
+      S('Errori tipici', 'Sostituire la cartuccia con una di corrente maggiore "perché salta": il cavo resta senza protezione. Sostituirla senza aver trovato la causa. Aprire il portafusibili sotto carico: è un sezionatore, va manovrato a circuito scarico se il costruttore non indica diversamente.'),
+      S('Nel simulatore', 'Curva media sintetica del tempo di prearco costruita dentro le porte convenzionali della CEI EN 60269-2 (non la curva del costruttore). Ogni cartuccia accumula un consumo (somma di dt / t_fusione) e si raffredda sotto la corrente di non fusione. Una cartuccia fusa resta aperta: apri il portafusibili e usa «Sostituisci la cartuccia» nelle proprietà. Il polo di neutro (1P+N, 3P+N) è una barretta senza fusibile.'),
+    ],
+  },
+  'fuse-1pn': {
+    title: 'Sezionatore portafusibili 1P+N',
+    summary: 'Cartuccia gG sulla fase e neutro sezionato senza fusibile.',
+    sections: [
+      S('A cosa serve', 'Protegge la conduttura contro sovraccarico e cortocircuito come un magnetotermico, ma con un principio diverso: un elemento metallico calibrato dentro la cartuccia fonde quando la corrente è eccessiva. Il portafusibili serve anche da sezionatore: aprendo il cassetto il circuito è separato e la cartuccia si può sostituire in sicurezza.'),
+      S('Come funziona', 'Una cartuccia gG (uso generale) sopporta indefinitamente la corrente di non fusione (1,25·In per In ≥ 16 A, 1,5·In per le più piccole) e fonde entro un\'ora alla corrente convenzionale di fusione (1,6·In o 1,9·In). Con correnti alte fonde in pochi millisecondi. Dopo la fusione la cartuccia va SOSTITUITA con una identica: non si riarma.'),
+      S('Coordinamento con il cavo', 'Per il sovraccarico valgono IB ≤ In ≤ Iz e If ≤ 1,45·Iz. Con il fusibile If = 1,6·In, quindi la seconda condizione è più severa: serve In ≤ 0,9·Iz circa. Per il cortocircuito a fondo linea la fusione deve avvenire prima che il cavo superi K²S².'),
+      S('Errori tipici', 'Sostituire la cartuccia con una di corrente maggiore "perché salta": il cavo resta senza protezione. Sostituirla senza aver trovato la causa. Aprire il portafusibili sotto carico: è un sezionatore, va manovrato a circuito scarico se il costruttore non indica diversamente.'),
+      S('Nel simulatore', 'Curva media sintetica del tempo di prearco costruita dentro le porte convenzionali della CEI EN 60269-2 (non la curva del costruttore). Ogni cartuccia accumula un consumo (somma di dt / t_fusione) e si raffredda sotto la corrente di non fusione. Una cartuccia fusa resta aperta: apri il portafusibili e usa «Sostituisci la cartuccia» nelle proprietà. Il polo di neutro (1P+N, 3P+N) è una barretta senza fusibile.'),
+    ],
+  },
+  'fuse-3p': {
+    title: 'Sezionatore portafusibili 3P',
+    summary: 'Tre cartucce gG: ogni fase è protetta da un fusibile che fonde da solo.',
+    sections: [
+      S('A cosa serve', 'Protegge la conduttura contro sovraccarico e cortocircuito come un magnetotermico, ma con un principio diverso: un elemento metallico calibrato dentro la cartuccia fonde quando la corrente è eccessiva. Il portafusibili serve anche da sezionatore: aprendo il cassetto il circuito è separato e la cartuccia si può sostituire in sicurezza.'),
+      S('Come funziona', 'Una cartuccia gG (uso generale) sopporta indefinitamente la corrente di non fusione (1,25·In per In ≥ 16 A, 1,5·In per le più piccole) e fonde entro un\'ora alla corrente convenzionale di fusione (1,6·In o 1,9·In). Con correnti alte fonde in pochi millisecondi. Dopo la fusione la cartuccia va SOSTITUITA con una identica: non si riarma.'),
+      S('Coordinamento con il cavo', 'Per il sovraccarico valgono IB ≤ In ≤ Iz e If ≤ 1,45·Iz. Con il fusibile If = 1,6·In, quindi la seconda condizione è più severa: serve In ≤ 0,9·Iz circa. Per il cortocircuito a fondo linea la fusione deve avvenire prima che il cavo superi K²S².'),
+      S('Errori tipici', 'Sostituire la cartuccia con una di corrente maggiore "perché salta": il cavo resta senza protezione. Sostituirla senza aver trovato la causa. Aprire il portafusibili sotto carico: è un sezionatore, va manovrato a circuito scarico se il costruttore non indica diversamente.'),
+      S('Nel simulatore', 'Curva media sintetica del tempo di prearco costruita dentro le porte convenzionali della CEI EN 60269-2 (non la curva del costruttore). Ogni cartuccia accumula un consumo (somma di dt / t_fusione) e si raffredda sotto la corrente di non fusione. Una cartuccia fusa resta aperta: apri il portafusibili e usa «Sostituisci la cartuccia» nelle proprietà. Il polo di neutro (1P+N, 3P+N) è una barretta senza fusibile.'),
+    ],
+  },
+  'fuse-3pn': {
+    title: 'Sezionatore portafusibili 3P+N',
+    summary: 'Tre cartucce gG sulle fasi e neutro sezionato. Se fonde un solo fusibile, il carico trifase resta alimentato da due fasi: un motore trifase si troverebbe a funzionare in monofase, surriscaldandosi.',
+    sections: [
+      S('A cosa serve', 'Protegge la conduttura contro sovraccarico e cortocircuito come un magnetotermico, ma con un principio diverso: un elemento metallico calibrato dentro la cartuccia fonde quando la corrente è eccessiva. Il portafusibili serve anche da sezionatore: aprendo il cassetto il circuito è separato e la cartuccia si può sostituire in sicurezza.'),
+      S('Come funziona', 'Una cartuccia gG (uso generale) sopporta indefinitamente la corrente di non fusione (1,25·In per In ≥ 16 A, 1,5·In per le più piccole) e fonde entro un\'ora alla corrente convenzionale di fusione (1,6·In o 1,9·In). Con correnti alte fonde in pochi millisecondi. Dopo la fusione la cartuccia va SOSTITUITA con una identica: non si riarma.'),
+      S('Coordinamento con il cavo', 'Per il sovraccarico valgono IB ≤ In ≤ Iz e If ≤ 1,45·Iz. Con il fusibile If = 1,6·In, quindi la seconda condizione è più severa: serve In ≤ 0,9·Iz circa. Per il cortocircuito a fondo linea la fusione deve avvenire prima che il cavo superi K²S².'),
+      S('Errori tipici', 'Sostituire la cartuccia con una di corrente maggiore "perché salta": il cavo resta senza protezione. Sostituirla senza aver trovato la causa. Aprire il portafusibili sotto carico: è un sezionatore, va manovrato a circuito scarico se il costruttore non indica diversamente.'),
+      S('Nel simulatore', 'Curva media sintetica del tempo di prearco costruita dentro le porte convenzionali della CEI EN 60269-2 (non la curva del costruttore). Ogni cartuccia accumula un consumo (somma di dt / t_fusione) e si raffredda sotto la corrente di non fusione. Una cartuccia fusa resta aperta: apri il portafusibili e usa «Sostituisci la cartuccia» nelle proprietà. Il polo di neutro (1P+N, 3P+N) è una barretta senza fusibile.'),
+    ],
+  },
   'rcd-2p': {
     title: 'Interruttore differenziale puro bipolare',
     summary: 'Interviene quando una parte della corrente si disperde verso terra. Non protegge dalle sovracorrenti.',
@@ -300,7 +344,26 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
     ],
   },
   contactor: { title: 'Contattore modulare', summary: 'Interruttore comandato elettricamente da una bobina, per carichi comandati a distanza o da temporizzatori.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
-  'step-relay': { title: 'Relè passo-passo', summary: 'Cambia stato a ogni impulso dei pulsanti: comando luci da più punti.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
+  'step-relay': {
+    title: 'Relè passo-passo (bistabile)',
+    summary: 'Comanda una o più luci da più punti con semplici pulsanti: ogni impulso cambia lo stato del contatto.',
+    sections: [
+      S('A cosa serve', 'È la soluzione classica per scale, corridoi e ambienti con molti punti di comando: al posto di deviatori e invertitori si mettono pulsanti, tutti in parallelo, e un solo relè nel quadro.'),
+      S('Come funziona', 'La bobina (A1-A2) muove un meccanismo a scatto: a ogni impulso di tensione il contatto 1-2 passa da aperto a chiuso o viceversa e resta in quella posizione anche senza alimentazione della bobina (per questo si dice bistabile). La leva sul fronte permette il comando manuale.'),
+      S('Collegamento', 'Circuito di comando: fase → pulsanti in parallelo → A1; A2 al neutro. Circuito di potenza: fase protetta → morsetto 1 → morsetto 2 → lampade; il neutro delle lampade torna direttamente. I pulsanti portano la fase: vanno scelti e posati come parti del circuito a 230 V.'),
+      S('Errori tipici', 'Tenere premuto il pulsante non accende e spegne di continuo: conta il fronte dell\'impulso. Una bobina alimentata in modo permanente (per errore di cablaggio) si scalda: le bobine sono dimensionate per impulsi brevi.'),
+      S('Nel simulatore', 'La bobina è un\'impedenza costante (assorbimento tipico 4 W con cos φ 0,5, valore indicativo). Quando la tensione A1-A2 supera l\'80% della nominale partendo da sotto (fronte di salita), il contatto cambia stato. Il contatto ha 5 mΩ quando è chiuso e viene segnalato se la corrente supera la sua corrente nominale.'),
+    ],
+  },
+  pushbutton: {
+    title: 'Pulsante (normalmente aperto)',
+    summary: 'Contatto momentaneo: chiude il circuito solo mentre è premuto.',
+    sections: [
+      S('A cosa serve', 'Invia un impulso: al relè passo-passo (luci), a un temporizzatore (luce scale), a un campanello. Più pulsanti in parallelo comandano lo stesso dispositivo da punti diversi.'),
+      S('Differenza dall\'interruttore', 'L\'interruttore resta nella posizione scelta; il pulsante torna da solo nella posizione di riposo (aperto) quando lo rilasci.'),
+      S('Nel simulatore', 'Clicca il tasto rotondo sul pulsante con la simulazione avviata: il contatto resta chiuso per circa 0,35 s.'),
+    ],
+  },
   'voltage-relay': { title: 'Relè di controllo tensione', summary: 'Interviene se la tensione esce dai limiti impostati, proteggendo gli apparecchi.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
   'energy-meter': { title: 'Misuratore di energia', summary: 'Contatore modulare per misurare i consumi di un circuito.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
   psu: { title: 'Alimentatore modulare', summary: 'Fornisce bassissima tensione (es. 12/24 V) per circuiti ausiliari.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },

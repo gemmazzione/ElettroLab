@@ -22,10 +22,13 @@ export type ComponentKind =
   | 'earth'
   | 'switch'
   | 'mcb'
+  | 'fuse'
   | 'rcd'
   | 'rcbo'
   | 'bar'
   | 'spd'
+  | 'relay'
+  | 'button'
   | 'load';
 
 export type MountType = 'din' | 'free';
@@ -97,6 +100,17 @@ export interface McbParams {
   icn: number;
 }
 
+/** Sezionatore portafusibili modulare con cartucce cilindriche gG. */
+export interface FuseParams {
+  poles: '1P' | '1P+N' | '3P' | '3P+N';
+  /** Corrente nominale della cartuccia [A] */
+  in: number;
+  /** Formato della cartuccia */
+  size: '10x38';
+  /** Potere di interruzione nominale [kA] */
+  icn: number;
+}
+
 export interface RcdParams {
   poles: PoleConfig;
   in: number;
@@ -127,6 +141,19 @@ export interface SpdParams {
   up: number;
   /** Corrente nominale di scarica In [kA] */
   inKA: number;
+}
+
+/** Relè passo-passo (bistabile): il contatto cambia stato a ogni impulso sulla bobina A1-A2. */
+export interface RelayParams {
+  /** Corrente nominale del contatto [A] */
+  in: number;
+  /** Tensione nominale della bobina [V] */
+  coilV: number;
+}
+
+/** Pulsante di comando (contatto momentaneo, normalmente aperto). */
+export interface ButtonParams {
+  name: string;
 }
 
 export interface BarParams {
@@ -164,10 +191,13 @@ export type ComponentParams =
   | { kind: 'earth'; p: EarthParams }
   | { kind: 'switch'; p: SwitchParams }
   | { kind: 'mcb'; p: McbParams }
+  | { kind: 'fuse'; p: FuseParams }
   | { kind: 'rcd'; p: RcdParams }
   | { kind: 'rcbo'; p: RcboParams }
   | { kind: 'bar'; p: BarParams }
   | { kind: 'spd'; p: SpdParams }
+  | { kind: 'relay'; p: RelayParams }
+  | { kind: 'button'; p: ButtonParams }
   | { kind: 'load'; p: LoadParams };
 
 export interface RailPlacement {
@@ -189,6 +219,8 @@ export interface ComponentInstance {
   rail?: RailPlacement;
   /** Stato dei contatti di manovra (dispositivi con leva) */
   closed: boolean;
+  /** Portafusibili: indici dei poli con la cartuccia fusa (da sostituire) */
+  blown?: number[];
 }
 
 export interface Wire {

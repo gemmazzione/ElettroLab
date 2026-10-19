@@ -314,6 +314,36 @@ export function villetta(): Project {
   return b.project;
 }
 
+export function luceScale(): Project {
+  const b = new ProjectBuilder('Luce scale da tre punti', 1, 12);
+  b.project.description =
+    'Comando di una luce da tre punti con un relè passo-passo. Avvia la simulazione, chiudi Q1 e premi uno qualsiasi dei tre pulsanti (tasto rotondo): la luce si accende; premine un altro e si spegne. ' +
+    'Circuito di comando: fase → pulsanti in parallelo → bobina A1-A2 → neutro. Circuito di potenza: fase → contatto 1-2 del relè → lampada.';
+  const cnt = b.add('supply-mono', { position: { x: -280, y: 30 } });
+  const earth = b.add('earth', { position: { x: -260, y: 300 } });
+  const q1 = b.add('rcbo-1pn', { rail: { row: 0, slot: 0 } }, (c) => setMcb(c, 10));
+  const ka = b.add('step-relay', { rail: { row: 0, slot: 3 } });
+  const xn = b.add('bar-n-8', { rail: { row: 0, slot: 5 } });
+  const xpe = b.add('bar-pe-8', { rail: { row: 0, slot: 9 } });
+  const buttons = ['Piano terra', 'Primo piano', 'Secondo piano'].map((name, k) =>
+    b.add('pushbutton', { position: { x: -40 + k * 150, y: 380 } }, (c) => {
+      if (c.params.kind === 'button') c.params.p.name = name;
+    }),
+  );
+  const lamp = addLoad(b, { catalogId: 'load-luce', name: 'Luce scale', powerW: 100, section: 1.5, length: 25 }, 430, 380, 1);
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
+  b.wire(t(q1, 'p1_out'), t(xn, 't0'), 1.5, 0.3);
+  // potenza: fase protetta → contatto del relè → lampada
+  b.wire(t(q1, 'p0_out'), t(ka, 'p0_in'), 1.5, 0.15);
+  b.wire(t(ka, 'p0_out'), t(lamp, 'L'), 1.5, 0.4);
+  b.wire(t(xn, 't1'), t(lamp, 'N'), 1.5, 0.4);
+  // comando: fase → pulsanti in parallelo → A1; A2 → neutro
+  for (const btn of buttons) b.wire(t(q1, 'p0_out'), t(btn, 'in'), 1.5, 12).wire(t(btn, 'out'), t(ka, 'A1'), 1.5, 12);
+  b.wire(t(ka, 'A2'), t(xn, 't2'), 1.5, 0.2);
+  b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5).wire(t(xpe, 't1'), t(lamp, 'PE'), 1.5, 0.5);
+  return b.project;
+}
+
 export const DEMO_PROJECTS: DemoProject[] = [
   {
     id: 'demo-monolocale',
@@ -338,6 +368,12 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Villetta con sottoquadro taverna',
     summary: 'Due quadri: generale con linea 2P C20 verso un sottoquadro a 25 m con sezionatore, differenziale 30 mA e due circuiti.',
     build: villetta,
+  },
+  {
+    id: 'demo-luce-scale',
+    name: 'Luce scale da tre punti (relè passo-passo)',
+    summary: 'Magnetotermico differenziale, relè passo-passo e tre pulsanti in parallelo che comandano la stessa luce.',
+    build: luceScale,
   },
   {
     id: 'demo-trifase',

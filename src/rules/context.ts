@@ -66,7 +66,7 @@ export function buildNormContext(project: Project): NormCtx {
     if (load.params.kind !== 'load') continue;
     const p = load.params.p;
     const path = info.lDevices.map((id) => byId.get(id)!).filter(Boolean);
-    const ocp = [...path].reverse().find((d) => d.params.kind === 'mcb' || d.params.kind === 'rcbo');
+    const ocp = [...path].reverse().find((d) => d.params.kind === 'mcb' || d.params.kind === 'rcbo' || d.params.kind === 'fuse');
     const rcds = path.filter((d) => isResidualDevice(d.params.kind));
     const install = p.install;
     let iz: CircuitCtx['iz'] = null;

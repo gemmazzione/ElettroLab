@@ -5,11 +5,13 @@ export type CatalogCategory =
   | 'Impianto di terra'
   | 'Manovra e sezionamento'
   | 'Magnetotermici'
+  | 'Portafusibili'
   | 'Differenziali'
   | 'Magnetotermici differenziali'
   | 'Distribuzione'
   | 'Utilizzatori'
   | 'Protezione dalle sovratensioni'
+  | 'Comando'
   | 'Altri dispositivi';
 
 export interface CatalogItem {
@@ -202,6 +204,54 @@ export const CATALOG: CatalogItem[] = [
     defaults: { kind: 'mcb', p: { poles: '4P', in: 32, curve: 'C', icn: 10 } },
   },
   {
+    id: 'fuse-1p',
+    kind: 'fuse',
+    name: 'Portafusibili 1P (10,3×38)',
+    category: 'Portafusibili',
+    description:
+      'Sezionatore con una cartuccia gG sulla fase. Quando la corrente è eccessiva l\'elemento fusibile fonde: la cartuccia va sostituita, non si riarma.',
+    mount: 'din',
+    modules: 1,
+    labelPrefix: 'F',
+    defaults: { kind: 'fuse', p: { poles: '1P', in: 16, size: '10x38', icn: 100 } },
+  },
+  {
+    id: 'fuse-1pn',
+    kind: 'fuse',
+    name: 'Portafusibili 1P+N (10,3×38)',
+    category: 'Portafusibili',
+    description:
+      'Cartuccia gG sulla fase e neutro sezionato (barretta, senza fusibile). Aprendo la maniglia si sezionano entrambi i conduttori.',
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'F',
+    defaults: { kind: 'fuse', p: { poles: '1P+N', in: 16, size: '10x38', icn: 100 } },
+  },
+  {
+    id: 'fuse-3p',
+    kind: 'fuse',
+    name: 'Portafusibili 3P (10,3×38)',
+    category: 'Portafusibili',
+    description:
+      'Tre cartucce gG sulle fasi. Ogni fusibile fonde da solo: se ne fonde uno solo il carico trifase resta alimentato da due fasi.',
+    mount: 'din',
+    modules: 3,
+    labelPrefix: 'F',
+    defaults: { kind: 'fuse', p: { poles: '3P', in: 16, size: '10x38', icn: 100 } },
+  },
+  {
+    id: 'fuse-3pn',
+    kind: 'fuse',
+    name: 'Portafusibili 3P+N (10,3×38)',
+    category: 'Portafusibili',
+    description:
+      'Tre cartucce gG sulle fasi e neutro sezionato senza fusibile.',
+    mount: 'din',
+    modules: 4,
+    labelPrefix: 'F',
+    defaults: { kind: 'fuse', p: { poles: '3P+N', in: 25, size: '10x38', icn: 100 } },
+  },
+  {
     id: 'rcd-2p',
     kind: 'rcd',
     name: 'Differenziale puro 2P',
@@ -343,7 +393,29 @@ export const CATALOG: CatalogItem[] = [
     defaults: { kind: 'spd', p: { poles: '3P+N', spdType: 2, uc: 275, up: 1.5, inKA: 20 } },
   },
   unavailable('contactor', 'Contattore modulare', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
-  unavailable('step-relay', 'Relè passo-passo', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
+  {
+    id: 'step-relay',
+    kind: 'relay',
+    name: 'Relè passo-passo (bistabile)',
+    category: 'Comando',
+    description:
+      'Comanda una luce da più punti con pulsanti: a ogni impulso sulla bobina A1-A2 il contatto 1-2 cambia stato e resta nella nuova posizione. Ha anche la leva per il comando manuale.',
+    mount: 'din',
+    modules: 1,
+    labelPrefix: 'KA',
+    defaults: { kind: 'relay', p: { in: 16, coilV: 230 } },
+  },
+  {
+    id: 'pushbutton',
+    kind: 'button',
+    name: 'Pulsante (normalmente aperto)',
+    category: 'Comando',
+    description: 'Pulsante a parete: chiude il contatto solo mentre è premuto. Collegato in parallelo ad altri pulsanti invia l\'impulso alla bobina del relè passo-passo.',
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'SB',
+    defaults: { kind: 'button', p: { name: 'Pulsante' } },
+  },
   unavailable('voltage-relay', 'Relè di controllo tensione', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
   unavailable('energy-meter', 'Misuratore di energia', 'Altri dispositivi', "l'integrazione dell'energia nel tempo non è modellata"),
   unavailable('psu', 'Alimentatore modulare', 'Altri dispositivi', 'i circuiti in bassissima tensione non sono modellati'),
@@ -362,14 +434,19 @@ export const KIND_LABEL: Record<ComponentKind, string> = {
   earth: 'Impianto di terra',
   switch: 'Interruttore-sezionatore',
   mcb: 'Interruttore magnetotermico',
+  fuse: 'Sezionatore portafusibili',
   rcd: 'Interruttore differenziale puro',
   rcbo: 'Magnetotermico differenziale',
   bar: 'Morsettiera',
   spd: 'Scaricatore di sovratensione (SPD)',
+  relay: 'Relè passo-passo',
+  button: 'Pulsante',
   load: 'Utilizzatore',
 };
 
 export const IN_VALUES_MCB = [6, 10, 16, 20, 25, 32, 40, 50, 63];
+/** Correnti nominali delle cartucce gG 10,3×38 */
+export const IN_VALUES_FUSE = [2, 4, 6, 8, 10, 12, 16, 20, 25, 32];
 export const IN_VALUES_RCD = [25, 40, 63];
 export const IN_VALUES_RCBO = [6, 10, 16, 20, 25, 32];
 export const IN_VALUES_SWITCH = [32, 40, 63, 80, 100];

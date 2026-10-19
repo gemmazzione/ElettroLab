@@ -94,7 +94,13 @@ interface State {
   setFaultPower: (faultId: string, w: number) => void;
   clearFaults: () => void;
   testRcd: (id: string) => void;
+  /** Sostituisce le cartucce fuse di un portafusibili (solo a portafusibili aperto) */
+  replaceFuse: (id: string) => void;
   setLoadNeutral: (id: string, withNeutral: boolean) => void;
+  /** Bobine dei relè eccitate nell'ultimo stato calcolato (per riconoscere il fronte dell'impulso) */
+  coil: Record<string, boolean>;
+  /** Preme un pulsante per un breve impulso */
+  pressButton: (id: string) => void;
   mode: AppMode;
   setMode: (m: AppMode) => void;
   /** Vista dell'area centrale: quadro fisico o schema unifilare */
@@ -211,6 +217,42 @@ export const useStore = create<State>((set, get) => {
     }
     if (out.tripped) saveCurrent(out.project);
     set({ project: out.tripped ? out.project : s.project, prot: out.prot, result: out.result, simTime: t1 });
+  };
+
+  /**
+   * Relè passo-passo: un impulso (fronte di salita della tensione sulla bobina oltre l'80% della
+   * tensione nominale) fa cambiare stato al contatto. Ripete finché lo stato è stabile.
+   */
+  let relayBusy = false;
+  const processRelays = () => {
+    if (relayBusy) return;
+    relayBusy = true;
+    try {
+      for (let iter = 0; iter < 5; iter++) {
+        const s = get();
+        if (!s.running || !s.result || !s.result.ok) return;
+        const res = s.result;
+        const next = { ...s.coil };
+        const pulses: ComponentInstance[] = [];
+        for (const c of s.project.components) {
+          if (c.params.kind !== 'relay') continue;
+          const va = res.terminalV.get(`${c.id}:A1`);
+          const vb = res.terminalV.get(`${c.id}:A2`);
+          const on = !!va && !!vb && abs(sub(va, vb)) >= 0.8 * c.params.p.coilV;
+          if (on && !s.coil[c.id]) pulses.push(c);
+          next[c.id] = on;
+        }
+        set({ coil: next });
+        if (!pulses.length) return;
+        for (const c of pulses) get().log('info', `${c.label}: impulso sulla bobina → contatto ${c.closed ? 'aperto' : 'chiuso'}`);
+        const ids = new Set(pulses.map((c) => c.id));
+        get().commit((p) => {
+          for (const c of p.components) if (ids.has(c.id)) c.closed = !c.closed;
+        }, false);
+      }
+    } finally {
+      relayBusy = false;
+    }
   };
 
   const first = initialProject();
@@ -332,6 +374,28 @@ export const useStore = create<State>((set, get) => {
     },
     exitExercise: () => set({ exercise: null, mode: 'academy', rightTab: 'props' }),
 
+    coil: {},
+    pressButton: (id) => {
+      const c = get().project.components.find((x) => x.id === id);
+      if (!c || c.params.kind !== 'button') return;
+      if (!get().running) {
+        get().toast('info', 'Avvia la simulazione: senza tensione il pulsante non invia nessun impulso.');
+        return;
+      }
+      get().log('info', `${c.label} (${c.params.p.name}) premuto`);
+      get().commit((p) => {
+        const t = p.components.find((x) => x.id === id);
+        if (t) t.closed = true;
+      }, false);
+      setTimeout(() => {
+        if (!get().project.components.some((x) => x.id === id)) return;
+        get().commit((p) => {
+          const t = p.components.find((x) => x.id === id);
+          if (t) t.closed = false;
+        }, false);
+      }, 350);
+    },
+
     setLoadNeutral: (id, withNeutral) =>
       get().commit((p) => {
         const c = p.components.find((x) => x.id === id);
@@ -339,6 +403,27 @@ export const useStore = create<State>((set, get) => {
         c.params.p.withNeutral = withNeutral;
         if (!withNeutral) p.wires = p.wires.filter((w) => w.from !== `${id}:N` && w.to !== `${id}:N`);
       }),
+
+    replaceFuse: (id) => {
+      const c = get().project.components.find((x) => x.id === id);
+      if (!c || c.params.kind !== 'fuse') return;
+      if (!c.blown?.length) {
+        get().toast('info', `${c.label}: nessuna cartuccia fusa da sostituire.`);
+        return;
+      }
+      if (c.closed) {
+        get().toast('errore', `Apri prima ${c.label}: la cartuccia si sostituisce con il portafusibili aperto (circuito sezionato).`);
+        return;
+      }
+      const st = get().prot[id];
+      if (st) set({ prot: { ...get().prot, [id]: { ...st, melt: [] } } });
+      const n = c.blown.length;
+      get().log('info', `${c.label}: ${n === 1 ? 'sostituita la cartuccia' : `sostituite ${n} cartucce`} gG ${c.params.p.in} A. Prima di richiudere elimina la causa della fusione.`);
+      get().commit((p) => {
+        const t = p.components.find((x) => x.id === id);
+        if (t) delete t.blown;
+      });
+    },
 
     testRcd: (id) => {
       const { project, result, running } = get();
@@ -377,6 +462,7 @@ export const useStore = create<State>((set, get) => {
         ...recompute(next, running),
       });
       settle(result);
+      processRelays();
     },
 
     undo: () => {
@@ -629,8 +715,9 @@ export const useStore = create<State>((set, get) => {
       const { project } = get();
       set({ running: true, simTime: 0, events: [], prot: {} });
       get().log('info', 'Simulazione avviata: rete di distribuzione in tensione al punto di consegna.');
-      set({ result: simulate(project) });
+      set({ result: simulate(project), coil: {} });
       settle(null);
+      processRelays();
     },
 
     stopSimulation: () => {

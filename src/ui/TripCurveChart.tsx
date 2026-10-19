@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { MAGNETIC_BAND, MAGNETIC_TRIP_S, residualTripTime, thermalTripTime } from '../protection/curves';
+import { fuseConventional, fuseMeltTime, fuseTimeToMelt, MAGNETIC_BAND, MAGNETIC_TRIP_S, residualTripTime, thermalTripTime } from '../protection/curves';
 import type { TripCurve } from '../model/types';
 import { fmt } from './format';
 
@@ -360,3 +360,138 @@ export function OvercurrentTable({ inA, curve }: { inA: number; curve: TripCurve
   );
 }
 
+
+/** Curva di fusione di una cartuccia gG (curva media del modello) con correnti convenzionali. */
+export function FuseChart({
+  inA,
+  current,
+  melt = 0,
+  iccA,
+  width = 290,
+  height = 230,
+}: {
+  inA: number;
+  /** Corrente attuale [A] (null = simulazione ferma) */
+  current?: number | null;
+  /** Consumo attuale della cartuccia (0–1) */
+  melt?: number;
+  iccA?: number | null;
+  width?: number;
+  height?: number;
+}) {
+  const X_MIN = 1;
+  const X_MAX = 100;
+  const T_MIN = 0.001;
+  const T_MAX = 10000;
+  const x = logScale(X_MIN, X_MAX, PAD.l, width - PAD.r);
+  const y = logScale(T_MIN, T_MAX, height - PAD.b, PAD.t);
+  const conv = fuseConventional(inA);
+  const [hover, setHover] = useState<number | null>(null);
+
+  const path = useMemo(() => {
+    const pts: string[] = [];
+    const n = 200;
+    for (let i = 0; i <= n; i++) {
+      const r = conv.inf * (X_MAX / conv.inf) ** ((i / n) ** 1.6);
+      const t = fuseMeltTime(r, inA);
+      if (!Number.isFinite(t) || t > T_MAX) continue;
+      pts.push(`${pts.length ? 'L' : 'M'}${x.to(r).toFixed(1)},${y.to(Math.max(t, T_MIN)).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }, [inA, width, height]);
+
+  const ratioNow = current !== null && current !== undefined ? current / inA : null;
+  const tNow = ratioNow !== null ? fuseTimeToMelt(melt, ratioNow, inA) : null;
+  const tHover = hover === null ? null : fuseMeltTime(hover, inA);
+  const xTicks = [1, 2, 5, 10, 20, 50, 100];
+  const ticks: [number, string][] = [[0.001, '1 ms'], ...T_TICKS];
+  const plotW = width - PAD.l - PAD.r;
+  const plotH = height - PAD.t - PAD.b;
+
+  return (
+    <div className="select-none">
+      <svg
+        width={width}
+        height={height}
+        role="img"
+        aria-label={`Curva di fusione gG ${inA} A: non fusione a ${fmt(conv.inf, 2)}·In, fusione convenzionale a ${fmt(conv.if, 2)}·In`}
+        onMouseLeave={() => setHover(null)}
+        onMouseMove={(e) => {
+          const box = e.currentTarget.getBoundingClientRect();
+          const px = ((e.clientX - box.left) / box.width) * width;
+          if (px < PAD.l || px > width - PAD.r) return setHover(null);
+          setHover(x.from(px));
+        }}
+      >
+        <rect x={PAD.l} y={PAD.t} width={plotW} height={plotH} fill={C.surface} />
+        {ticks.map(([t]) => (
+          <line key={`gt${t}`} x1={PAD.l} x2={width - PAD.r} y1={y.to(t)} y2={y.to(t)} stroke={C.grid} strokeWidth={1} />
+        ))}
+        {xTicks.map((r) => (
+          <line key={`gx${r}`} y1={PAD.t} y2={height - PAD.b} x1={x.to(r)} x2={x.to(r)} stroke={C.grid} strokeWidth={1} />
+        ))}
+        {/* correnti convenzionali: non fusione (×) e fusione entro 1 h (○) */}
+        <circle cx={x.to(conv.if)} cy={y.to(3600)} r={4} fill="none" stroke={C.muted} strokeWidth={1.5} />
+        <path d={`M${x.to(conv.inf) - 4},${y.to(3600) - 4} l8,8 m0,-8 l-8,8`} stroke={C.muted} strokeWidth={1.5} />
+        <path d={path} fill="none" stroke={C.magnetic} strokeWidth={2} strokeLinejoin="round" />
+        {iccA && iccA / inA >= X_MIN && (
+          <g>
+            <line x1={x.to(iccA / inA)} x2={x.to(iccA / inA)} y1={PAD.t} y2={height - PAD.b} stroke={C.icc} strokeWidth={2} />
+            <text x={x.to(iccA / inA) - 3} y={PAD.t + 10} textAnchor="end" fontSize={9} fill={C.text}>
+              Icc
+            </text>
+          </g>
+        )}
+        {ratioNow !== null && ratioNow > 0.02 && (
+          <g>
+            <line x1={x.to(ratioNow)} x2={x.to(ratioNow)} y1={PAD.t} y2={height - PAD.b} stroke={C.point} strokeWidth={1} strokeDasharray="2 3" />
+            {tNow !== null && Number.isFinite(tNow) && tNow <= T_MAX && (
+              <circle cx={x.to(ratioNow)} cy={y.to(Math.max(tNow, T_MIN))} r={5} fill={C.point} stroke={C.surface} strokeWidth={2} />
+            )}
+          </g>
+        )}
+        {hover !== null && (
+          <g pointerEvents="none">
+            <line x1={x.to(hover)} x2={x.to(hover)} y1={PAD.t} y2={height - PAD.b} stroke={C.text} strokeWidth={1} opacity={0.5} />
+            {tHover !== null && Number.isFinite(tHover) && tHover <= T_MAX && (
+              <circle cx={x.to(hover)} cy={y.to(Math.max(tHover, T_MIN))} r={4} fill={C.magnetic} stroke={C.surface} strokeWidth={2} />
+            )}
+          </g>
+        )}
+        <line x1={PAD.l} x2={PAD.l} y1={PAD.t} y2={height - PAD.b} stroke={C.axis} />
+        <line x1={PAD.l} x2={width - PAD.r} y1={height - PAD.b} y2={height - PAD.b} stroke={C.axis} />
+        {ticks.map(([t, l]) => (
+          <text key={`yt${t}`} x={PAD.l - 4} y={y.to(t) + 3} textAnchor="end" fontSize={8.5} fill={C.muted}>
+            {l}
+          </text>
+        ))}
+        {xTicks.map((r) => (
+          <text key={`xt${r}`} x={x.to(r)} y={height - PAD.b + 12} textAnchor="middle" fontSize={8.5} fill={C.muted}>
+            {r}
+          </text>
+        ))}
+        <text x={PAD.l + plotW / 2} y={height - 6} textAnchor="middle" fontSize={9} fill={C.text}>
+          Corrente in multipli di In (gG {inA} A)
+        </text>
+      </svg>
+      <div className="mt-1 min-h-[16px] font-mono text-[10.5px] text-slate-200">
+        {hover !== null ? (
+          <>
+            {fmt(hover, 2)}·In = {fmt(hover * inA, 1)} A → {tHover !== null && Number.isFinite(tHover) ? `fusione in ${fmtTime(tHover)}` : 'non fonde'}
+          </>
+        ) : ratioNow !== null && current !== null && current !== undefined ? (
+          <>
+            Ora: {fmt(current, 2)} A = {fmt(ratioNow, 2)}·In · {tNow !== null && Number.isFinite(tNow) ? `fusione tra ${fmtTime(tNow)}` : 'nessuna fusione'}
+          </>
+        ) : (
+          <span className="text-slate-500">Passa con il mouse sul grafico per leggere i tempi.</span>
+        )}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-slate-300">
+        <LegendItem swatch={<span className="inline-block h-0.5 w-4" style={{ background: C.magnetic }} />} label="Tempo di prearco (curva media, da freddo)" />
+        {iccA ? <LegendItem swatch={<span className="inline-block h-3 w-0.5" style={{ background: C.icc }} />} label="Icc presunta" /> : null}
+        <LegendItem swatch={<span className="text-slate-400">○ ×</span>} label={`${fmt(conv.if, 2)}·In fonde <1 h · ${fmt(conv.inf, 2)}·In non fonde`} />
+      </div>
+    </div>
+  );
+}

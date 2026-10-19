@@ -345,14 +345,14 @@ export function checkWiring(project: Project): Issue[] {
       }
       const ocp = info.lDevices.filter((id) => {
         const k = byId.get(id)!.params.kind;
-        return k === 'mcb' || k === 'rcbo';
+        return k === 'mcb' || k === 'rcbo' || k === 'fuse';
       });
       if (ocp.length === 0) {
         push({
           code: 'NO_OVERCURRENT_PROTECTION',
           severity: 'attenzione',
           title: 'Circuito senza protezione contro le sovracorrenti',
-          message: `${name}: nessun magnetotermico sulla fase.`,
+          message: `${name}: nessun magnetotermico o fusibile sulla fase.`,
           explanation: 'Ogni circuito deve essere protetto contro sovraccarico e cortocircuito da un dispositivo posto sul conduttore di fase.',
           componentIds: [load.id],
         });

@@ -6,7 +6,7 @@ import { TERMINAL_Y_BOTTOM, TERMINAL_Y_TOP } from '../../model/geometry';
 import { H_TRIP } from '../../protection/curves';
 import type { TripCause } from '../../protection/stepper';
 
-const TRIP_LABEL: Record<TripCause, string> = { termico: 'scatto termico', magnetico: 'scatto magnetico', differenziale: 'scatto diff.', prova: 'prova T' };
+const TRIP_LABEL: Record<TripCause, string> = { termico: 'scatto termico', magnetico: 'scatto magnetico', differenziale: 'scatto diff.', prova: 'prova T', fusione: 'fusibile fuso' };
 import { componentHeight, componentWidth, getTerminals } from '../../model/terminals';
 import type { ComponentInstance, LoadCategory } from '../../model/types';
 import { useStore } from '../../store/projectStore';
@@ -54,11 +54,14 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const tripped = useStore((s) => s.prot[id]?.tripped);
   const spdOver = useStore((s) => !!(s.result && s.result.ok && s.result.alerts.some((a) => a.code === 'SPD_TOV' && a.componentIds.includes(id))));
   const heat = useStore((s) => s.prot[id]?.heat ?? 0);
+  const melt = useStore((s) => Math.max(0, ...(s.prot[id]?.melt ?? []).filter((m) => m < 1)));
   const testRcd = useStore((s) => s.testRcd);
   if (!comp) return null;
   const w = componentWidth(comp);
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
-  const heatPct = Math.min(100, (heat / H_TRIP) * 100);
+  const isFuse = comp.params.kind === 'fuse';
+  const heatPct = isFuse ? Math.min(100, melt * 100) : Math.min(100, (heat / H_TRIP) * 100);
+  const blown = isFuse && !!comp.blown?.length;
   const terms = getTerminals(comp);
   const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd';
   return (
@@ -73,14 +76,19 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         onToggle={hasLever ? () => toggle(id) : undefined}
         onTest={residual ? () => testRcd(id) : undefined}
       />
-      {running && (comp.params.kind === 'mcb' || comp.params.kind === 'rcbo') && heatPct > 1 && (
-        <div className="pointer-events-none absolute bottom-[30px] left-[3px] right-[3px] h-[3px] rounded bg-slate-500/50" title="Stato termico">
+      {running && (comp.params.kind === 'mcb' || comp.params.kind === 'rcbo' || isFuse) && heatPct > 1 && (
+        <div className="pointer-events-none absolute bottom-[30px] left-[3px] right-[3px] h-[3px] rounded bg-slate-500/50" title={isFuse ? 'Consumo della cartuccia' : 'Stato termico'}>
           <div className={`h-full rounded ${heatPct > 80 ? 'bg-red-500' : 'bg-orange-400'}`} style={{ width: `${heatPct}%` }} />
         </div>
       )}
       {tripped && (
         <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-amber-500 px-1 text-[8.5px] font-bold uppercase leading-[13px] text-slate-950">
           {TRIP_LABEL[tripped]}
+        </div>
+      )}
+      {blown && (
+        <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-600 px-1 text-[8.5px] font-bold uppercase leading-[13px] text-white">
+          {TRIP_LABEL.fusione}
         </div>
       )}
       {terms.map((t) => (
@@ -290,4 +298,53 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
   );
 });
 
-export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode };
+/** Pulsante a parete: clic per inviare un impulso (contatto chiuso per circa 0,35 s). */
+export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps) {
+  const id = (data as CompNodeData).componentId;
+  const comp = useComponent(id);
+  const press = useStore((s) => s.pressButton);
+  const running = useStore((s) => s.running);
+  const issue = useHasIssue(id);
+  if (!comp || comp.params.kind !== 'button') return null;
+  const terms = getTerminals(comp);
+  return (
+    <div
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : 'border-slate-600'}`}
+      style={{ width: componentWidth(comp), height: componentHeight(comp) }}
+    >
+      <IssueDot level={issue} />
+      {terms.map((t) => (
+        <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
+      ))}
+      <div className="flex pt-3.5 font-mono text-[9px] text-slate-400">
+        {terms.map((t) => (
+          <span key={t.key} className="absolute -translate-x-1/2" style={{ left: t.x }}>
+            {t.label}
+          </span>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-2 px-2.5">
+        <button
+          className={`nodrag flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-transform active:scale-90 ${
+            comp.closed ? 'border-amber-300 bg-amber-400 text-slate-900' : 'border-slate-400 bg-slate-200 text-slate-700 hover:bg-white'
+          }`}
+          title={running ? 'Premi il pulsante' : 'Avvia la simulazione per usare il pulsante'}
+          onClick={(e) => {
+            e.stopPropagation();
+            press(id);
+          }}
+        >
+          ●
+        </button>
+        <div className="min-w-0">
+          <div className="truncate text-[11px] font-semibold text-slate-100">{comp.params.p.name}</div>
+          <div className="font-mono text-[10px] text-slate-400">
+            {comp.label} · {comp.closed ? 'premuto' : 'NA'}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode, button: ButtonNode };

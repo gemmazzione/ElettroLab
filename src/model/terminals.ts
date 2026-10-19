@@ -6,6 +6,7 @@ export const FREE_NODE_SIZE: Partial<Record<ComponentKind, { w: number; h: numbe
   supply: { w: 180, h: 118 },
   earth: { w: 140, h: 110 },
   load: { w: 176, h: 128 },
+  button: { w: 120, h: 96 },
 };
 
 export function terminalId(componentId: string, key: string): string {
@@ -18,7 +19,7 @@ export function parseTerminalId(id: string): { componentId: string; key: string 
 }
 
 export function isSwitchingDevice(kind: ComponentKind): boolean {
-  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo';
+  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse';
 }
 
 export function isResidualDevice(kind: ComponentKind): boolean {
@@ -48,8 +49,9 @@ export function railYOffset(c: ComponentInstance): number {
 /** Poli di manovra di un dispositivo (vuoto per componenti senza contatti). */
 export function getPoles(c: ComponentInstance): PoleDef[] {
   const pr = c.params;
-  if (pr.kind !== 'switch' && pr.kind !== 'mcb' && pr.kind !== 'rcd' && pr.kind !== 'rcbo') return [];
-  const overcurrent = pr.kind === 'mcb' || pr.kind === 'rcbo';
+  if (pr.kind === 'relay') return [{ index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false }];
+  if (pr.kind !== 'switch' && pr.kind !== 'mcb' && pr.kind !== 'rcd' && pr.kind !== 'rcbo' && pr.kind !== 'fuse') return [];
+  const overcurrent = pr.kind === 'mcb' || pr.kind === 'rcbo' || pr.kind === 'fuse';
   const pole = (index: number, fn: 'L' | 'N', prot: boolean): PoleDef => ({
     index,
     fn,
@@ -136,6 +138,19 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'L', label: 'L', fn: 'L', role: 'in', side: 'top', x: 44 },
         { key: 'N', label: 'N', fn: 'N', role: 'in', side: 'top', x: 88 },
         { key: 'PE', label: 'PE', fn: 'PE', role: 'in', side: 'top', x: 132 },
+      ];
+    case 'relay':
+      // Bobina A1-A2 a sinistra, contatto 1-2 a destra (1 modulo).
+      return [
+        { key: 'A1', label: 'A1', fn: 'L', role: 'bus', side: 'top', x: w * 0.27 },
+        { key: 'p0_in', label: '1', fn: 'L', role: 'in', side: 'top', pole: 0, x: w * 0.73 },
+        { key: 'A2', label: 'A2', fn: 'N', role: 'bus', side: 'bottom', x: w * 0.27 },
+        { key: 'p0_out', label: '2', fn: 'L', role: 'out', side: 'bottom', pole: 0, x: w * 0.73 },
+      ];
+    case 'button':
+      return [
+        { key: 'in', label: '1', fn: 'L', role: 'bus', side: 'top', x: 38 },
+        { key: 'out', label: '2', fn: 'L', role: 'bus', side: 'top', x: 82 },
       ];
     case 'spd': {
       const keys = pr.p.poles === '3P+N' ? ['L1', 'L2', 'L3', 'N'] : ['L', 'N'];

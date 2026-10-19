@@ -83,8 +83,10 @@ export function buildReport(project: Project, now = new Date()): ReportData {
         if (pr.kind === 'mcb') car = `${pr.p.poles} ${pr.p.curve}${pr.p.in} · Icn ${f(pr.p.icn, 1)} kA`;
         if (pr.kind === 'rcbo') car = `${pr.p.poles} ${pr.p.curve}${pr.p.in} · Icn ${f(pr.p.icn, 1)} kA · IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}`;
         if (pr.kind === 'rcd') car = `${pr.p.poles} ${pr.p.in} A · IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`;
+        if (pr.kind === 'fuse') car = `${pr.p.poles} gG ${pr.p.in} A (10,3×38) · potere di interruzione ${f(pr.p.icn, 0)} kA${c.blown?.length ? ' · CARTUCCIA FUSA' : ''}`;
         if (pr.kind === 'switch') car = `${pr.p.poles} ${pr.p.in} A`;
         if (pr.kind === 'bar') car = `${pr.p.barFn}, ${pr.p.ways} vie`;
+        if (pr.kind === 'relay') car = `contatto ${pr.p.in} A · bobina ${pr.p.coilV} V~`;
         if (pr.kind === 'spd') car = `${pr.p.poles} tipo ${pr.p.spdType} · Uc ${pr.p.uc} V · Up ${f(pr.p.up, 1)} kV · In ${pr.p.inKA} kA`;
         const m = catalogItem(c.catalogId).modules;
         const pn = project.panels.length > 1 ? `${panelOf(project, c.rail!.panelId).name}, ` : '';

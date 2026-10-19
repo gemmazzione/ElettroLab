@@ -1,6 +1,6 @@
 import { getPoles } from '../model/terminals';
-import type { ComponentInstance } from '../model/types';
-import { magneticZone, MAGNETIC_BAND, thermalTripTime } from '../protection/curves';
+import type { ComponentInstance, TripCurve } from '../model/types';
+import { fuseConventional, fuseMeltTime, magneticZone, MAGNETIC_BAND, thermalTripTime } from '../protection/curves';
 import { AMPACITY_SOURCE, K_ADIABATIC } from './ampacity';
 import type { CircuitCtx, NormCtx } from './context';
 import type { NormRef, Rule, RuleOutcome, RuleSet } from './types';
@@ -26,8 +26,20 @@ const fA = (a: number) => (a >= 1000 ? `${f(a / 1000, 2)} kA` : `${f(a, a >= 100
 
 type R = Rule<NormCtx>;
 
-const ocpParams = (c: ComponentInstance | undefined) =>
-  c && (c.params.kind === 'mcb' || c.params.kind === 'rcbo') ? c.params.p : null;
+/** Dati comuni dei dispositivi contro le sovracorrenti (magnetotermici e fusibili gG). */
+const ocpParams = (c: ComponentInstance | undefined): { in: number; icn: number; curve: TripCurve | null; iF: number; ifText: string } | null => {
+  if (!c) return null;
+  if (c.params.kind === 'mcb' || c.params.kind === 'rcbo') {
+    const p = c.params.p;
+    return { in: p.in, icn: p.icn, curve: p.curve, iF: 1.45 * p.in, ifText: '1,45 × In' };
+  }
+  if (c.params.kind === 'fuse') {
+    const p = c.params.p;
+    const k = fuseConventional(p.in).if;
+    return { in: p.in, icn: p.icn, curve: null, iF: k * p.in, ifText: `${f(k, 2)} × In (fusione convenzionale gG, CEI EN 60269)` };
+  }
+  return null;
+};
 const idnOf = (c: ComponentInstance) => (c.params.kind === 'rcd' || c.params.kind === 'rcbo' ? c.params.p.idn : null);
 
 const fedCircuits = (ctx: NormCtx) => ctx.circuits.filter((c) => c.info.lConnected && c.info.nConnected);
@@ -253,17 +265,17 @@ const sovraccarico: R = {
         };
       }
       const iz = c.iz.value;
-      const iF = 1.45 * p.in;
+      const iF = p.iF;
       const c1a = c.ib <= p.in;
       const c1b = p.in <= iz;
       const c2 = iF <= 1.45 * iz;
       const details = [
         `IB = P / (${c.p.phases === 3 ? '3 × ' : ''}U0${(c.p.cosPhi ?? 1) < 1 ? ' × cos φ' : ''}) = ${f(c.p.powerW, 0)} W / (${c.p.phases === 3 ? '3 × ' : ''}230 V${(c.p.cosPhi ?? 1) < 1 ? ` × ${f(c.p.cosPhi ?? 1, 2)}` : ''}) = ${fA(c.ib)}`,
-        `In = ${p.in} A (${c.ocp.label}, curva ${p.curve})`,
+        `In = ${p.in} A (${c.ocp.label}, ${p.curve ? `curva ${p.curve}` : 'fusibile gG'})`,
         c.iz.source === 'utente'
           ? `Iz = ${f(iz, 1)} A (inserita dall'utente)`
           : `Iz = I0 × k1 × k2 = ${f(c.iz.calc!.i0, 1)} × ${f(c.iz.calc!.k1, 2)} × ${f(c.iz.calc!.k2, 2)} = ${f(iz, 1)} A — ${c.p.cableSection} mm², posa ${c.install?.method}, ${c.install?.insulation}, ${c.install?.ambientC} °C, ${c.install?.grouped} circuiti`,
-        `If = 1,45 × In = ${f(iF, 1)} A ≤ 1,45 × Iz = ${f(1.45 * iz, 1)} A → ${c2 ? 'sì' : 'no'}`,
+        `If = ${p.ifText} = ${f(iF, 1)} A ≤ 1,45 × Iz = ${f(1.45 * iz, 1)} A → ${c2 ? 'sì' : 'no'}`,
         ...(c.iz.source === 'tabella' ? [AMPACITY_SOURCE] : []),
       ];
       const ok = c1a && c1b && c2;
@@ -275,7 +287,9 @@ const sovraccarico: R = {
           ? `${fA(c.ib)} ≤ ${p.in} A ≤ ${f(iz, 1)} A: condizioni soddisfatte.`
           : !c1a
             ? `IB = ${fA(c.ib)} > In = ${p.in} A: la protezione interverrebbe in servizio ordinario (sottodimensionata per il carico).`
-            : `In = ${p.in} A > Iz = ${f(iz, 1)} A: il cavo non è protetto dal sovraccarico (conduttore sottodimensionato o protezione troppo grande).`,
+            : !c1b
+              ? `In = ${p.in} A > Iz = ${f(iz, 1)} A: il cavo non è protetto dal sovraccarico (conduttore sottodimensionato o protezione troppo grande).`
+              : `If = ${f(iF, 1)} A > 1,45 × Iz = ${f(1.45 * iz, 1)} A: con un fusibile la seconda condizione è più severa di In ≤ Iz (serve In ≤ ${f((1.45 * iz * p.in) / iF, 1)} A).`,
         details,
         componentIds: [c.load.id, c.ocp.id],
       };
@@ -379,6 +393,49 @@ const energiaPassante: R = {
       const k2s2 = k * k * s * s;
       const ik = c.iccEnd.ln;
       const ratio = ik / p.in;
+      const baseF = [`Icc minima a fondo linea ≈ ${fA(ik)} (${f(ratio, 1)}·In)`, `K²S² = ${k}² × ${s}² = ${Math.round(k2s2).toLocaleString('it-IT')} A²s`];
+      if (!p.curve) {
+        const tf = fuseMeltTime(ratio, p.in);
+        if (Number.isFinite(tf) && tf < 0.1) {
+          return [
+            {
+              ruleId: 'SC-434-I2T',
+              status: 'dati-insufficienti',
+              subject: c.name,
+              message: `Fusione in meno di 0,1 s (curva media ≈ ${f(tf * 1000, 0)} ms): confrontare K²S² con l'I²t totale della cartuccia indicato dal costruttore di ${c.ocp.label}.`,
+              details: baseF,
+              missingData: [`I²t totale della cartuccia di ${c.ocp.label} a ${fA(ik)}`],
+              componentIds: [c.load.id, c.ocp.id],
+            },
+          ];
+        }
+        if (!Number.isFinite(tf) || tf > 5) {
+          return [
+            {
+              ruleId: 'SC-434-I2T',
+              status: 'errore',
+              subject: c.name,
+              message: `A fondo linea ${fA(ik)} = ${f(ratio, 1)}·In: la cartuccia fonderebbe ${Number.isFinite(tf) ? `in circa ${f(tf, 0)} s (curva media)` : 'dopo un tempo indefinito'}, oltre i 5 s di validità della formula. Ridurre la lunghezza, aumentare la sezione o usare una cartuccia più piccola.`,
+              details: baseF,
+              componentIds: [c.load.id, c.ocp.id],
+            },
+          ];
+        }
+        const i2tF = ik * ik * tf;
+        return [
+          {
+            ruleId: 'SC-434-I2T',
+            status: i2tF <= k2s2 ? 'dati-insufficienti' : 'errore',
+            subject: c.name,
+            message:
+              i2tF <= k2s2
+                ? `Verifica indicativa superata (I²t ≈ ${Math.round(i2tF).toLocaleString('it-IT')} A²s ≤ K²S²) con il tempo di fusione della curva media sintetica (${f(tf, 2)} s): confermare con la curva del costruttore.`
+                : `I²t ≈ ${Math.round(i2tF).toLocaleString('it-IT')} A²s > K²S²: il cavo supererebbe la temperatura limite prima della fusione.`,
+            details: [...baseF, `Tempo di fusione (curva media gG) ≈ ${f(tf, 2)} s`],
+            componentIds: [c.load.id, c.ocp.id],
+          },
+        ];
+      }
       const zone = magneticZone(ratio, p.curve);
       const base = [`Icc minima a fondo linea ≈ ${fA(ik)} (${f(ratio, 1)}·In)`, `K²S² = ${k}² × ${s}² = ${Math.round(k2s2).toLocaleString('it-IT')} A²s`];
       if (zone === 'certa') {
@@ -560,7 +617,7 @@ const suddivisione: R = {
         status: shared.length ? 'attenzione' : 'conforme',
         subject: 'Circuiti terminali',
         message: shared.length
-          ? `Più utilizzatori sotto lo stesso magnetotermico: ${shared.map((l) => l.map((c) => c.load.label).join(' + ')).join('; ')}.`
+          ? `Più utilizzatori sotto la stessa protezione contro le sovracorrenti: ${shared.map((l) => l.map((c) => c.load.label).join(' + ')).join('; ')}.`
           : `${fed.length} circuiti, ciascuno con la propria protezione contro le sovracorrenti.`,
         componentIds: shared.flat().map((c) => c.load.id),
       },

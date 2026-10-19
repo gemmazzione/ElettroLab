@@ -10,6 +10,7 @@ import {
   CURVES,
   ICN_VALUES,
   IDN_VALUES,
+  IN_VALUES_FUSE,
   IN_VALUES_MCB,
   IN_VALUES_RCBO,
   IN_VALUES_RCD,
@@ -248,6 +249,21 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             </Field>
           </>
         )}
+        {pr.kind === 'fuse' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Cartuccia gG In" hint="Formato 10,3×38: fino a 32 A">
+                <Select value={pr.p.in} options={IN_VALUES_FUSE} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'fuse', p: { ...pr.p, in: v } })} />
+              </Field>
+              <Field label="Potere di interruzione">
+                <Select value={pr.p.icn} options={[20, 50, 100]} format={(v) => `${v} kA`} onChange={(v) => update(comp.id, { kind: 'fuse', p: { ...pr.p, icn: v } })} />
+              </Field>
+            </div>
+            <p className="text-[11px] leading-snug text-slate-500">
+              Il potere di interruzione dipende dalla cartuccia e dalla tensione: usa il valore dichiarato dal costruttore (100 kA è tipico per gG 10,3×38 in c.a.).
+            </p>
+          </>
+        )}
         {pr.kind === 'rcbo' && (
           <>
             <div className="grid grid-cols-2 gap-2">
@@ -301,6 +317,26 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
         {pr.kind === 'switch' && (
           <Field label="Corrente nominale In">
             <Select value={pr.p.in} options={IN_VALUES_SWITCH} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'switch', p: { ...pr.p, in: v } })} />
+          </Field>
+        )}
+        {pr.kind === 'relay' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Corrente nominale contatto">
+                <Select value={pr.p.in} options={[10, 16, 20, 32]} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'relay', p: { ...pr.p, in: v } })} />
+              </Field>
+              <Field label="Tensione bobina">
+                <Row k="" v={`${pr.p.coilV} V~`} />
+              </Field>
+            </div>
+            <p className="text-[11px] leading-snug text-slate-500">
+              A ogni impulso sulla bobina (tensione A1-A2 oltre l'80% di quella nominale) il contatto 1-2 cambia stato e resta nella nuova posizione. La leva permette anche il comando manuale.
+            </p>
+          </>
+        )}
+        {pr.kind === 'button' && (
+          <Field label="Nome / posizione">
+            <TextInput value={pr.p.name} onChange={(v) => update(comp.id, { kind: 'button', p: { ...pr.p, name: v } })} />
           </Field>
         )}
         {pr.kind === 'spd' && (

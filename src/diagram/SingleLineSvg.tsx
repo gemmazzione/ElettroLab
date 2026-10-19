@@ -37,6 +37,10 @@ function ratingLines(c: ComponentInstance): string[] {
       return [`${pr.p.poles} ${pr.p.in} A`, `IΔn ${pr.p.idn} mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`];
     case 'switch':
       return [`${pr.p.poles} ${pr.p.in} A`, 'Sezionatore'];
+    case 'relay':
+      return ['Relè passo-passo', `${pr.p.in} A`];
+    case 'fuse':
+      return [`${pr.p.poles} gG ${pr.p.in} A`, `10×38 · ${pr.p.icn} kA`];
     default:
       return [];
   }
@@ -47,6 +51,18 @@ function DeviceSymbol({ node, p }: { node: SLNode; p: DiagramPalette }) {
   const breaker = k === 'mcb' || k === 'rcbo';
   const residual = k === 'rcd' || k === 'rcbo';
   const H = SL.symbolH;
+  if (k === 'fuse') {
+    // sezionatore con fusibile: rettangolo del fusibile sulla lama
+    return (
+      <g>
+        <line x1={0} y1={0} x2={0} y2={20} stroke={p.line} strokeWidth={1.6} />
+        <line x1={-5} y1={20} x2={5} y2={20} stroke={p.line} strokeWidth={1.6} />
+        <line x1={0} y1={46} x2={-12} y2={18} stroke={p.line} strokeWidth={1.6} />
+        <rect x={-10.5} y={23} width={7} height={16} transform="rotate(-23 -7 31)" fill="none" stroke={p.line} strokeWidth={1.4} />
+        <line x1={0} y1={46} x2={0} y2={H} stroke={p.line} strokeWidth={1.6} />
+      </g>
+    );
+  }
   // contatto fisso a y=20, lama da (0,44) a (-12,18)
   return (
     <g>

@@ -272,7 +272,7 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
 
   for (const c of project.components) {
     const pr = c.params;
-    if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'switch' && pr.kind !== 'rcd') continue;
+    if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'fuse' && pr.kind !== 'switch' && pr.kind !== 'rcd' && pr.kind !== 'relay') continue;
     const imax = Math.max(0, ...(poleI.get(c.id) ?? []).map((v) => (v ? abs(v) : 0)));
     const inom = pr.p.in;
     if (imax > 10 * inom) {
@@ -283,7 +283,7 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
         componentIds: [c.id],
       });
     } else if (imax > inom) {
-      const what = pr.kind === 'mcb' || pr.kind === 'rcbo' ? 'sovraccarico: lo sganciatore termico si sta riscaldando' : 'il dispositivo non è una protezione contro le sovracorrenti';
+      const what = pr.kind === 'mcb' || pr.kind === 'rcbo' ? 'sovraccarico: lo sganciatore termico si sta riscaldando' : pr.kind === 'fuse' ? 'sovraccarico: oltre la corrente di non fusione la cartuccia si consuma' : 'il dispositivo non è una protezione contro le sovracorrenti';
       alerts.push({
         code: 'OVERCURRENT',
         severity: 'attenzione',

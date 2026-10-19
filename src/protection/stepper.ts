@@ -3,6 +3,8 @@ import { simulate, type SimResult } from '../engine/simulate';
 import { getPoles } from '../model/terminals';
 import type { ComponentInstance, Project } from '../model/types';
 import {
+  fuseMeltAfter,
+  fuseTimeToMelt,
   heatAfter,
   MAGNETIC_BAND,
   MAGNETIC_TRIP_S,
@@ -12,7 +14,7 @@ import {
   thermalTripTime,
 } from './curves';
 
-export type TripCause = 'termico' | 'magnetico' | 'differenziale' | 'prova';
+export type TripCause = 'termico' | 'magnetico' | 'differenziale' | 'prova' | 'fusione';
 
 export interface DeviceProtState {
   /** Stato termico normalizzato H (intervento a H_TRIP) */
@@ -21,6 +23,8 @@ export interface DeviceProtState {
   tripped?: TripCause;
   warnedMagnetic?: boolean;
   warnedResidual?: boolean;
+  /** Portafusibili: consumo di ogni cartuccia per polo (fonde a 1) */
+  melt?: number[];
 }
 
 export type ProtState = Record<string, DeviceProtState>;
@@ -62,6 +66,8 @@ export function protectedCurrent(result: SimResult, c: ComponentInstance): numbe
 
 interface Candidate {
   id: string;
+  /** Polo (solo fusibili: ogni cartuccia fonde da sola) */
+  pole?: number;
   time: number;
   cause: TripCause;
   current: number;
@@ -93,12 +99,29 @@ export function advance(
     const remaining = horizonTotal - t;
     const cands: Candidate[] = [];
     const ratios = new Map<string, number>();
+    const fuseRatios = new Map<string, number[]>();
 
     for (const c of p.components) {
       const pr = c.params;
-      if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'rcd') continue;
+      if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'rcd' && pr.kind !== 'fuse') continue;
       const s = (st[c.id] ??= { heat: 0 });
       const closed = c.closed && res.ok;
+
+      if (pr.kind === 'fuse') {
+        const currents = closed ? (res.ok ? (res.poleI.get(c.id) ?? []) : []) : [];
+        const rs: number[] = [];
+        for (const pole of getPoles(c)) {
+          if (!pole.protected) continue;
+          const i = currents[pole.index] ? abs(currents[pole.index]!) : 0;
+          const ratio = i / pr.p.in;
+          rs[pole.index] = ratio;
+          if (c.blown?.includes(pole.index)) continue;
+          const tt = fuseTimeToMelt(s.melt?.[pole.index] ?? 0, ratio, pr.p.in);
+          if (Number.isFinite(tt)) cands.push({ id: c.id, pole: pole.index, time: tt, cause: 'fusione', current: i });
+        }
+        fuseRatios.set(c.id, rs);
+        continue;
+      }
 
       if (pr.kind === 'mcb' || pr.kind === 'rcbo') {
         const i = closed ? protectedCurrent(res, c) : 0;
@@ -154,6 +177,16 @@ export function advance(
         const s = st[c.id]!;
         s.heat = heatAfter(s.heat, ratios.get(c.id) ?? 0, advanceBy);
       }
+      for (const c of p.components) {
+        if (c.params.kind !== 'fuse') continue;
+        const s = st[c.id]!;
+        const rs = fuseRatios.get(c.id) ?? [];
+        const melt = (s.melt ??= []);
+        for (const pole of getPoles(c)) {
+          if (!pole.protected || c.blown?.includes(pole.index)) continue;
+          melt[pole.index] = fuseMeltAfter(melt[pole.index] ?? 0, rs[pole.index] ?? 0, c.params.p.in, advanceBy);
+        }
+      }
     }
     t += advanceBy;
     if (tmin > limit) break;
@@ -166,6 +199,25 @@ export function advance(
     }
     const done = new Set<string>();
     for (const cand of now) {
+      if (cand.cause === 'fusione') {
+        const dev = p.components.find((x) => x.id === cand.id)!;
+        const pr = dev.params;
+        if (pr.kind !== 'fuse' || cand.pole === undefined) continue;
+        dev.blown = [...(dev.blown ?? []), cand.pole];
+        (st[cand.id]!.melt ??= [])[cand.pole] = 1;
+        tripped = true;
+        const poleName = pr.p.poles.startsWith('3P') ? `L${cand.pole + 1}` : 'L';
+        const ok = cand.current <= pr.p.icn * 1000;
+        events.push({
+          at: t,
+          level: 'errore',
+          text: `${dev.label}: fonde il fusibile ${poleName} (gG ${pr.p.in} A) dopo ${cand.time < 1 ? `${f1(cand.time * 1000, 0)} ms` : `${f1(cand.time, 1)} s`} con ${fA(cand.current)} = ${f1(cand.current / pr.p.in, 1)}·In. La cartuccia va sostituita (portafusibili aperto) dopo aver eliminato la causa.${
+            ok ? '' : ` ATTENZIONE: la corrente supera il potere di interruzione ${f1(pr.p.icn, 0)} kA della cartuccia.`
+          }`,
+          componentIds: [dev.id],
+        });
+        continue;
+      }
       if (done.has(cand.id)) continue;
       done.add(cand.id);
       const dev = p.components.find((x) => x.id === cand.id)!;
