@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONTACT_RESISTANCE } from '../../model/constants';
 import { DEMO_PROJECTS, ProjectBuilder, t } from '../../projects/demos';
-import { wireResistance } from '../netlist';
+import { LINE_LINK_RESISTANCE, wireResistance } from '../netlist';
 import { simulate } from '../simulate';
 
 /** Fornitura → magnetotermico 1P+N → carico 2300 W, con PE. */
@@ -32,7 +32,7 @@ describe('circuito monofase', () => {
     const rSeries =
       0.25 + // rete (fase + neutro)
       2 * wireResistance(5, 6) +
-      2 * wireResistance(1, 2.5) +
+      2 * LINE_LINK_RESISTANCE + // conduttori verso l'utilizzatore: fanno parte della linea (20 m)
       2 * wireResistance(20, 2.5) +
       2 * CONTACT_RESISTANCE +
       rLoad;

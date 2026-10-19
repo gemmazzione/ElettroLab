@@ -5,7 +5,7 @@ import { ProjectBuilder, t } from '../../projects/demos';
 import { advance } from '../../protection/stepper';
 import { abs, add, C, div, polar, sub, type Complex, ZERO } from '../complex';
 import { deviceShortCircuit, prospectiveShortCircuit } from '../measure';
-import { wireResistance } from '../netlist';
+import { LINE_LINK_RESISTANCE, wireResistance } from '../netlist';
 import { simulate } from '../simulate';
 
 /** Fornitura trifase → 3P+N → tre carichi monofase su L1, L2, L3 con neutro comune (morsettiera). */
@@ -82,7 +82,7 @@ describe('rete trifase', () => {
     if (supply.params.kind !== 'supply') throw new Error();
     const zHalf = C(supply.params.p.rNetwork / 2, supply.params.p.xNetwork / 2);
     const rLoad = powers.map((p) => (230 * 230) / p);
-    const rSeries = wireResistance(0.01, 16) + CONTACT_RESISTANCE + wireResistance(0.01, 2.5) + 2 * wireResistance(0.1, 2.5) + wireResistance(0.01, 2.5);
+    const rSeries = wireResistance(0.01, 16) + CONTACT_RESISTANCE + LINE_LINK_RESISTANCE + 2 * wireResistance(0.1, 2.5) + LINE_LINK_RESISTANCE;
     const Z = rLoad.map((rl) => add(zHalf, C(rSeries + rl)));
     const E = [polar(230, 0), polar(230, -120), polar(230, 120)];
     let num: Complex = ZERO;

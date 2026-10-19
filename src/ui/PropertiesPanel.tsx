@@ -22,6 +22,7 @@ import { CONDUCTOR_LABEL, WIRE_COLOR_HEX, WIRE_COLOR_LABEL } from '../model/cons
 import { PANEL_SIZES } from '../model/geometry';
 import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId } from '../model/terminals';
 import { modulesUsed } from '../model/placement';
+import { lineLoadOf } from '../model/lineWires';
 import { COMB_LABEL, COMB_RATED_A, COMB_SECTION, combDevices } from '../model/comb';
 import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
@@ -624,6 +625,7 @@ function WireProps({ wire }: { wire: Wire }) {
     return c && t ? `${c.label} · morsetto ${t.label} (${t.fn})` : tid;
   };
   const r = wireResistance(wire.length, wire.section);
+  const lineLoad = lineLoadOf(project, wire);
   const i = result && result.ok ? result.wireI.get(wire.id) : undefined;
   const va = result && result.ok ? result.terminalV.get(wire.from) : undefined;
   const vb = result && result.ok ? result.terminalV.get(wire.to) : undefined;
@@ -649,6 +651,11 @@ function WireProps({ wire }: { wire: Wire }) {
       <Section title="Conduttore">
         <Row k="Da" v={name(wire.from)} mono={false} />
         <Row k="A" v={name(wire.to)} mono={false} />
+        {lineLoad && lineLoad.params.kind === 'load' && (
+          <p className="rounded bg-sky-500/10 px-2 py-1.5 text-[11.5px] leading-snug text-sky-200 ring-1 ring-sky-500/30">
+            Questo conduttore è la linea di {lineLoad.label} ({lineLoad.params.p.name}): lunghezza e sezione sono quelle della linea e vengono contate una sola volta. Se le cambi qui, cambia la linea dell'utilizzatore.
+          </p>
+        )}
         <Field label="Identificazione">
           <Select value={wire.conductor} options={CONDUCTORS} format={(c) => CONDUCTOR_LABEL[c]} onChange={(c) => update(wire.id, { conductor: c })} />
         </Field>
@@ -675,7 +682,7 @@ function WireProps({ wire }: { wire: Wire }) {
             <NumberInput value={wire.length} min={0.01} max={500} step={0.05} suffix="m" onChange={(l) => update(wire.id, { length: l })} />
           </Field>
         </div>
-        <Row k="Resistenza R = ρL/S" v={`${fmt(r * 1000, 2)} mΩ`} />
+        <Row k="Resistenza R = ρL/S" v={lineLoad ? `${fmt(r * 1000, 2)} mΩ (nella linea di ${lineLoad.label})` : `${fmt(r * 1000, 2)} mΩ`} />
       </Section>
       {result && result.ok && (
         <Section title="Valori simulati">

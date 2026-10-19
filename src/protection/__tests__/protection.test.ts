@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { abs } from '../../engine/complex';
 import { clampReading, deviceShortCircuit, loadEndFaultCurrents, resistanceBetween } from '../../engine/measure';
-import { innerNode, wireResistance } from '../../engine/netlist';
+import { innerNode, LINE_LINK_RESISTANCE, wireResistance } from '../../engine/netlist';
 import { simulate } from '../../engine/simulate';
 import { CONTACT_RESISTANCE } from '../../model/constants';
 import type { FaultType } from '../../model/types';
@@ -210,7 +210,8 @@ describe('multimetro', () => {
   it('a impianto disalimentato misura la resistenza dell\'anello L-N attraverso il carico', () => {
     const { project, q, u } = circuit({ powerW: 2300 });
     const r = resistanceBetween(project, t(q, 'p0_out'), t(q, 'p1_out'));
-    const expected = 23 + 2 * wireResistance(20, 2.5) + 2 * wireResistance(0.5, 2.5);
+    // i conduttori quadro → utilizzatore sono la linea stessa (già contata con 20 m): collegamento trascurabile
+    const expected = 23 + 2 * wireResistance(20, 2.5) + 2 * LINE_LINK_RESISTANCE;
     expect(r).toBeCloseTo(expected, 9);
     // utilizzatore spento → circuito aperto
     const load = project.components.find((c) => c.id === u.id)!;
@@ -221,7 +222,7 @@ describe('multimetro', () => {
   it('continuità del PE tra massa e dispersore', () => {
     const { project, u, e } = circuit();
     const r = resistanceBetween(project, t(u, 'PE'), t(e, 'PE'));
-    expect(r).toBeCloseTo(wireResistance(1, 2.5), 9);
+    expect(r).toBeCloseTo(LINE_LINK_RESISTANCE, 9); // il PE dell'utilizzatore fa parte della sua linea
     expect(innerNode(u.id, 'PE')).toContain('#PE');
   });
 });

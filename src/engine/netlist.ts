@@ -1,3 +1,4 @@
+import { lineWireIds } from '../model/lineWires';
 import { UnionFind } from '../graph/unionFind';
 import { CONTACT_RESISTANCE, LOAD_RATED_VOLTAGE, MIN_FAULT_RESISTANCE, MIN_WIRE_LENGTH, RHO_CU_70 } from '../model/constants';
 import { getPoles, getTerminals, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId } from '../model/terminals';
@@ -65,6 +66,9 @@ export interface NetlistOptions {
  * Impedenza costante di un ramo di carico: potenza attiva P alla tensione nominale con fattore
  * di potenza cos φ (ohmico-induttivo): |Z| = U² · cos φ / P, Z = |Z| (cos φ + j sin φ).
  */
+/** Resistenza di collegamento dei conduttori che rappresentano la linea di un utilizzatore [Ω] (trascurabile, come un serraggio). */
+export const LINE_LINK_RESISTANCE = 1e-3;
+
 export function loadBranchImpedance(powerW: number, cosPhi: number): Complex {
   const pf = Math.min(1, Math.max(0.1, cosPhi));
   const zMag = (LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE * pf) / powerW;
@@ -111,12 +115,14 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
   for (const c of project.components) for (const t of getTerminals(c)) terminalNode.set(t.id, node(t.id));
   const resolve = (p: string) => terminalNode.get(p) ?? p;
 
+  // I conduttori collegati a un utilizzatore sono la sua linea, già modellata con i parametri dell'utilizzatore.
+  const lineWires = lineWireIds(project);
   for (const w of project.wires) {
     if (!terminalNode.has(w.from) || !terminalNode.has(w.to) || brokenWires.has(w.id)) continue;
     elements.push({
       a: node(w.from),
       b: node(w.to),
-      z: C(wireResistance(w.length, w.section)),
+      z: C(lineWires.has(w.id) ? LINE_LINK_RESISTANCE : wireResistance(w.length, w.section)),
       tag: { t: 'wire', wireId: w.id },
     });
   }

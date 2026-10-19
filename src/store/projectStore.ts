@@ -6,6 +6,7 @@ import { DEFAULT_COLOR_FOR } from '../model/constants';
 import { createComponent, createWire, emptyProject, inferConductor } from '../model/factory';
 import { MODULE_W, nextPanelOrigin, PANEL_GAP, panelSize, positionToRail, railToPosition } from '../model/geometry';
 import { buildComb } from '../model/comb';
+import { lineLoadOf, syncLineWires } from '../model/lineWires';
 import { canPlace, nearestFreeSlot, panelFits, panelOf } from '../model/placement';
 import { getTerminals, parseTerminalId } from '../model/terminals';
 import { DEFAULT_NORM } from '../rules/context';
@@ -170,7 +171,9 @@ let eventSeq = 0;
 let toastSeq = 0;
 
 function initialProject(): Project {
-  return loadCurrent() ?? DEMO_PROJECTS[0]!.build();
+  const p = loadCurrent() ?? DEMO_PROJECTS[0]!.build();
+  syncLineWires(p);
+  return p;
 }
 
 const alertKey = (a: { code: string; componentIds: string[] }) => `${a.code}:${a.componentIds.join(',')}`;
@@ -460,6 +463,7 @@ export const useStore = create<State>((set, get) => {
       const { project, past, result, running } = get();
       const next = structuredClone(project);
       mutate(next);
+      syncLineWires(next);
       next.updatedAt = new Date().toISOString();
       saveCurrent(next);
       set({
@@ -492,7 +496,10 @@ export const useStore = create<State>((set, get) => {
 
     newProject: () => get().openProject(emptyProject()),
 
-    openProject: (p) => {
+    openProject: (input) => {
+      // I conduttori collegati agli utilizzatori ereditano lunghezza e sezione della linea.
+      const p = structuredClone(input);
+      syncLineWires(p);
       saveCurrent(p);
       set({
         project: p,
@@ -692,7 +699,14 @@ export const useStore = create<State>((set, get) => {
     updateWire: (id, patch) =>
       get().commit((p) => {
         const w = p.wires.find((x) => x.id === id);
-        if (w) Object.assign(w, patch);
+        if (!w) return;
+        Object.assign(w, patch);
+        // Lunghezza e sezione di un conduttore di linea sono quelle della linea dell'utilizzatore.
+        const load = lineLoadOf(p, w);
+        if (load && load.params.kind === 'load') {
+          if (patch.length !== undefined) load.params.p.cableLength = patch.length;
+          if (patch.section !== undefined) load.params.p.cableSection = patch.section;
+        }
       }),
 
     setPanel: (panelId, config) => {
