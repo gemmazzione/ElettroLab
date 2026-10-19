@@ -543,10 +543,10 @@ const cadutaTensione: R = {
   title: 'Caduta di tensione',
   description: 'Raccomandazione: caduta tra origine e utilizzatore non superiore al 4%.',
   area: 'Dimensionamento delle condutture',
-  scope: 'Ogni utilizzatore, tutti i carichi accesi',
+  scope: 'Ogni utilizzatore a piena potenza, con gli altri utilizzatori scelti accesi secondo il fattore di contemporaneità',
   severity: 'attenzione',
   explanation:
-    'È una raccomandazione ("si raccomanda"), non una prescrizione: una caduta eccessiva riduce le prestazioni degli apparecchi. Il valore è calcolato dal modello con tutti gli utilizzatori accesi alla potenza nominale.',
+    'È una raccomandazione ("si raccomanda"), non una prescrizione: una caduta eccessiva riduce le prestazioni degli apparecchi. Il valore è calcolato dal modello con l\'utilizzatore verificato alla potenza nominale e gli altri utilizzatori indicati come contemporanei alla potenza nominale moltiplicata per il fattore di contemporaneità (impostazioni nella scheda Norma). Il fattore e la scelta degli utilizzatori sono decisioni di progetto: con tutti accesi e fattore 1 il risultato è il caso più gravoso.',
   refs: [r07('525'), rIX('525')],
   requiredData: ['Lunghezze e sezioni', 'Potenze'],
   evaluate: (ctx) =>
@@ -555,6 +555,15 @@ const cadutaTensione: R = {
       status: c.dropPct === null ? 'dati-insufficienti' : c.dropPct <= 4 ? 'conforme' : 'attenzione',
       subject: c.name,
       message: c.dropPct === null ? 'Utilizzatore non alimentato nel modello.' : `Caduta di tensione ${f(c.dropPct, 2)}% (raccomandato ≤ 4%).`,
+      details:
+        c.dropPct === null
+          ? undefined
+          : [
+              `${c.load.label} a piena potenza (${f(c.p.powerW, 0)} W)`,
+              c.dropOthers.length
+                ? `Contemporanei: ${c.dropOthers.map((o) => o.label).join(', ')} al ${f((ctx.settings.simultaneity ?? 1) * 100, 0)}% della potenza nominale`
+                : 'Nessun altro utilizzatore considerato acceso',
+            ],
       componentIds: [c.load.id],
     })),
 };

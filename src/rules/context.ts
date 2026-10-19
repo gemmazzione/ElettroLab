@@ -5,7 +5,25 @@ import { isResidualDevice, isSwitchingDevice } from '../model/terminals';
 import type { CableInstall, ComponentInstance, LoadParams, NormSettings, Project, SupplyParams } from '../model/types';
 import { ampacity, type AmpacityResult } from './ampacity';
 
-export const DEFAULT_NORM: NormSettings = { residential: true, ul: 50, declaredIccKA: null };
+export const DEFAULT_NORM: NormSettings = { residential: true, ul: 50, declaredIccKA: null, simultaneity: 1 };
+
+/**
+ * Scenario della verifica della caduta di tensione per un utilizzatore: lui a piena potenza,
+ * gli altri inclusi (designOn) alla potenza nominale × fattore di contemporaneità, gli esclusi spenti.
+ * Protezioni tutte chiuse, nessun guasto.
+ */
+export function dropScenario(project: Project, focusId: string | null, k: number): Project {
+  return {
+    ...project,
+    components: project.components.map((c) => {
+      if (c.params.kind !== 'load') return c;
+      const p = c.params.p;
+      const focus = c.id === focusId;
+      const on = focus || p.designOn !== false;
+      return { ...c, params: { kind: 'load', p: { ...p, on, powerW: focus ? p.powerW : p.powerW * k } } };
+    }),
+  };
+}
 
 export interface CircuitCtx {
   load: ComponentInstance;
@@ -22,8 +40,10 @@ export interface CircuitCtx {
   iz: { value: number; source: 'tabella' | 'utente'; calc: AmpacityResult | null } | null;
   /** Correnti di guasto presunte a fondo linea */
   iccEnd: { ln: number | null; lpe: number | null };
-  /** Caduta di tensione di progetto origine → utilizzatore (tutti i carichi accesi) [%] */
+  /** Caduta di tensione di progetto origine → utilizzatore [%] (scenario: vedi dropScenario) */
   dropPct: number | null;
+  /** Altri utilizzatori considerati accesi nella verifica della caduta */
+  dropOthers: ComponentInstance[];
   hasSockets: boolean;
 }
 
@@ -51,14 +71,14 @@ export function buildNormContext(project: Project): NormCtx {
   const deviceIcc = new Map<string, number | null>();
   for (const d of devices) deviceIcc.set(d.id, deviceShortCircuit(project, d));
 
-  // Condizione di progetto: tutte le protezioni chiuse, tutti gli utilizzatori accesi, nessun guasto.
-  const design = simulate(
-    {
-      ...project,
-      components: project.components.map((c) => (c.params.kind === 'load' ? { ...c, params: { kind: 'load', p: { ...c.params.p, on: true } } } : c)),
-    },
-    { closed: () => true, ignoreFaults: true },
-  );
+  // Verifica della caduta: con k = 1 e tutti gli utilizzatori inclusi basta una sola simulazione;
+  // altrimenti una per utilizzatore (lui a piena potenza, gli altri ridotti).
+  const k = Math.min(1, Math.max(0.05, settings.simultaneity ?? 1));
+  const loads = project.components.filter((c) => c.params.kind === 'load');
+  const shared = k === 1 && loads.every((c) => c.params.kind === 'load' && c.params.p.designOn !== false);
+  const opts = { closed: () => true, ignoreFaults: true };
+  const sharedDesign = shared ? simulate(dropScenario(project, null, 1), opts) : null;
+  const designFor = (id: string) => sharedDesign ?? simulate(dropScenario(project, id, k), opts);
 
   const circuits: CircuitCtx[] = [];
   for (const info of analyzeCircuits(project, graph)) {
@@ -76,6 +96,7 @@ export function buildNormContext(project: Project): NormCtx {
       if (calc) iz = { value: calc.iz, source: 'tabella', calc };
     }
     let dropPct: number | null = null;
+    const design = designFor(load.id);
     if (design.ok) {
       const r = design.loads.get(load.id);
       if (r && r.energized) {
@@ -100,6 +121,7 @@ export function buildNormContext(project: Project): NormCtx {
       iz,
       iccEnd: info.lConnected && info.nConnected ? loadEndFaultCurrents(project, load.id) : { ln: null, lpe: null },
       dropPct,
+      dropOthers: loads.filter((c) => c.id !== load.id && c.params.kind === 'load' && c.params.p.designOn !== false),
       hasSockets: p.hasSockets ?? p.category === 'prese',
     });
   }

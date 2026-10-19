@@ -185,6 +185,8 @@ export interface LoadParams {
   withNeutral?: boolean;
   /** Fattore di potenza (carico ohmico-induttivo); 1 = resistivo (default) */
   cosPhi?: number;
+  /** Verifica della caduta di tensione: considerato acceso insieme agli altri (default true) */
+  designOn?: boolean;
 }
 
 export type ComponentParams =
@@ -272,6 +274,11 @@ export interface NormSettings {
   ul: number;
   /** Corrente di cortocircuito dichiarata dal distributore al punto di consegna [kA] */
   declaredIccKA?: number | null;
+  /**
+   * Fattore di contemporaneità per la verifica della caduta di tensione (0,1–1, default 1):
+   * gli altri utilizzatori considerati accesi assorbono questa frazione della potenza nominale.
+   */
+  simultaneity?: number;
 }
 
 export interface PanelConfig {

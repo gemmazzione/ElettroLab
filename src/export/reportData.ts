@@ -98,7 +98,9 @@ export function buildReport(project: Project, now = new Date()): ReportData {
 
   const circuits: ReportTable = {
     title: 'Circuiti utilizzatori',
-    intro: 'IB = corrente d\'impiego alla potenza nominale; Iz = portata della conduttura con i fattori di correzione; ΔV = caduta di tensione di progetto con tutti gli utilizzatori accesi; Icc min = cortocircuito franco a fondo linea.',
+    intro: 'IB = corrente d\'impiego alla potenza nominale; Iz = portata della conduttura con i fattori di correzione; ΔV = caduta di tensione di progetto con l\'utilizzatore a piena potenza e gli altri utilizzatori contemporanei (' +
+      `${project.components.filter((c) => c.params.kind === 'load' && c.params.p.designOn !== false).length} considerati accesi, fattore di contemporaneità ${f((ctx.settings.simultaneity ?? 1) * 100, 0)}%` +
+      '); Icc min = cortocircuito franco a fondo linea.',
     head: ['Circuito', 'Fase', 'Protezioni', 'P', 'IB', 'Linea', 'Posa', 'Iz', 'ΔV', 'Icc min'],
     widths: [17, 6, 14, 8, 8, 13, 9, 8, 7, 10],
     body: ctx.circuits.map((c) => {

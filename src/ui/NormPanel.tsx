@@ -79,6 +79,63 @@ function Outcome({ o }: { o: NormReport['outcomes'][number] }) {
   );
 }
 
+/** Scenario della verifica della caduta di tensione: fattore di contemporaneità e utilizzatori accesi insieme. */
+function SimultaneitySection() {
+  const project = useStore((s) => s.project);
+  const setNorm = useStore((s) => s.setNorm);
+  const update = useStore((s) => s.updateParams);
+  const commit = useStore((s) => s.commit);
+  const k = project.norm?.simultaneity ?? 1;
+  const loads = project.components.filter((c) => c.params.kind === 'load');
+  const included = loads.filter((c) => c.params.kind === 'load' && c.params.p.designOn !== false);
+  const totalW = included.reduce((a, c) => a + (c.params.kind === 'load' ? c.params.p.powerW : 0), 0);
+  const setAll = (on: boolean) =>
+    commit((p) => {
+      for (const c of p.components) if (c.params.kind === 'load') c.params.p.designOn = on;
+    });
+  return (
+    <Section title="Caduta di tensione: contemporaneità">
+      <p className="text-[11px] leading-snug text-slate-400">
+        Ogni utilizzatore è verificato alla sua potenza nominale; gli altri selezionati qui sotto sono considerati accesi insieme, alla potenza nominale moltiplicata per il fattore di contemporaneità.
+      </p>
+      <label className="block" title="1 = tutti alla potenza piena (caso più gravoso). Valore di progetto, da scegliere in base all'uso reale dell'impianto.">
+        <span className="mb-1 block text-[11px] text-slate-400">Fattore di contemporaneità degli altri utilizzatori</span>
+        <NumberInput value={Math.round(k * 100)} min={10} max={100} step={5} suffix="%" onChange={(v) => setNorm({ simultaneity: Math.min(1, Math.max(0.1, v / 100)) })} />
+      </label>
+      <div className="flex items-center justify-between text-[11px] text-slate-400">
+        <span>Utilizzatori accesi insieme ({included.length}/{loads.length})</span>
+        <span className="flex gap-2">
+          <button className="text-sky-300 hover:underline" onClick={() => setAll(true)}>tutti</button>
+          <button className="text-sky-300 hover:underline" onClick={() => setAll(false)}>nessuno</button>
+        </span>
+      </div>
+      <div className="space-y-0.5">
+        {loads.map((c) =>
+          c.params.kind === 'load' ? (
+            <label key={c.id} className="flex items-center gap-2 text-[12px] text-slate-300">
+              <input
+                type="checkbox"
+                checked={c.params.p.designOn !== false}
+                onChange={(e) => c.params.kind === 'load' && update(c.id, { kind: 'load', p: { ...c.params.p, designOn: e.target.checked } })}
+              />
+              <span className="min-w-0 flex-1 truncate">
+                {c.label} · {c.params.p.name}
+              </span>
+              <span className="font-mono text-[10.5px] text-slate-500">{c.params.p.powerW} W</span>
+            </label>
+          ) : null,
+        )}
+      </div>
+      <p className="font-mono text-[10.5px] text-slate-400">
+        Potenza contemporanea degli altri ≈ {Math.round(totalW * k).toLocaleString('it-IT')} W (somma {totalW.toLocaleString('it-IT')} W × {Math.round(k * 100)}%)
+      </p>
+      <p className="text-[10.5px] leading-snug text-slate-500">
+        Fattore e scelta degli utilizzatori sono ipotesi di progetto: indicale nella relazione. Con tutti accesi e fattore 100% il risultato è il caso più gravoso.
+      </p>
+    </Section>
+  );
+}
+
 export function NormPanel() {
   const project = useStore((s) => s.project);
   const setNorm = useStore((s) => s.setNorm);
@@ -139,6 +196,8 @@ export function NormPanel() {
         </div>
         <p className="text-[10.5px] text-slate-500">I dati di posa delle condutture si inseriscono selezionando ciascun utilizzatore; RA misurata nel dispersore.</p>
       </Section>
+
+      <SimultaneitySection />
 
       <div className="space-y-4 p-4">
         {AREAS.map((area, i) => {
