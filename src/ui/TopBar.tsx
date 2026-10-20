@@ -21,6 +21,7 @@ import {
 import { useState, type ReactNode } from 'react';
 import { saveProject } from '../persistence/storage';
 import { useStore } from '../store/projectStore';
+import { AccountButton } from './Account';
 import { fmtTime } from './format';
 
 function Btn({
@@ -179,6 +180,7 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
       />
       <div className="flex-1" />
       <Btn icon={<Info size={15} />} label="Modello fisico" onClick={onInfo} />
+      <AccountButton />
     </header>
   );
 }

@@ -1,3 +1,4 @@
+import { emitPersist, storageKey } from '../../persistence/space';
 import { BASICS_LESSONS } from './basics';
 import { PROTECTION_LESSONS } from './protection';
 import { SYSTEM_LESSONS } from './systems';
@@ -35,7 +36,7 @@ export const quizPassed = (correct: number, total: number) => total > 0 && corre
 
 export function loadLessonProgress(): Record<string, LessonProgress> {
   try {
-    return JSON.parse(localStorage.getItem(KEY) ?? '{}') as Record<string, LessonProgress>;
+    return JSON.parse(localStorage.getItem(storageKey(KEY)) ?? '{}') as Record<string, LessonProgress>;
   } catch {
     return {};
   }
@@ -47,9 +48,19 @@ export function saveLessonResult(id: string, correct: number, total: number): Re
   const best = Math.max(prev?.best ?? 0, correct);
   all[id] = { best, total, done: (prev?.done ?? false) || quizPassed(correct, total) };
   try {
-    localStorage.setItem(KEY, JSON.stringify(all));
+    localStorage.setItem(storageKey(KEY), JSON.stringify(all));
   } catch {
     /* memoria locale non disponibile: i progressi valgono solo per questa sessione */
   }
+  emitPersist({ type: 'lessons', data: all });
   return all;
+}
+
+/** Sostituisce i progressi locali delle lezioni (dati scaricati dall'account). */
+export function replaceLessonProgress(all: Record<string, LessonProgress>): void {
+  try {
+    localStorage.setItem(storageKey(KEY), JSON.stringify(all));
+  } catch {
+    /* memoria locale non disponibile */
+  }
 }

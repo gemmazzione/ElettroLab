@@ -4,6 +4,7 @@ import { LayoutGrid, Network } from 'lucide-react';
 import { SchemaView } from './diagram/SchemaView';
 import { Canvas } from './editor/Canvas';
 import { useStore } from './store/projectStore';
+import { useAccount } from './cloud/account';
 import { CatalogPanel } from './ui/CatalogPanel';
 import { Dashboard } from './ui/Dashboard';
 import { InfoDialog, OpenDialog, Toasts } from './ui/Dialogs';
@@ -21,6 +22,11 @@ export default function App() {
   const mode = useStore((s) => s.mode);
   const view = useStore((s) => s.view);
   const setView = useStore((s) => s.setView);
+  // Account: stato della sessione all'avvio; i progressi dell'Accademia si ricaricano quando cambia l'utente.
+  const dataVersion = useAccount((s) => s.dataVersion);
+  useEffect(() => {
+    void useAccount.getState().init();
+  }, []);
 
   // Orologio della simulazione (tempo virtuale per il registro eventi).
   useEffect(() => {
@@ -54,7 +60,7 @@ export default function App() {
     <div className="flex h-screen flex-col bg-slate-950 text-slate-200">
       <TopBar onOpen={() => setOpenDlg(true)} onInfo={() => setInfoDlg(true)} />
       {mode === 'academy' ? (
-        <AcademyView />
+        <AcademyView key={dataVersion} />
       ) : (
       <div className="flex min-h-0 flex-1">
         <CatalogPanel />

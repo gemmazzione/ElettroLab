@@ -1,5 +1,6 @@
 import { CATALOG_BY_ID } from '../model/catalog';
 import type { Project } from '../model/types';
+import { emitPersist, storageKey } from './space';
 
 const INDEX_KEY = 'electrolab.projects.v1';
 const CURRENT_KEY = 'electrolab.current.v1';
@@ -12,7 +13,7 @@ export interface SavedEntry {
 
 function read<T>(key: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(storageKey(key));
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
@@ -21,7 +22,7 @@ function read<T>(key: string, fallback: T): T {
 
 function write(key: string, value: unknown): boolean {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
+    localStorage.setItem(storageKey(key), JSON.stringify(value));
     return true;
   } catch {
     return false;
@@ -37,8 +38,30 @@ export function listSaved(): SavedEntry[] {
 
 export function saveProject(p: Project): boolean {
   const all = read<Record<string, Project>>(INDEX_KEY, {});
-  all[p.id] = { ...p, updatedAt: new Date().toISOString() };
-  return write(INDEX_KEY, all);
+  const saved = { ...p, updatedAt: new Date().toISOString() };
+  all[p.id] = saved;
+  const ok = write(INDEX_KEY, all);
+  if (ok) emitPersist({ type: 'project-save', project: saved });
+  return ok;
+}
+
+/** Sostituisce l'intera libreria locale (dati scaricati dall'account). */
+export function replaceLibrary(projects: Project[]): void {
+  const all: Record<string, Project> = {};
+  for (const p of projects) {
+    try {
+      const v = validateProject(p);
+      all[v.id] = v;
+    } catch {
+      /* progetto non leggibile: ignorato */
+    }
+  }
+  write(INDEX_KEY, all);
+}
+
+/** Tutti i progetti della libreria locale, così come sono salvati. */
+export function readLibraryRaw(): Project[] {
+  return Object.values(read<Record<string, Project>>(INDEX_KEY, {}));
 }
 
 export function loadSaved(id: string): Project | null {
@@ -50,10 +73,24 @@ export function deleteSaved(id: string): void {
   const all = read<Record<string, Project>>(INDEX_KEY, {});
   delete all[id];
   write(INDEX_KEY, all);
+  emitPersist({ type: 'project-delete', id });
 }
 
 export function saveCurrent(p: Project): void {
   write(CURRENT_KEY, p);
+  emitPersist({ type: 'current', project: p });
+}
+
+/** Scrive il progetto in corso senza segnalarlo alla sincronizzazione. */
+export function storeCurrentLocal(p: Project | null): void {
+  if (p) write(CURRENT_KEY, p);
+  else {
+    try {
+      localStorage.removeItem(storageKey(CURRENT_KEY));
+    } catch {
+      /* memoria locale non disponibile */
+    }
+  }
 }
 
 export function loadCurrent(): Project | null {

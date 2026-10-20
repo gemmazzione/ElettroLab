@@ -2,6 +2,7 @@ import { modulesTotal, modulesUsed } from '../model/placement';
 import { newId } from '../model/factory';
 import type { Project } from '../model/types';
 import { deleteSaved, loadSaved, saveProject, validateProject } from './storage';
+import { storageKey } from './space';
 
 const INDEX_KEY = 'electrolab.projects.v1';
 
@@ -42,7 +43,7 @@ export interface LibraryEntry {
 export function listLibrary(): LibraryEntry[] {
   let all: Record<string, Project> = {};
   try {
-    all = JSON.parse(localStorage.getItem(INDEX_KEY) ?? '{}') as Record<string, Project>;
+    all = JSON.parse(localStorage.getItem(storageKey(INDEX_KEY)) ?? '{}') as Record<string, Project>;
   } catch {
     all = {};
   }

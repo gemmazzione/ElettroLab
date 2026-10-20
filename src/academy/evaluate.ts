@@ -1,3 +1,4 @@
+import { emitPersist, storageKey } from '../persistence/space';
 import { simulate } from '../engine/simulate';
 import { checkWiring } from '../graph/erc';
 import type { Project } from '../model/types';
@@ -100,7 +101,7 @@ export interface Progress {
 
 export function loadProgress(): Record<string, Progress> {
   try {
-    return JSON.parse(localStorage.getItem(PROGRESS_KEY) ?? '{}') as Record<string, Progress>;
+    return JSON.parse(localStorage.getItem(storageKey(PROGRESS_KEY)) ?? '{}') as Record<string, Progress>;
   } catch {
     return {};
   }
@@ -111,9 +112,19 @@ export function saveProgress(id: string, score: number): Record<string, Progress
   const prev = all[id] ?? { best: 0, attempts: 0 };
   all[id] = { best: Math.max(prev.best, score), attempts: prev.attempts + 1 };
   try {
-    localStorage.setItem(PROGRESS_KEY, JSON.stringify(all));
+    localStorage.setItem(storageKey(PROGRESS_KEY), JSON.stringify(all));
   } catch {
     /* memoria locale non disponibile */
   }
+  emitPersist({ type: 'exercises', data: all });
   return all;
+}
+
+/** Sostituisce i progressi locali (dati scaricati dall'account). */
+export function replaceProgress(all: Record<string, Progress>): void {
+  try {
+    localStorage.setItem(storageKey(PROGRESS_KEY), JSON.stringify(all));
+  } catch {
+    /* memoria locale non disponibile */
+  }
 }

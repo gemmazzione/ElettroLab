@@ -9,6 +9,13 @@
 #                             es. /www.tuodominio.it/electrolab/
 #              FTP_PROTOCOL   facoltativa: ftps (predefinita, cifrato) oppure ftp
 # Senza questi dati il workflow esegue test e build ma salta la pubblicazione.
+#
+# Account utente (facoltativi, database MySQL dell'hosting):
+#   Secrets:   DB_NAME        nome del database (AlterVista: di solito my_nomesito)
+#              DB_USER        utente del database (AlterVista: di solito nomesito)
+#              DB_PASSWORD    password del database (può essere vuota se l'hosting non la prevede)
+#              SETUP_TOKEN    codice segreto per creare l'amministratore la prima volta
+#   Variables: DB_HOST        facoltativa, predefinito localhost
 
 name: Pubblica su Aruba
 
@@ -42,6 +49,31 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Account (facoltativo): config.php dell'API creato dai secrets, mai salvato nel repository.
+      # Valori codificati in base64 per evitare qualsiasi problema di caratteri speciali.
+      - name: Configura il database degli account
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_HOST: ${{ vars.DB_HOST }}
+          SETUP_TOKEN: ${{ secrets.SETUP_TOKEN }}
+        if: env.DB_NAME != ''
+        run: |
+          node -e '
+            const e = process.env;
+            const cfg = {
+              dsn: `mysql:host=${e.DB_HOST || "localhost"};dbname=${e.DB_NAME};charset=utf8mb4`,
+              user: e.DB_USER || "",
+              password: e.DB_PASSWORD || "",
+              setup_token: e.SETUP_TOKEN || "",
+            };
+            const b64 = Buffer.from(JSON.stringify(cfg)).toString("base64");
+            require("fs").writeFileSync("dist/api/config.php",
+              "<?php\nif (!defined(\"ELECTROLAB_API\")) { http_response_code(404); exit; }\nreturn json_decode(base64_decode(\"" + b64 + "\"), true);\n");
+          '
+          echo "config.php creato per il database $DB_NAME"
 
       - name: Pubblica via FTP
         env:

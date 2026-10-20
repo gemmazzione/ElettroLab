@@ -6,8 +6,9 @@ import { copyProject, duplicateSaved, exportLibraryFile, importIntoLibrary, list
 import { exportProjectFile, saveProject } from '../persistence/storage';
 import { DEMO_PROJECTS } from '../projects/demos';
 import { useStore } from '../store/projectStore';
+import { useAccount } from '../cloud/account';
 
-function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-6" onMouseDown={onClose}>
       <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
@@ -46,6 +47,7 @@ function SummaryChips({ s }: { s: ProjectSummary }) {
 
 /** Libreria progetti: salvati nel browser, predefiniti, import/esportazione. */
 export function OpenDialog({ onClose }: { onClose: () => void }) {
+  const accountUser = useAccount((s) => (s.phase === 'signed-in' ? s.user : null));
   const openProject = useStore((s) => s.openProject);
   const project = useStore((s) => s.project);
   const toast = useStore((s) => s.toast);
@@ -63,7 +65,7 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
     .sort((a, b) => (sort === 'nome' ? a.project.name.localeCompare(b.project.name, 'it') : b.project.updatedAt.localeCompare(a.project.updatedAt)));
 
   return (
-    <Modal title="Libreria progetti" onClose={onClose}>
+    <Modal title={accountUser ? `Libreria progetti · account ${accountUser.username}` : 'Libreria progetti (questo browser)'} onClose={onClose}>
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="flex flex-1 items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 focus-within:border-sky-500">
           <Search size={13} className="text-slate-500" />

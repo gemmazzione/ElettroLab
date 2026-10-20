@@ -59,6 +59,23 @@ Configurazione, una volta sola, in GitHub → repository → **Settings → Secr
 Poi avvia una pubblicazione da **Actions → Pubblica su Aruba → Run workflow** (o fai un push). Lo stato di ogni pubblicazione è visibile nella scheda Actions.
 
 Note:
-- L'app è statica (HTML, JS, CSS): non servono PHP né database. I percorsi sono relativi, quindi funziona sia nella radice del sito sia in una sottocartella.
+- L'app è statica (HTML, JS, CSS); PHP e database servono solo per gli account (facoltativi, vedi sotto). I percorsi sono relativi, quindi funziona sia nella radice del sito sia in una sottocartella.
 - Il file `public/.htaccess` (copiato nella build) imposta compressione e cache su Apache.
-- I progetti degli utenti restano salvati nel loro browser (memoria locale); usa «Esporta tutta la libreria» per trasferirli.
+- Senza account i progetti restano salvati nel browser (memoria locale); usa «Esporta tutta la libreria» per trasferirli.
+
+## Account utente (database MySQL, es. AlterVista)
+
+Con gli account la libreria progetti, i progressi dell'Accademia e il progetto in corso vengono salvati nel database del sito e si ritrovano da qualsiasi computer. Gli account li crea solo l'amministratore (nessuna registrazione pubblica).
+
+Componenti: `public/api/` (PHP 7.4+ con PDO MySQL) e `src/cloud/` (client e sincronizzazione).
+
+Attivazione, una volta sola:
+1. Nel pannello dell'hosting attiva il database MySQL e annota nome del database, utente e password (su AlterVista di solito il database è `my_nomesito` e l'utente `nomesito`: verifica nel pannello).
+2. In GitHub → Settings → Secrets and variables → Actions aggiungi i secrets `DB_NAME`, `DB_USER`, `DB_PASSWORD` (non crearlo se il database non ha password) e `SETUP_TOKEN` (un codice lungo e casuale scelto da te). Variabile facoltativa `DB_HOST` (predefinito `localhost`).
+3. Ripubblica (push o Run workflow): la GitHub Action crea `api/config.php` dai secrets. Il file non è mai nel repository.
+4. Apri il sito, clicca «Configura account», inserisci il codice `SETUP_TOKEN` e scegli nome e password dell'amministratore. Le tabelle (`el_*`) si creano da sole.
+5. Dalla finestra dell'account (pulsante con l'omino) l'amministratore crea, disattiva o elimina gli utenti e ne reimposta la password.
+
+Sicurezza: password con `password_hash`; sessioni proprie nel database (nel cookie un token casuale, nel database solo il suo hash); cookie HttpOnly e SameSite=Strict (Secure in HTTPS); intestazione anti-CSRF obbligatoria sulle richieste che modificano dati; query preparate; limite di 10 tentativi di accesso falliti ogni 15 minuti per indirizzo IP; `lib.php` e `config.php` non accessibili dal web. Con l'accesso i dati locali stanno in uno spazio separato del browser, cancellato all'uscita.
+
+Prova dell'API in locale (serve PHP con pdo_sqlite): `npm run test:api`.

@@ -1,0 +1,15 @@
+# API account di ElectroLab: solo index.php è raggiungibile dall'esterno.
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "^(lib|config.*)\.php$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+<IfModule !mod_authz_core.c>
+  <FilesMatch "^(lib|config.*)\.php$">
+    Order allow,deny
+    Deny from all
+  </FilesMatch>
+</IfModule>
