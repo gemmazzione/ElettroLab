@@ -1,15 +1,27 @@
 import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, GraduationCap, LogOut, Play, RotateCcw, Trophy, XCircle } from 'lucide-react';
 import { useState } from 'react';
+import { LESSONS, loadLessonProgress } from '../academy/lessons';
+import { LessonsView } from './Lessons';
 import { EXERCISES, exerciseById } from '../academy/exercises';
 import { LEVELS, type Task } from '../academy/types';
 import { catalogItem } from '../model/catalog';
 import { useStore } from '../store/projectStore';
 
-/** Pagina dell'Accademia: elenco degli esercizi per livello con i progressi. */
+/** Scheda aperta dell'Accademia (ricordata durante la sessione). */
+let lastTab: 'lezioni' | 'esercizi' = 'lezioni';
+
+/** Pagina dell'Accademia: lezioni per tema e livello, esercizi nel simulatore. */
 export function AcademyView() {
   const progress = useStore((s) => s.progress);
   const start = useStore((s) => s.startExercise);
+  const [tab, setTabState] = useState(lastTab);
+  const setTab = (t: typeof lastTab) => {
+    lastTab = t;
+    setTabState(t);
+  };
   const done = EXERCISES.filter((e) => (progress[e.id]?.best ?? 0) >= 80).length;
+  const [lessonProgress, setLessonProgress] = useState(() => loadLessonProgress());
+  const lessonsDone = Object.values(lessonProgress).filter((p) => p.done).length;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto bg-slate-950">
       <div className="mx-auto max-w-6xl px-6 py-8">
@@ -20,8 +32,14 @@ export function AcademyView() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold tracking-tight text-slate-100">Accademia</h1>
             <p className="text-[13px] text-slate-400">
-              Esercizi guidati dai fondamenti al trifase. Ogni esercizio usa il simulatore reale: le risposte sono confrontate con i valori calcolati dal modello e con le verifiche automatiche.
+              Lezioni per tema, dal livello «base base» all'avanzato, ed esercizi guidati nel simulatore reale: le risposte sono confrontate con i valori calcolati dal modello e con le verifiche automatiche.
             </p>
+          </div>
+          <div className="rounded-lg border border-slate-800 px-4 py-2 text-right">
+            <div className="font-mono text-xl text-emerald-300">
+              {lessonsDone}/{LESSONS.length}
+            </div>
+            <div className="text-[11px] text-slate-500">lezioni completate</div>
           </div>
           <div className="rounded-lg border border-slate-800 px-4 py-2 text-right">
             <div className="font-mono text-xl text-amber-300">
@@ -30,7 +48,21 @@ export function AcademyView() {
             <div className="text-[11px] text-slate-500">esercizi superati (≥ 80%)</div>
           </div>
         </div>
-        {LEVELS.map((l) => (
+        <div className="mb-6 flex gap-1 border-b border-slate-800" role="tablist">
+          {(['lezioni', 'esercizi'] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`-mb-px border-b-2 px-4 py-2 text-[13.5px] font-semibold ${tab === t ? 'border-amber-400 text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+            >
+              {t === 'lezioni' ? `Lezioni (${LESSONS.length})` : `Esercizi nel simulatore (${EXERCISES.length})`}
+            </button>
+          ))}
+        </div>
+        {tab === 'lezioni' && <LessonsView progress={lessonProgress} setProgress={setLessonProgress} />}
+        {tab === 'esercizi' && LEVELS.map((l) => (
           <section key={l.level} className="mb-8">
             <div className="mb-3 flex items-baseline gap-3">
               <span className="rounded bg-slate-800 px-2 py-0.5 font-mono text-[12px] text-amber-300">Livello {l.level}</span>
