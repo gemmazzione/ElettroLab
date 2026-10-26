@@ -65,7 +65,7 @@ export type ResidualZone = 'sotto' | 'incerta' | 'certa';
 /** Fino a 0,5·IΔn il differenziale non deve intervenire; da IΔn deve intervenire. */
 export function residualZone(iRes: number, idnA: number): ResidualZone {
   if (iRes >= idnA) return 'certa';
-  if (iRes >= 0.5 * idnA) return 'incerta';
+  if (iRes > 0.5 * idnA) return 'incerta';
   return 'sotto';
 }
 

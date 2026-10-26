@@ -767,9 +767,9 @@ const sezione37: R = {
 const VERIFICHE: [string, string, string][] = [
   ['61.2', 'Esame a vista', 'Componenti conformi, scelti e posati correttamente, non danneggiati; documentazione di progetto.'],
   ['61.3.2', 'Continuità dei conduttori', 'Continuità dei conduttori di protezione e dei collegamenti equipotenziali (nel simulatore: multimetro in continuità a impianto disalimentato).'],
-  ['61.3.3', 'Resistenza d\'isolamento', 'Misura a impianto non in tensione; non rappresentabile nel modello.'],
+  ['61.3.3', 'Resistenza d\'isolamento', 'Misura a impianto non in tensione (nel simulatore: Verificatore, funzione RISO; il modello rappresenta solo i guasti d\'isolamento inseriti).'],
   ['61.3.6.2', 'Misura della resistenza di terra', 'Misura di RE per confermare il coordinamento RE × IΔn ≤ UL.'],
-  ['61.3.7', 'Protezione addizionale mediante interruttore differenziale', 'Prova dei differenziali con strumento (il pulsante T verifica solo il meccanismo).'],
+  ['61.3.7', 'Protezione addizionale mediante interruttore differenziale', 'Prova dei differenziali con strumento (nel simulatore: Verificatore, funzione RCD; il pulsante T verifica solo il meccanismo).'],
   ['61.3.8', 'Prova di polarità', 'Verifica che i dispositivi unipolari siano sulla fase.'],
   ['61.3.10', 'Prove di funzionamento', 'Funzionamento di quadri, comandi e interblocchi.'],
   ['61.3.11', 'Verifica della caduta di tensione', 'Conferma strumentale dei valori di progetto.'],

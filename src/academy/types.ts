@@ -51,7 +51,7 @@ export type Task =
 
 export interface Exercise {
   id: string;
-  level: 1 | 2 | 3 | 4 | 5;
+  level: 1 | 2 | 3 | 4 | 5 | 6;
   title: string;
   objective: string;
   /** Richiami di teoria */
@@ -83,4 +83,5 @@ export const LEVELS: { level: Exercise['level']; title: string; description: str
   { level: 3, title: 'Quadro appartamento', description: 'Suddivisione dei circuiti, dimensionamento di protezioni e linee, carichi.' },
   { level: 4, title: 'Ricerca guasti', description: 'Cortocircuito, sovraccarico, dispersione, neutro interrotto, cablaggio errato.' },
   { level: 5, title: 'Trifase', description: 'Distribuzione su L1/L2/L3, neutro comune, squilibri, tensioni concatenate, protezioni multipolari.' },
+  { level: 6, title: 'Fotovoltaico, comandi e verifiche', description: 'Deviatori e contattori, dimensionamento della stringa, polarità DC, autoconsumo e batteria, verifiche strumentali.' },
 ];

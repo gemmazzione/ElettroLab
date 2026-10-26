@@ -1,6 +1,7 @@
 import {
   Cable,
   ClipboardCheck,
+  ClipboardList,
   FileDown,
   FilePlus2,
   FolderOpen,
@@ -14,6 +15,7 @@ import {
   Ruler,
   Save,
   Square,
+  Stethoscope,
   Tags,
   Undo2,
   Zap,
@@ -128,6 +130,13 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
       <Btn icon={<MousePointer2 size={15} />} title="Selezione e cablaggio" active={s.tool === 'select'} onClick={() => s.setTool('select')} />
       <Btn icon={<Gauge size={15} />} label="Multimetro" active={s.tool === 'multimeter'} onClick={() => s.setTool('multimeter')} title="Multimetro: clic su due morsetti" />
       <Btn icon={<Magnet size={15} />} label="Pinza" active={s.tool === 'clamp'} onClick={() => s.setTool('clamp')} title="Pinza amperometrica: clic su un conduttore o su un utilizzatore" />
+      <Btn
+        icon={<Stethoscope size={15} />}
+        label="Verificatore"
+        active={s.tool === 'tester'}
+        onClick={() => s.setTool('tester')}
+        title="Verifiche iniziali: isolamento, anello di guasto e prova del differenziale (clic su un utilizzatore)"
+      />
       <Sep />
       {s.running ? (
         <Btn icon={<Square size={13} fill="currentColor" />} label="Interrompi simulazione" tone="stop" onClick={s.stopSimulation} />
@@ -159,6 +168,22 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
         label="Verifica impianto"
         onClick={() => s.setRightTab('norm')}
         active={s.rightTab === 'norm'}
+      />
+      <Btn
+        icon={<ClipboardList size={15} />}
+        label="Materiali"
+        title="Elenco materiali (CSV per Excel): dispositivi, apparecchiature, pettini e metri di cavo"
+        onClick={async () => {
+          const { bomCsv } = await import('../export/bom');
+          const blob = new Blob([bomCsv(s.project)], { type: 'text/csv;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${s.project.name.replace(/[^\w\s-]+/g, '').trim() || 'progetto'} - materiali.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+          s.toast('info', 'Elenco materiali scaricato (CSV).');
+        }}
       />
       <Btn
         icon={<FileDown size={15} />}

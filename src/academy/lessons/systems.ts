@@ -172,10 +172,11 @@ export const SYSTEM_LESSONS: Lesson[] = [
       },
       {
         title: "Nel simulatore",
-        body: "I comandi locali (interruttori, deviatori, invertitori a parete) non sono modellati: l'utilizzatore ha un semplice acceso/spento. Pulsanti e relè passo-passo invece sono simulati.",
+        body: "Interruttore, deviatore e invertitore sono nel catalogo (categoria Comando): si cablano come nella realtà e si azionano cliccando il bilanciere. Il progetto «Comandi luce» ha una luce comandata da tre punti.",
       },
     ],
     keyPoints: ["Il comando interrompe la fase, mai solo il neutro.", "2 punti = 2 deviatori.", "Ogni punto in più = un invertitore."],
+    practice: { demo: 'demo-comandi-luce', exercise: 'l6-deviatori', info: ['wall-deviatore', 'wall-invertitore'] },
     quiz: [
       { q: "Perché l'interruttore deve aprire la fase?", options: ["Per risparmiare energia", "Perché a luce spenta il portalampada sia senza tensione", "Perché il neutro è più sottile"], correct: 1, why: "Aprendo il neutro la fase resterebbe presente sul portalampada." },
       { q: "Per comandare una luce da 4 punti servono…", options: ["4 deviatori", "2 deviatori e 2 invertitori", "4 invertitori"], correct: 1, why: "Due deviatori agli estremi più un invertitore per ogni punto aggiuntivo." },
@@ -439,6 +440,6 @@ export const SYSTEM_LESSONS: Lesson[] = [
       { q: "Il differenziale generale interviene. Come trovi il circuito guasto?", options: ["Cambi il differenziale", "Apri tutti i magnetotermici e li richiudi uno alla volta", "Aspetti"], correct: 1, why: "Il circuito che fa intervenire il differenziale alla richiusura è quello guasto." },
       { q: "Tra fase e neutro a monte di un apparecchio, a impianto disalimentato e apparecchio scollegato, misuri 0,3 Ω. Indica…", options: ["linea sana", "un cortocircuito nella linea", "neutro interrotto"], correct: 1, why: "Senza carico collegato la linea dovrebbe essere aperta (resistenza molto alta)." },
     ],
-    practice: { exercise: 'l4-cortocircuito', hint: "Gli esercizi del livello «Ricerca guasti» hanno guasti nascosti da trovare con questo metodo." },
+    practice: { exercise: 'l6-verifiche', hint: "Usa il Verificatore (barra in alto): isolamento, anello di guasto e prova del differenziale. Gli esercizi del livello «Ricerca guasti» hanno guasti nascosti da trovare con questo metodo." },
   },
 ];

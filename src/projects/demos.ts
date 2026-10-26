@@ -344,6 +344,95 @@ export function luceScale(): Project {
   return b.project;
 }
 
+/** Comandi luce: corridoio da tre punti (deviatore, invertitore, deviatore) e camera con interruttore. */
+export function comandiLuce(): Project {
+  const b = new ProjectBuilder('Comandi luce: interruttore, deviatori, invertitore', 1, 12);
+  b.project.description =
+    'Il corridoio è comandato da tre punti: deviatore S1, invertitore S2, deviatore S3, collegati con i conduttori navetta. La camera ha un interruttore unipolare S4. ' +
+    'Avvia la simulazione, chiudi Q1 e Q2 e clicca i bilancieri: la luce del corridoio cambia stato da qualunque punto. I comandi interrompono sempre la fase.';
+  const cnt = b.add('supply-mono', { position: { x: -280, y: 30 } });
+  const earth = b.add('earth', { position: { x: -260, y: 300 } });
+  const q1 = b.add('rcbo-1pn', { rail: { row: 0, slot: 0 } }, (c) => setMcb(c, 10));
+  const q2 = b.add('rcbo-1pn', { rail: { row: 0, slot: 2 } }, (c) => setMcb(c, 10));
+  const xpe = b.add('bar-pe-8', { rail: { row: 0, slot: 8 } });
+  const s1 = b.add('wall-deviatore', { position: { x: -60, y: 380 } }, (c) => {
+    if (c.params.kind === 'wall-switch') c.params.p.name = 'Corridoio, ingresso';
+  });
+  const s2 = b.add('wall-invertitore', { position: { x: 120, y: 380 } }, (c) => {
+    if (c.params.kind === 'wall-switch') c.params.p.name = 'Corridoio, centro';
+  });
+  const s3 = b.add('wall-deviatore', { position: { x: 300, y: 380 } }, (c) => {
+    if (c.params.kind === 'wall-switch') c.params.p.name = 'Corridoio, fondo';
+  });
+  const s4 = b.add('wall-switch', { position: { x: 520, y: 380 } }, (c) => {
+    if (c.params.kind === 'wall-switch') c.params.p.name = 'Camera';
+  });
+  const l1 = addLoad(b, { catalogId: 'load-luce', name: 'Luce corridoio', powerW: 60, section: 1.5, length: 12 }, 140, 560, 2);
+  const l2 = addLoad(b, { catalogId: 'load-luce', name: 'Luce camera', powerW: 60, section: 1.5, length: 10 }, 520, 560, 2);
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
+  bridge(b, [q1, q2], 4);
+  // corridoio: fase → comune di S1 → navette → invertitore S2 → navette → S3 → comune → lampada
+  b.wire(t(q1, 'p0_out'), t(s1, 'C'), 1.5, 6);
+  b.wire(t(s1, '1'), t(s2, '1'), 1.5, 5).wire(t(s1, '2'), t(s2, '2'), 1.5, 5);
+  b.wire(t(s2, '3'), t(s3, '2'), 1.5, 5).wire(t(s2, '4'), t(s3, '1'), 1.5, 5);
+  b.wire(t(s3, 'C'), t(l1, 'L'), 1.5, 3);
+  // ogni neutro torna al proprio magnetotermico differenziale
+  b.wire(t(q1, 'p1_out'), t(l1, 'N'), 1.5, 12);
+  // camera: fase → interruttore → lampada
+  b.wire(t(q2, 'p0_out'), t(s4, 'L'), 1.5, 6).wire(t(s4, '1'), t(l2, 'L'), 1.5, 3);
+  b.wire(t(q2, 'p1_out'), t(l2, 'N'), 1.5, 10);
+  b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5).wire(t(xpe, 't1'), t(l1, 'PE'), 1.5, 12).wire(t(xpe, 't2'), t(l2, 'PE'), 1.5, 10);
+  return b.project;
+}
+
+/** Comando con contattore, relè di controllo tensione e alimentatore. */
+export function contattore(): Project {
+  const b = new ProjectBuilder('Contattore, relè di tensione e alimentatore', 2, 12);
+  b.project.description =
+    'Lo scaldabagno è comandato da un contattore KM1: l\'interruttore S1 alimenta la bobina, i contatti portano la potenza. Gli apparecchi elettronici sono protetti dal relè di controllo tensione KV1, ' +
+    'che apre la fase se la tensione esce da 184–264 V; l\'alimentatore G1 fornisce 12 V in continua. Avvia la simulazione, chiudi Q1 e azione S1; prova anche a cambiare la tensione della fornitura.';
+  const cnt = b.add('supply-mono', { position: { x: -280, y: 30 } });
+  const earth = b.add('earth', { position: { x: -260, y: 420 } });
+  const q1 = b.add('mcb-2p', { rail: { row: 0, slot: 0 } }, (c) => {
+    setMcb(c, 25, 'C', 6);
+    c.label = 'Q1';
+  });
+  const q2 = b.add('rcd-2p', { rail: { row: 0, slot: 3 } }, (c) => (c.closed = true));
+  const q3 = b.add('mcb-1pn', { rail: { row: 0, slot: 6 } }, (c) => {
+    setMcb(c, 16);
+    c.closed = true;
+  });
+  const q4 = b.add('mcb-1pn', { rail: { row: 0, slot: 7 } }, (c) => {
+    setMcb(c, 10);
+    c.closed = true;
+  });
+  const km = b.add('contactor', { rail: { row: 0, slot: 9 } });
+  const kv = b.add('voltage-relay', { rail: { row: 1, slot: 0 } }, (c) => (c.closed = true));
+  const g1 = b.add('psu', { rail: { row: 1, slot: 3 } });
+  const xpe = b.add('bar-pe-8', { rail: { row: 1, slot: 7 } });
+  const s1 = b.add('wall-switch', { position: { x: 560, y: 120 } }, (c) => {
+    if (c.params.kind === 'wall-switch') c.params.p.name = 'Comando scaldabagno';
+  });
+  const boiler = addLoad(b, { catalogId: 'load-boiler', name: 'Scaldabagno', powerW: 1200, section: 2.5, length: 10 }, 120, 640, 2);
+  const tv = addLoad(b, { catalogId: 'load-generico', name: 'Apparecchi elettronici', powerW: 200, section: 1.5, length: 12 }, 340, 640, 2);
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
+  b.wire(t(q1, 'p0_out'), t(q2, 'p0_in'), 6).wire(t(q1, 'p1_out'), t(q2, 'p1_in'), 6);
+  b.wire(t(q2, 'p0_out'), t(q3, 'p0_in'), 4).wire(t(q2, 'p1_out'), t(q3, 'p1_in'), 4);
+  bridge(b, [q3, q4], 4);
+  // potenza: Q3 → contatti del contattore → scaldabagno
+  b.wire(t(q3, 'p0_out'), t(km, 'p0_in'), 2.5, 0.2).wire(t(q3, 'p1_out'), t(km, 'p1_in'), 2.5, 0.2);
+  b.wire(t(km, 'p0_out'), t(boiler, 'L'), 2.5, 10).wire(t(km, 'p1_out'), t(boiler, 'N'), 2.5, 10);
+  // comando: fase dopo Q3 → interruttore S1 → bobina A1; A2 al neutro
+  b.wire(t(q3, 'p0_out'), t(s1, 'L'), 1.5, 8).wire(t(s1, '1'), t(km, 'A1'), 1.5, 8);
+  b.wire(t(q3, 'p1_out'), t(km, 'A2'), 1.5, 0.2);
+  // elettronica: Q4 → relè di tensione → apparecchi e alimentatore
+  b.wire(t(q4, 'p0_out'), t(kv, 'p0_in'), 1.5, 0.3).wire(t(q4, 'p1_out'), t(kv, 'p1_in'), 1.5, 0.3);
+  b.wire(t(kv, 'p0_out'), t(tv, 'L'), 1.5, 12).wire(t(kv, 'p1_out'), t(tv, 'N'), 1.5, 12);
+  b.wire(t(kv, 'p0_out'), t(g1, 'L'), 1.5, 0.3).wire(t(kv, 'p1_out'), t(g1, 'N'), 1.5, 0.3);
+  b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5).wire(t(xpe, 't1'), t(boiler, 'PE'), 2.5, 10).wire(t(xpe, 't2'), t(tv, 'PE'), 1.5, 12);
+  return b.project;
+}
+
 /** Abitazione con impianto fotovoltaico da 3,2 kWp e inverter da 3 kW. */
 export function fotovoltaico(): Project {
   const b = new ProjectBuilder('Casa con fotovoltaico 3,2 kWp', 3, 12);
@@ -392,6 +481,14 @@ export function fotovoltaico(): Project {
   const u1 = addLoad(b, { catalogId: 'load-luce', name: 'Luci', powerW: 300, section: 1.5, length: 18 }, -20, 700, 3);
   const u2 = addLoad(b, { catalogId: 'load-prese', name: 'Prese', powerW: 1000, section: 2.5, length: 20, sockets: true }, 180, 700, 3);
   const u3 = addLoad(b, { catalogId: 'load-generico', name: 'Lavatrice', powerW: 2000, section: 2.5, length: 12, on: false, sockets: true }, 380, 700, 3);
+  const qev = b.add('rcbo-1pn', { rail: { row: 1, slot: 9 } }, (c) => {
+    setMcb(c, 20);
+    c.label = 'QEV';
+    c.closed = true;
+  });
+  const ev = b.add('load-wallbox', { position: { x: 900, y: 700 } }, (c) => {
+    if (c.params.kind === 'load') c.params.p = { ...c.params.p, on: false, install: { ...POSA, grouped: 1 }, evse: { mode: 'solare', minW: 1400 } };
+  });
 
   // fornitura → generale → differenziale → circuiti
   b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
@@ -401,6 +498,9 @@ export function fotovoltaico(): Project {
   line(b, q3, u1, xpe, 1, 1.5);
   line(b, q4, u2, xpe, 2, 2.5);
   line(b, q5, u3, xpe, 3, 2.5);
+  // linea della wallbox: dal generale, magnetotermico differenziale dedicato
+  b.wire(t(q1, 'p0_out'), t(qev, 'p0_in'), 6, 0.3).wire(t(q1, 'p1_out'), t(qev, 'p1_in'), 6, 0.3);
+  line(b, qev, ev, xpe, 7, 6);
   // linea dell'inverter: dal generale, magnetotermico differenziale dedicato e contatore di produzione
   b.wire(t(q1, 'p0_out'), t(qfv, 'p0_in'), 6, 0.3).wire(t(q1, 'p1_out'), t(qfv, 'p1_in'), 6, 0.3);
   b.wire(t(qfv, 'p0_out'), t(pm, 'p0_in'), 4, 0.3).wire(t(qfv, 'p1_out'), t(pm, 'p1_in'), 4, 0.3);
@@ -411,7 +511,7 @@ export function fotovoltaico(): Project {
   b.wire(t(qdc, 'p0_out'), t(fdc, 'DC+'), 6, 0.2).wire(t(qdc, 'p1_out'), t(fdc, 'DC-'), 6, 0.2);
   // protezione: masse, cornici dei moduli e SPD al collettore di terra
   b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5);
-  b.wire(t(xpe, 't4'), t(inv, 'PE'), 4, 5).wire(t(xpe, 't5'), t(arr, 'PE'), 6, 20).wire(t(xpe, 't6'), t(fdc, 'PE'), 6, 0.5);
+  b.wire(t(xpe, 't4'), t(inv, 'PE'), 6, 5).wire(t(xpe, 't5'), t(arr, 'PE'), 6, 20).wire(t(xpe, 't6'), t(fdc, 'PE'), 6, 0.5);
   return b.project;
 }
 
@@ -445,6 +545,18 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Luce scale da tre punti (relè passo-passo)',
     summary: 'Magnetotermico differenziale, relè passo-passo e tre pulsanti in parallelo che comandano la stessa luce.',
     build: luceScale,
+  },
+  {
+    id: 'demo-comandi-luce',
+    name: 'Comandi luce: interruttore, deviatori, invertitore',
+    summary: 'Luce del corridoio comandata da tre punti con deviatori e invertitore, luce della camera con interruttore unipolare.',
+    build: comandiLuce,
+  },
+  {
+    id: 'demo-contattore',
+    name: 'Contattore, relè di tensione e alimentatore',
+    summary: 'Scaldabagno comandato da contattore, apparecchi protetti da relè di controllo tensione, alimentatore 12 V.',
+    build: contattore,
   },
   {
     id: 'demo-fotovoltaico',

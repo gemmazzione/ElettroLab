@@ -1,4 +1,4 @@
-import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId } from '../model/terminals';
+import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId, wallSwitchLinks } from '../model/terminals';
 import type { ComponentInstance, Phase, Project, TerminalFunction } from '../model/types';
 import { UnionFind } from './unionFind';
 
@@ -42,6 +42,10 @@ export function buildNetGraph(project: Project): NetGraph {
 
   const poleEdges: PoleEdge[] = [];
   for (const c of project.components) {
+    // Comandi luce: tutti i collegamenti possibili (la topologia non dipende dalla posizione del comando).
+    for (const l of wallSwitchLinks(c)) {
+      poleEdges.push({ deviceId: c.id, pole: l.pole, fn: 'L', netIn: netOf(terminalId(c.id, l.a)), netOut: netOf(terminalId(c.id, l.b)) });
+    }
     // Il misuratore è in serie come un dispositivo di manovra sempre chiuso.
     if (!isSwitchingDevice(c.params.kind) && c.params.kind !== 'meter') continue;
     for (const p of getPoles(c)) {

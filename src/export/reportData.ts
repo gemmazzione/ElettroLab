@@ -9,6 +9,7 @@ import { buildNormContext } from '../rules/context';
 import { runRules } from '../rules/engine';
 import { inverterDcLink } from '../engine/dc';
 import { pvEnv, stringChecks } from '../engine/pv';
+import { buildBom } from './bom';
 import { STATUS_LABEL } from '../rules/types';
 
 /** Contenuto della relazione, indipendente dal formato di uscita. */
@@ -166,6 +167,18 @@ export function buildReport(project: Project, now = new Date()): ReportData {
       for (const c of stringChecks(a.params.p, ip, env)) pvRows.push([inv.label, c.title, c.detail, c.ok === true ? 'sì' : c.ok === false ? 'NO' : 'da valutare']);
     }
   }
+  // Elenco materiali
+  const bomRows: string[][] = [];
+  for (const sec of buildBom(project)) {
+    for (const r of sec.rows) bomRows.push([sec.title, `${f(r.qty, r.unit === 'm' ? 1 : 0)} ${r.unit}`, r.item, r.details]);
+  }
+  const bomTable = {
+    title: 'Elenco materiali',
+    intro: 'Quantità ricavate dal disegno, senza scarti né accessori (morsetti, capicorda, tubi, scatole). I metri di cavo delle linee comprendono fase, neutro e PE.',
+    head: ['Sezione', 'Quantità', 'Articolo', 'Caratteristiche e riferimenti'],
+    widths: [18, 10, 30, 42],
+    body: bomRows,
+  };
   if (pvRows.length) {
     tables.push({
       title: 'Impianto fotovoltaico',
@@ -175,6 +188,7 @@ export function buildReport(project: Project, now = new Date()): ReportData {
       body: pvRows,
     });
   }
+  tables.push(bomTable);
   const visibleFaults = (project.faults ?? []).filter((x) => !x.hidden);
   if (visibleFaults.length) {
     tables.push({

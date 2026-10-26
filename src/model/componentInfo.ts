@@ -363,6 +363,16 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Impedenza costante R + jX con potenza e cos φ impostati (valori tipici, indicativi). Il ciclo non è simulato.'),
     ],
   },
+  'load-wallbox': {
+    title: 'Wallbox (ricarica auto elettrica)',
+    summary: 'Stazione di ricarica domestica: un carico grande che lavora per ore, da gestire insieme agli altri consumi.',
+    sections: [
+      S('Caratteristiche', "Una wallbox monofase carica tipicamente tra 1,4 kW (6 A) e 7,4 kW (32 A). La ricarica dura ore alla potenza impostata: per cavi e protezioni conta il funzionamento prolungato, non un picco breve."),
+      S('Gestione della potenza', "Con un contratto domestico da 3 kW una ricarica a piena potenza farebbe intervenire il limitatore del contatore. Le wallbox con gestione dinamica misurano la potenza al contatore e riducono la ricarica (modalità «limitata»); con il fotovoltaico possono usare solo il surplus (modalità «solare»). Sotto circa 6 A la ricarica si sospende."),
+      S('Collegamento e protezioni', "Linea dedicata dal quadro con protezione contro le sovracorrenti dimensionata sulla corrente di ricarica. Per la protezione differenziale si seguono le istruzioni del costruttore e le norme di prodotto (es. differenziale di tipo A con rilevamento delle correnti continue integrato nella wallbox, oppure differenziale di tipo B): riferimenti non verificati nel simulatore."),
+      S('Nel simulatore', "Carico con cos φ quasi 1. Con le modalità «limitata» e «solare» la potenza è regolata per iterazioni sul punto di lavoro: limite pari alla potenza contrattuale al contatore oppure scambio con la rete vicino a zero. Nelle verifiche di progetto la wallbox è considerata alla potenza piena."),
+    ],
+  },
   'load-caldaia': {
     title: 'Utilizzatore: caldaia a gas',
     summary: 'La parte elettrica di una caldaia: elettronica di controllo, ventilatore e circolatore.',
@@ -397,7 +407,51 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'A 50 Hz non conduce (nessun ramo nel circuito). Se la tensione tra fase e neutro o tra fase e PE supera Uc, per esempio per un neutro interrotto, l\'indicatore diventa rosso e viene segnalata una sovratensione temporanea che può danneggiarlo.'),
     ],
   },
-  contactor: { title: 'Contattore modulare', summary: 'Interruttore comandato elettricamente da una bobina, per carichi comandati a distanza o da temporizzatori.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
+  contactor: {
+    title: 'Contattore modulare',
+    summary: 'Interruttore comandato da una bobina: i contatti restano chiusi finché la bobina è alimentata.',
+    sections: [
+      S('A cosa serve', "Separa il circuito di comando (piccole correnti: un interruttore, un orologio, un termostato) dal circuito di potenza (il carico vero, per esempio uno scaldabagno). Permette di comandare carichi grandi con comandi piccoli e lontani."),
+      S('Come funziona', "Quando la bobina A1-A2 riceve la tensione nominale, l'elettromagnete chiude i contatti NA (normalmente aperti). Togliendo tensione una molla li riapre: a differenza del relè passo-passo non ricorda lo stato."),
+      S('Collegamento', "Comando: fase → interruttore di comando → A1; A2 al neutro. Potenza: dalla protezione della linea ai contatti 1-3 (fase) e N, poi dai contatti 2-4 all'utilizzatore. Il contattore non protegge: a monte serve sempre la protezione contro le sovracorrenti."),
+      S('Nel simulatore', "Bobina come impedenza costante; contatti chiusi con almeno l'80% della tensione nominale sulla bobina (valore del modello). Lo stato si aggiorna durante la simulazione."),
+    ],
+  },
+  'contactor-4no': {
+    title: 'Contattore modulare 4NA',
+    summary: 'Quattro contatti NA comandati dalla bobina: per carichi trifase con neutro.',
+    sections: [
+      S('A cosa serve', "Comanda carichi trifase (per esempio un forno o una pompa di calore trifase) con un circuito di comando separato. Le fasi passano nei contatti 1-2, 3-4, 5-6, il neutro nell'ultimo contatto."),
+      S('Nel simulatore', "Come il contattore 2NA: contatti chiusi solo con la bobina alimentata."),
+    ],
+  },
+  'wall-switch': {
+    title: 'Interruttore unipolare (comando luce)',
+    summary: 'Accende e spegne una luce da un punto interrompendo il conduttore di fase.',
+    sections: [
+      S('Collegamento', "La fase arriva al morsetto L, dal morsetto 1 parte il conduttore che va alla lampada (ritorno lampada); il neutro va direttamente alla lampada. Si interrompe sempre la fase: a luce spenta il portalampada resta senza tensione."),
+      S('Errori tipici', "Comando sul neutro: la luce si spegne, ma il portalampada resta in tensione. Morsetti invertiti tra ingresso e uscita non cambiano il funzionamento, ma rendono il cablaggio difficile da leggere."),
+      S('Nel simulatore', "Clic sul bilanciere per cambiare stato. Contatto da 5 mΩ quando è chiuso."),
+    ],
+  },
+  'wall-deviatore': {
+    title: 'Deviatore',
+    summary: 'Commutatore a due vie: con due deviatori si comanda una luce da due punti.',
+    sections: [
+      S('Come funziona', "Ha un morsetto comune (C) che si collega al morsetto 1 oppure al 2. Nello schema a due punti la fase entra nel comune del primo deviatore; i morsetti 1 e 2 dei due deviatori sono collegati tra loro da due conduttori «navetta»; dal comune del secondo deviatore parte il ritorno alla lampada."),
+      S('Perché funziona', "La lampada è accesa quando i due deviatori sono nella stessa posizione (la fase trova un percorso su una delle navette); azionando uno dei due il percorso si apre o si richiude."),
+      S('Nel simulatore', "Clic sul bilanciere: C passa da 1 a 2 e viceversa."),
+    ],
+  },
+  'wall-invertitore': {
+    title: 'Invertitore',
+    summary: 'Aggiunge punti di comando tra due deviatori incrociando i conduttori navetta.',
+    sections: [
+      S('Come funziona', "Ha quattro morsetti: in una posizione collega 1-3 e 2-4 (diritto), nell'altra 1-4 e 2-3 (incrociato). Si inserisce sulle navette tra due deviatori: ogni invertitore in più aggiunge un punto di comando."),
+      S('Collegamento', "Le due navette provenienti dal primo deviatore entrano in 1 e 2; da 3 e 4 ripartono verso il deviatore successivo (o il prossimo invertitore). Con molti punti di comando conviene usare pulsanti e un relè passo-passo."),
+      S('Nel simulatore', "Clic sul bilanciere per passare da diritto a incrociato."),
+    ],
+  },
   'step-relay': {
     title: 'Relè passo-passo (bistabile)',
     summary: 'Comanda una o più luci da più punti con semplici pulsanti: ogni impulso cambia lo stato del contatto.',
@@ -418,7 +472,15 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Clicca il tasto rotondo sul pulsante con la simulazione avviata: il contatto resta chiuso per circa 0,35 s.'),
     ],
   },
-  'voltage-relay': { title: 'Relè di controllo tensione', summary: 'Interviene se la tensione esce dai limiti impostati, proteggendo gli apparecchi.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
+  'voltage-relay': {
+    title: 'Relè di controllo tensione',
+    summary: "Apre la fase verso gli utilizzatori quando la tensione esce dall'intervallo impostato.",
+    sections: [
+      S('A cosa serve', "Protegge gli apparecchi da tensioni anomale: sovratensioni dovute per esempio a un neutro interrotto in un impianto trifase, oppure sottotensioni che fanno lavorare male motori e compressori."),
+      S('Come funziona', "Misura la tensione fase-neutro; se esce dall'intervallo apre il contatto e, quando rientra, lo richiude (nei modelli reali dopo un ritardo impostabile). Non è una protezione contro le sovracorrenti."),
+      S('Nel simulatore', "Il neutro passa sempre, la fase solo con la tensione tra soglia minima e massima. Ritardi non modellati: il contatto segue subito la tensione."),
+    ],
+  },
   'energy-meter': {
     title: 'Misuratore di energia',
     summary: "Conta l'energia che lo attraversa nei due versi: prelievo e immissione.",
@@ -477,7 +539,15 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', "Non conduce in funzionamento ordinario; la verifica di cablaggio controlla che il morsetto PE raggiunga l'impianto di terra."),
     ],
   },
-  psu: { title: 'Alimentatore modulare', summary: 'Fornisce bassissima tensione (es. 12/24 V) per circuiti ausiliari.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
+  psu: {
+    title: 'Alimentatore modulare',
+    summary: 'Trasforma i 230 V alternati in bassissima tensione continua (12 o 24 V).',
+    sections: [
+      S('A cosa serve', "Alimenta circuiti di comando, strisce LED, sensori, campanelli e apparecchi elettronici in bassissima tensione. L'uscita è separata dalla rete: toccare i morsetti di uscita non è pericoloso come toccare la fase."),
+      S('Scelta', "La potenza nominale deve superare quella dei carichi collegati con un certo margine; i cavi in uscita portano correnti maggiori a parità di potenza (24 W a 12 V sono 2 A) e vanno dimensionati anche per la caduta di tensione."),
+      S('Nel simulatore', "Dal lato rete è un carico che assorbe la potenza dell'uscita divisa per il rendimento. L'uscita è presente se l'ingresso è alimentato (LED verde); il multimetro in V⎓ legge la tensione ai morsetti + e −. Il circuito in bassissima tensione a valle non è simulato."),
+    ],
+  },
 };
 
 export function componentInfo(catalogId: string): ComponentInfo | null {

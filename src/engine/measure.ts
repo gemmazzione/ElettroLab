@@ -158,5 +158,18 @@ export function dcVoltageBetween(project: Project, a: string, b: string, result:
     if (uf.same(a, plus) && uf.same(b, minus)) return v;
     if (uf.same(a, minus) && uf.same(b, plus)) return -v;
   }
+  // Alimentatori: tensione di uscita se l'ingresso è alimentato (sovraccarico: tensione ridotta in proporzione, stima).
+  for (const c of project.components) {
+    if (c.params.kind !== 'psu' || !result || !result.ok) continue;
+    const vl = result.terminalV.get(terminalId(c.id, 'L'));
+    const vn = result.terminalV.get(terminalId(c.id, 'N'));
+    if (!vl || !vn || abs(sub(vl, vn)) < 85) continue;
+    const p = c.params.p;
+    const v = p.loadW > p.pmaxW ? p.vout * (p.pmaxW / p.loadW) : p.vout;
+    const plus = terminalId(c.id, 'V+');
+    const minus = terminalId(c.id, 'V-');
+    if (uf.same(a, plus) && uf.same(b, minus)) return v;
+    if (uf.same(a, minus) && uf.same(b, plus)) return -v;
+  }
   return null;
 }

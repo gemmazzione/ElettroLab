@@ -113,6 +113,8 @@ export type SimResult =
       supply: SupplyResult;
       inverters: Map<string, InverterResult>;
       pvArrays: Map<string, PvArrayResult>;
+      /** Wallbox con gestione della potenza */
+      evse?: Map<string, EvseResult>;
       alerts: SimAlert[];
     }
   | { ok: false; reason: string };
@@ -131,7 +133,74 @@ const elementCurrent = (e: NetElement, V: Map<string, Complex>): Complex => {
  * Risolve l'impianto in regime permanente sinusoidale.
  * Funzione pura: dipende solo dal progetto.
  */
+export interface EvseResult {
+  mode: 'fissa' | 'limitata' | 'solare';
+  maxW: number;
+  /** Potenza di ricarica impostata dalla gestione [W] (0 = sospesa) */
+  setW: number;
+  reason: string;
+}
+
+/**
+ * Risolve l'impianto; se ci sono wallbox con gestione della potenza, ne regola la potenza per iterazioni
+ * (limite della potenza contrattuale al contatore, oppure solo surplus fotovoltaico).
+ */
 export function simulate(project: Project, opts: NetlistOptions = {}): SimResult {
+  const managed = project.components.filter((c) => c.params.kind === 'load' && c.params.p.on && c.params.p.evse && c.params.p.evse.mode !== 'fissa');
+  if (!managed.length || opts.loadsOff || opts.noGeneration) return withEvse(simulateCore(project, opts), project, new Map());
+  const supply = project.components.find((c) => c.params.kind === 'supply');
+  const limitW = supply && supply.params.kind === 'supply' ? supply.params.p.contractKW * 1000 : Infinity;
+  const power = new Map<string, number>();
+  for (const c of managed) if (c.params.kind === 'load') power.set(c.id, c.params.p.powerW);
+  let r = simulateCore(project, { ...opts, loadPower: power });
+  for (let iter = 0; iter < 8 && r.ok; iter++) {
+    let changed = false;
+    for (const c of managed) {
+      if (c.params.kind !== 'load' || !c.params.p.evse) continue;
+      const ev = c.params.p.evse;
+      const cur = power.get(c.id)!;
+      // Potenza al contatore (> 0 prelievo). Si lascia un margine di 1 W per stabilità.
+      const target = ev.mode === 'limitata' ? limitW : 0;
+      let next = Math.min(c.params.p.powerW, Math.max(0, cur - (r.supply.p - target) - 1));
+      if (next < ev.minW) next = 0;
+      if (Math.abs(next - cur) > 5) {
+        power.set(c.id, next);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+    r = simulateCore(project, { ...opts, loadPower: power });
+  }
+  return withEvse(r, project, power);
+}
+
+function withEvse(r: SimResult, project: Project, power: Map<string, number>): SimResult {
+  if (!r.ok) return r;
+  const evse = new Map<string, EvseResult>();
+  for (const c of project.components) {
+    if (c.params.kind !== 'load' || !c.params.p.evse) continue;
+    const ev = c.params.p.evse;
+    const maxW = c.params.p.powerW;
+    const setW = !c.params.p.on ? 0 : (power.get(c.id) ?? maxW);
+    const reason = !c.params.p.on
+      ? 'ricarica spenta'
+      : ev.mode === 'fissa'
+        ? 'potenza fissa'
+        : setW === 0
+          ? ev.mode === 'solare'
+            ? 'sospesa: surplus fotovoltaico insufficiente'
+            : 'sospesa: potenza disponibile sotto il minimo'
+          : setW < maxW - 5
+            ? ev.mode === 'solare'
+              ? 'ridotta al surplus fotovoltaico'
+              : 'ridotta per non superare il contratto'
+            : 'piena potenza';
+    evse.set(c.id, { mode: ev.mode, maxW, setW, reason });
+  }
+  return { ...r, evse };
+}
+
+function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
   const net = buildNetlist(project, opts);
   const supply = project.components.find((c) => c.id === net.supplyId);
   if (!supply || supply.params.kind !== 'supply') {

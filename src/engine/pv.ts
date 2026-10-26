@@ -107,6 +107,14 @@ export function inverterOutput(
 
 // ------------------------------------------------------------------ giornata tipo
 
+/** Giornate serene tipiche (valori indicativi). */
+export const DAY_SEASONS = {
+  estate: { label: 'Estate', sunrise: 5.5, sunset: 20.5, peak: 1000, ambientC: 28 },
+  'mezza stagione': { label: 'Mezza stagione', sunrise: 6.5, sunset: 18.5, peak: 850, ambientC: 18 },
+  inverno: { label: 'Inverno', sunrise: 8, sunset: 16.5, peak: 550, ambientC: 6 },
+} as const;
+
+
 export interface DayPoint {
   hour: number;
   irradiance: number;

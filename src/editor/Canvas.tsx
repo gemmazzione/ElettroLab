@@ -114,6 +114,7 @@ export function Canvas() {
   const wiringMode = useStore((s) => s.wiringMode);
   const tool = useStore((s) => s.tool);
   const setClampTarget = useStore((s) => s.setClampTarget);
+  const setTesterTarget = useStore((s) => s.setTesterTarget);
   const select = useStore((s) => s.select);
   const moveComponent = useStore((s) => s.moveComponent);
   const connect = useStore((s) => s.connect);
@@ -204,6 +205,7 @@ export function Canvas() {
         onNodeClick={(_, n) => {
           const c = project.components.find((x) => x.id === n.id);
           if (tool === 'clamp' && c?.params.kind === 'load') setClampTarget({ kind: 'line', id: n.id });
+          else if (tool === 'tester' && c?.params.kind === 'load') setTesterTarget(n.id);
           else select({ type: 'component', id: n.id });
         }}
         onEdgeClick={(_, e) => {

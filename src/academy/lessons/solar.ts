@@ -69,7 +69,7 @@ export const SOLAR_LESSONS: Lesson[] = [
       { q: "Con metà dell'irraggiamento la corrente del modulo è circa…", options: ["la stessa", "la metà", "il doppio"], correct: 1, why: "La corrente è quasi proporzionale alla luce ricevuta." },
       { q: "In una mattina d'inverno molto fredda la tensione a vuoto della stringa…", options: ["è più bassa del valore di targa", "è più alta del valore di targa", "è uguale"], correct: 1, why: "Il coefficiente della Voc è negativo: sotto i 25 °C la tensione aumenta." },
     ],
-    practice: { demo: 'demo-fotovoltaico', info: ['pv-string'], hint: "Seleziona il generatore: il «Punto di lavoro» mostra temperatura di cella, Vmp, Imp, Voc e Isc con il sole impostato." },
+    practice: { demo: 'demo-fotovoltaico', exercise: 'l6-polarita', info: ['pv-string'], hint: "Seleziona il generatore: il «Punto di lavoro» mostra temperatura di cella, Vmp, Imp, Voc e Isc con il sole impostato." },
   },
   {
     id: 'fv-2-inverter',
@@ -103,7 +103,7 @@ export const SOLAR_LESSONS: Lesson[] = [
       { q: "Cosa succede se la tensione MPP scende sotto il minimo dell'MPPT?", options: ["L'inverter produce di più", "L'inverter non riesce a lavorare nel punto ottimale o si ferma", "Niente"], correct: 1, why: "Fuori dall'intervallo l'inseguitore non funziona: produzione ridotta o nulla." },
       { q: "Generatore da 4 kWp e inverter da 3 kW a mezzogiorno d'estate:", options: ["l'inverter immette 4 kW", "l'inverter limita la potenza a circa 3 kW", "l'inverter si spegne"], correct: 1, why: "La potenza in uscita è limitata alla nominale: è il clipping." },
     ],
-    practice: { demo: 'demo-fotovoltaico', info: ['pv-inverter'], hint: "Seleziona l'inverter: «Dimensionamento stringa-inverter» mostra le verifiche. Prova a portare la stringa a 16 moduli." },
+    practice: { demo: 'demo-fotovoltaico', exercise: 'l6-stringa', info: ['pv-inverter'], hint: "Seleziona l'inverter: «Dimensionamento stringa-inverter» mostra le verifiche. Prova a portare la stringa a 16 moduli." },
   },
   {
     id: 'fv-3-rete',
@@ -141,6 +141,6 @@ export const SOLAR_LESSONS: Lesson[] = [
       { q: "Hai aperto il sezionatore DC accanto all'inverter. I cavi verso i moduli sono…", options: ["senza tensione", "ancora in tensione finché c'è luce", "collegati a terra"], correct: 1, why: "Il sezionatore separa l'inverter, ma la stringa continua a generare tensione." },
       { q: "Una batteria in un impianto domestico serve soprattutto a…", options: ["aumentare la potenza di picco dei moduli", "usare la sera l'energia prodotta a mezzogiorno", "evitare il contatore"], correct: 1, why: "Aumenta l'autoconsumo spostando l'energia nel tempo." },
     ],
-    practice: { demo: 'demo-fotovoltaico', info: ['pv-inverter-hybrid', 'dc-switch-2p', 'energy-meter'], hint: "Nel progetto apri il generale Q1 con il sole: l'inverter si stacca. Poi nella «Giornata tipo» dell'inverter imposta una batteria e confronta autoconsumo e prelievi." },
+    practice: { demo: 'demo-fotovoltaico', exercise: 'l6-autoconsumo', info: ['pv-inverter-hybrid', 'dc-switch-2p', 'energy-meter'], hint: "Nel progetto apri il generale Q1 con il sole: l'inverter si stacca. Poi nella «Giornata tipo» dell'inverter imposta una batteria e confronta autoconsumo e prelievi." },
   },
 ];

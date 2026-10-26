@@ -1,5 +1,5 @@
 import type { NodeProps } from '@xyflow/react';
-import { Activity, AirVent, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, Sun, WashingMachine, Zap } from 'lucide-react';
+import { Activity, AirVent, Car, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, Sun, WashingMachine, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { deviceCurrent } from '../../engine/simulate';
 import { TERMINAL_Y_BOTTOM, TERMINAL_Y_TOP } from '../../model/geometry';
@@ -73,6 +73,13 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
     return c ? meterPower(s.result, c) : 0;
   });
   const meterE = useStore((s) => s.meterEnergy[id]);
+  // Alimentatore: uscita presente se l'ingresso ha tensione (LED acceso)
+  const psuOn = useStore((s) => {
+    if (!s.running || !s.result || !s.result.ok) return false;
+    const a = s.result.terminalV.get(`${id}:L`);
+    const b = s.result.terminalV.get(`${id}:N`);
+    return !!a && !!b && Math.hypot(a.re - b.re, a.im - b.im) >= 85;
+  });
   if (!comp) return null;
   const w = componentWidth(comp);
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
@@ -80,7 +87,8 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const heatPct = isFuse ? Math.min(100, melt * 100) : Math.min(100, (heat / H_TRIP) * 100);
   const blown = isFuse && !!comp.blown?.length;
   const terms = getTerminals(comp);
-  const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd' && comp.params.kind !== 'meter';
+  // Dispositivi automatici o senza manovra: niente leva da cliccare.
+  const hasLever = !['bar', 'spd', 'meter', 'contactor', 'voltage-relay', 'psu'].includes(comp.params.kind);
   return (
     <div className={`relative rounded-[3px] ${selected ? 'node-selected' : linked ? 'node-linked' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
       <IssueDot level={issue} />
@@ -89,7 +97,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         width={w}
         terminals={terms}
         showLabels={showLabels}
-        tripped={!!tripped || spdOver}
+        tripped={!!tripped || spdOver || psuOn}
         onToggle={hasLever ? () => toggle(id) : undefined}
         onTest={residual ? () => testRcd(id) : undefined}
         meter={comp.params.kind === 'meter' && running ? { p: meterP, fwd: meterE?.fwd ?? 0, rev: meterE?.rev ?? 0 } : null}
@@ -226,6 +234,7 @@ const LOAD_ICON: Record<LoadCategory, typeof Plug> = {
   scaldabagno: Droplets,
   climatizzazione: AirVent,
   lavaggio: WashingMachine,
+  ricarica: Car,
   refrigerazione: Refrigerator,
   riscaldamento: Flame,
   generico: Activity,
@@ -243,6 +252,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
   const faultCount = useStore((s) => (s.project.faults ?? []).filter((f) => f.targetId === id && !f.hidden).length);
   const touch = useStore((s) => (s.result && s.result.ok ? (s.result.touchV.get(id) ?? null) : null));
   const clampOn = useStore((s) => s.clampTarget?.kind === 'line' && s.clampTarget.id === id);
+  const evReason = useStore((s) => (s.result && s.result.ok ? (s.result.evse?.get(id)?.reason ?? null) : null));
   if (!comp || comp.params.kind !== 'load') return null;
   const p = comp.params.p;
   const Icon = LOAD_ICON[p.category];
@@ -311,6 +321,11 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
           <span className="text-slate-500">0 V — senza tensione</span>
         )}
       </div>
+      {running && evReason && (
+        <div className="absolute left-0 right-0 top-full mt-1 truncate rounded bg-slate-900/90 px-2 py-0.5 text-center text-[9.5px] text-sky-200 ring-1 ring-slate-700" title={evReason}>
+          ⚡ {evReason}
+        </div>
+      )}
       {running && touch !== null && touch > 50 && (
         <div className="absolute left-0 right-0 top-full mt-1 rounded bg-red-600 px-2 py-0.5 text-center text-[10px] font-bold text-white">
           ⚠ Massa a {fmt(touch, 0)} V verso terra
@@ -502,4 +517,59 @@ export const InverterNode = memo(function InverterNode({ data, selected }: NodeP
   );
 });
 
-export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode, button: ButtonNode, 'pv-array': PvArrayNode, inverter: InverterNode };
+const WALL_POS: Record<string, [string, string]> = {
+  interruttore: ['aperto', 'chiuso'],
+  deviatore: ['C → 1', 'C → 2'],
+  invertitore: ['1-3 · 2-4', '1-4 · 2-3'],
+};
+
+/** Comando luce a parete: clic sul bilanciere per cambiare posizione. */
+export const WallSwitchNode = memo(function WallSwitchNode({ data, selected }: NodeProps) {
+  const id = (data as CompNodeData).componentId;
+  const comp = useComponent(id);
+  const toggle = useStore((s) => s.toggleComponent);
+  const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
+  if (!comp || comp.params.kind !== 'wall-switch') return null;
+  const p = comp.params.p;
+  const terms = getTerminals(comp);
+  const pos = WALL_POS[p.type]!;
+  return (
+    <div
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
+      style={{ width: componentWidth(comp), height: componentHeight(comp) }}
+    >
+      <IssueDot level={issue} />
+      {terms.map((t) => (
+        <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
+      ))}
+      {terms.map((t) => (
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: 13 }}>
+          {t.label}
+        </span>
+      ))}
+      <div className="mt-7 flex items-center gap-2 px-2.5">
+        <button
+          className="nodrag flex h-12 w-9 shrink-0 flex-col items-center justify-center rounded-md border border-slate-500 bg-slate-200 shadow-inner"
+          title={`Clic per cambiare posizione (ora: ${pos[comp.closed ? 1 : 0]})`}
+          aria-label={`${p.name}: cambia posizione`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle(id);
+          }}
+        >
+          <span className={`block h-5 w-6 rounded-sm transition-transform ${comp.closed ? 'translate-y-[5px] bg-slate-400' : '-translate-y-[5px] bg-slate-50'} border border-slate-400`} />
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] font-semibold text-slate-100">{p.name}</div>
+          <div className="font-mono text-[9.5px] text-slate-400">
+            {comp.label} · {p.type}
+          </div>
+          <div className="font-mono text-[10px] text-amber-200">{pos[comp.closed ? 1 : 0]}</div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode, button: ButtonNode, 'wall-switch': WallSwitchNode, 'pv-array': PvArrayNode, inverter: InverterNode };

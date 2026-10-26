@@ -1,7 +1,8 @@
 import { CheckCircle2, CircleHelp, CloudSun, Moon, RotateCcw, Sun, XCircle } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { inverterDcLink } from '../engine/dc';
-import { dayProfile, INVERTER_STATE_TEXT, maxStringVoc, pvEnv, stringChecks, type DaySummary } from '../engine/pv';
+import { inverterDay, loadsOnW } from '../engine/pvDay';
+import { DAY_SEASONS, INVERTER_STATE_TEXT, maxStringVoc, pvEnv, stringChecks, type DaySummary } from '../engine/pv';
 import type { ComponentInstance, InverterParams, PvArrayParams, PvEnvironment } from '../model/types';
 import { meterPower, useStore } from '../store/projectStore';
 import { Field, NumberInput, Row, Section, TextInput } from './fields';
@@ -254,28 +255,14 @@ export function StringChecksSection({ comp }: { comp: ComponentInstance }) {
 
 // ------------------------------------------------------------------ giornata tipo
 
-const SEASONS = {
-  estate: { label: 'Estate', sunrise: 5.5, sunset: 20.5, peak: 1000, ambientC: 28 },
-  'mezza stagione': { label: 'Mezza stagione', sunrise: 6.5, sunset: 18.5, peak: 850, ambientC: 18 },
-  inverno: { label: 'Inverno', sunrise: 8, sunset: 16.5, peak: 550, ambientC: 6 },
-} as const;
+const SEASONS = DAY_SEASONS;
 type Season = keyof typeof SEASONS;
 
 export function DayProfileSection({ comp }: { comp: ComponentInstance }) {
   const project = useStore((s) => s.project);
   const [season, setSeason] = useState<Season>('mezza stagione');
-  const loadW = useMemo(
-    () => project.components.reduce((a, c) => a + (c.params.kind === 'load' && c.params.p.on ? c.params.p.powerW : 0), 0),
-    [project],
-  );
-  const day = useMemo<DaySummary | null>(() => {
-    if (comp.params.kind !== 'inverter') return null;
-    const link = inverterDcLink(project, comp, () => true);
-    const arrs = link.arrays.map((a) => (a.params.kind === 'pv-array' ? a.params.p : null)).filter((x): x is PvArrayParams => !!x);
-    if (!arrs.length) return null;
-    const s = SEASONS[season];
-    return dayProfile(arrs, comp.params.p, { ...pvEnv(project.pv), ambientC: s.ambientC }, () => loadW, { sunrise: s.sunrise, sunset: s.sunset, peak: s.peak });
-  }, [project, comp, season, loadW]);
+  const loadW = useMemo(() => loadsOnW(project), [project]);
+  const day = useMemo<DaySummary | null>(() => inverterDay(project, comp, season), [project, comp, season]);
   if (comp.params.kind !== 'inverter') return null;
   return (
     <Section title="Giornata tipo">

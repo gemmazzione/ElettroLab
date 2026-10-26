@@ -99,7 +99,8 @@ export function buildSingleLine(project: Project): SingleLine | null {
       continue;
     }
     const keys = loadPhaseKeys(l);
-    parentOf.set(l.id, info.lDevices[info.lDevices.length - 1] ?? supply.id);
+    const drawn = info.lDevices.filter((id) => byId.has(id));
+    parentOf.set(l.id, drawn[drawn.length - 1] ?? supply.id);
     byId.set(l.id, {
       id: l.id,
       kind: 'load',

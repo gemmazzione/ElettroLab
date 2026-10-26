@@ -1,7 +1,7 @@
 import { lineWireIds } from '../model/lineWires';
 import { UnionFind } from '../graph/unionFind';
 import { CONTACT_RESISTANCE, LOAD_RATED_VOLTAGE, MIN_FAULT_RESISTANCE, MIN_WIRE_LENGTH, RHO_CU_70 } from '../model/constants';
-import { getPoles, getTerminals, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId } from '../model/terminals';
+import { getPoles, getTerminals, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId, wallSwitchLinks } from '../model/terminals';
 import type { ComponentInstance, Phase, Project } from '../model/types';
 import { C, polar, type Complex } from './complex';
 
@@ -62,6 +62,8 @@ export interface NetlistOptions {
   ignoreFaults?: boolean;
   /** Esclude la produzione degli inverter fotovoltaici (calcoli di progetto: caso senza sole) */
   noGeneration?: boolean;
+  /** Potenza imposta a singoli utilizzatori [W] (gestione della potenza delle wallbox) */
+  loadPower?: Map<string, number>;
 }
 
 /**
@@ -153,6 +155,13 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
       case 'earth':
         elements.push({ a: tid('PE'), b: NODE_EARTH, z: C(Math.max(pr.p.ra, 1e-3)), tag: { t: 'ra', componentId: c.id } });
         break;
+      case 'wall-switch': {
+        const pos = opts.closed ? opts.closed(c) : c.closed;
+        for (const l of wallSwitchLinks(c)) {
+          if (l.when === pos) elements.push({ a: tid(l.a), b: tid(l.b), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: l.pole } });
+        }
+        break;
+      }
       case 'button':
         // Contatto momentaneo: chiuso solo mentre il pulsante è premuto (mai forzato dalle opzioni).
         if (c.closed) elements.push({ a: tid('in'), b: tid('out'), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: 0 } });
@@ -165,6 +174,27 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
           elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
         }
         break;
+      case 'contactor':
+        // Bobina sempre presente; contatti chiusi solo con lo stato del progetto (deciso dalla tensione sulla bobina).
+        elements.push({ a: tid('A1'), b: tid('A2'), z: loadBranchImpedance(COIL_POWER_W * 2, COIL_COS_PHI), tag: { t: 'coil', componentId: c.id } });
+        if (!(opts.closed ? opts.closed(c) : c.closed)) break;
+        for (const p of getPoles(c)) {
+          elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
+        }
+        break;
+      case 'voltage-relay':
+        // Il neutro passa sempre; la fase solo se la tensione è nell'intervallo (stato closed).
+        for (const p of getPoles(c)) {
+          if (p.fn === 'L' && !(opts.closed ? opts.closed(c) : c.closed)) continue;
+          elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
+        }
+        break;
+      case 'psu': {
+        // Ingresso dell'alimentatore: assorbe la potenza del carico in uscita diviso il rendimento (più un piccolo consumo a vuoto).
+        const pin = Math.min(pr.p.loadW, pr.p.pmaxW) / (pr.p.efficiency / 100) + 0.5;
+        elements.push({ a: tid('L'), b: tid('N'), z: loadBranchImpedance(pin, 0.95), tag: { t: 'coil', componentId: c.id } });
+        break;
+      }
       case 'meter':
         // Misuratore: contatti sempre chiusi (non è un dispositivo di manovra).
         for (const p of getPoles(c)) {
@@ -201,10 +231,11 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
           if (isOpen) continue;
           elements.push({ a: tid(k), b: innerNode(c.id, k), z: C(rc), tag: { t: 'cable', componentId: c.id, conductor: k } });
         }
-        if (pr.p.on && pr.p.powerW > 0 && !opts.loadsOff) {
+        const powerW = opts.loadPower?.get(c.id) ?? pr.p.powerW;
+        if (pr.p.on && powerW > 0 && !opts.loadsOff) {
           // Potenza di targa riferita alla tensione nominale degli apparecchi (230 V fase-neutro).
           // Trifase a stella: ogni ramo assorbe P/3 sotto 230 V.
-          const z = loadBranchImpedance(pr.p.powerW / phaseKeys.length, pr.p.cosPhi ?? 1);
+          const z = loadBranchImpedance(powerW / phaseKeys.length, pr.p.cosPhi ?? 1);
           const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
           for (const k of phaseKeys) {
             elements.push({ a: innerNode(c.id, k), b: star, z, tag: { t: 'load', componentId: c.id, key: k } });

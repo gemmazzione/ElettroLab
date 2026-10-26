@@ -61,17 +61,7 @@ const load = (
   },
 });
 
-const unavailable = (id: string, name: string, category: CatalogCategory, phase: string): CatalogItem => ({
-  id,
-  kind: 'unavailable',
-  name,
-  category,
-  description: '',
-  mount: 'din',
-  modules: 1,
-  labelPrefix: '',
-  unavailableReason: `Funzionalità non implementata in questa versione (${phase}).`,
-});
+// Gli articoli non ancora simulati si aggiungono con kind "unavailable" e unavailableReason (lucchetto nel catalogo).
 
 export const CATALOG: CatalogItem[] = [
   {
@@ -409,6 +399,20 @@ export const CATALOG: CatalogItem[] = [
     0.95,
     16,
   ),
+  {
+    ...load(
+      'load-wallbox',
+      'Wallbox (ricarica auto)',
+      'ricarica',
+      3700,
+      6,
+      "Stazione di ricarica per auto elettrica: carico grande e prolungato su linea dedicata. Può ridurre la potenza per non superare il contratto o usare solo il surplus del fotovoltaico. Valori tipici di una 16 A monofase, modificabili.",
+      0.99,
+    ),
+    get defaults() {
+      return { kind: 'load' as const, p: { name: 'Wallbox', category: 'ricarica' as const, powerW: 3700, on: true, cableLength: 15, cableSection: 6 as const, cosPhi: 0.99, evse: { mode: 'limitata' as const, minW: 1400 } } };
+    },
+  },
   load(
     'load-lavastoviglie',
     'Lavastoviglie',
@@ -527,7 +531,29 @@ export const CATALOG: CatalogItem[] = [
     labelPrefix: 'FDC',
     defaults: { kind: 'spd', p: { poles: 'DC', spdType: 2, uc: 1000, up: 4, inKA: 20 } },
   },
-  unavailable('contactor', 'Contattore modulare', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
+  {
+    id: 'contactor',
+    kind: 'contactor',
+    name: 'Contattore modulare 2NA',
+    category: 'Comando',
+    description:
+      "Interruttore comandato da una bobina: i contatti restano chiusi finché A1-A2 sono alimentati. Si usa per comandare carichi da un interruttore, un orologio o un altro circuito di comando.",
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'KM',
+    defaults: { kind: 'contactor', p: { poles: '2NO', in: 25, coilV: 230 } },
+  },
+  {
+    id: 'contactor-4no',
+    kind: 'contactor',
+    name: 'Contattore modulare 4NA',
+    category: 'Comando',
+    description: 'Contattore a quattro contatti NA per carichi trifase con neutro, comandato dalla bobina A1-A2.',
+    mount: 'din',
+    modules: 3,
+    labelPrefix: 'KM',
+    defaults: { kind: 'contactor', p: { poles: '4NO', in: 25, coilV: 230 } },
+  },
   {
     id: 'step-relay',
     kind: 'relay',
@@ -551,7 +577,54 @@ export const CATALOG: CatalogItem[] = [
     labelPrefix: 'SB',
     defaults: { kind: 'button', p: { name: 'Pulsante' } },
   },
-  unavailable('voltage-relay', 'Relè di controllo tensione', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
+  {
+    id: 'wall-switch',
+    kind: 'wall-switch',
+    name: 'Interruttore unipolare (comando luce)',
+    category: 'Comando',
+    description:
+      "Comanda una luce da un punto: apre o chiude la fase. Morsetti L (ingresso) e 1 (uscita verso la lampada).",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'S',
+    defaults: { kind: 'wall-switch', p: { type: 'interruttore', name: 'Interruttore unipolare' } },
+  },
+  {
+    id: 'wall-deviatore',
+    kind: 'wall-switch',
+    name: 'Deviatore',
+    category: 'Comando',
+    description:
+      "Commutatore a due vie: il comune C si collega al morsetto 1 oppure al 2. Due deviatori collegati con i conduttori navetta comandano una luce da due punti.",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'S',
+    defaults: { kind: 'wall-switch', p: { type: 'deviatore', name: 'Deviatore' } },
+  },
+  {
+    id: 'wall-invertitore',
+    kind: 'wall-switch',
+    name: 'Invertitore',
+    category: 'Comando',
+    description:
+      "Inserito tra due deviatori, sui conduttori navetta, aggiunge un punto di comando: collega 1-3 e 2-4 oppure le incrocia (1-4 e 2-3).",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'S',
+    defaults: { kind: 'wall-switch', p: { type: 'invertitore', name: 'Invertitore' } },
+  },
+  {
+    id: 'voltage-relay',
+    kind: 'voltage-relay',
+    name: 'Relè di controllo tensione (min/max)',
+    category: 'Comando',
+    description:
+      "Controlla la tensione fase-neutro e apre la fase verso gli utilizzatori se esce dall'intervallo impostato (es. neutro interrotto, sovratensioni). Si richiude da solo quando la tensione rientra.",
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'KV',
+    defaults: { kind: 'voltage-relay', p: { umin: 184, umax: 264 } },
+  },
   {
     id: 'energy-meter',
     kind: 'meter',
@@ -564,7 +637,18 @@ export const CATALOG: CatalogItem[] = [
     labelPrefix: 'P',
     defaults: { kind: 'meter', p: { name: 'Contatore' } },
   },
-  unavailable('psu', 'Alimentatore modulare', 'Altri dispositivi', 'i circuiti in bassissima tensione non sono modellati'),
+  {
+    id: 'psu',
+    kind: 'psu',
+    name: 'Alimentatore modulare 12 V DC',
+    category: 'Distribuzione',
+    description:
+      "Trasforma i 230 V in bassissima tensione continua (12 o 24 V) per circuiti di comando, strisce LED, campanelli. L'uscita è isolata dalla rete.",
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'G',
+    defaults: { kind: 'psu', p: { vout: 12, pmaxW: 60, loadW: 30, efficiency: 88 } },
+  },
 ];
 
 export const CATALOG_BY_ID: Record<string, CatalogItem> = Object.fromEntries(CATALOG.map((c) => [c.id, c]));
@@ -587,6 +671,10 @@ export const KIND_LABEL: Record<ComponentKind, string> = {
   spd: 'Scaricatore di sovratensione (SPD)',
   relay: 'Relè passo-passo',
   button: 'Pulsante',
+  'wall-switch': 'Comando luce a parete',
+  contactor: 'Contattore',
+  'voltage-relay': 'Relè di controllo tensione',
+  psu: 'Alimentatore',
   'pv-array': 'Generatore fotovoltaico',
   inverter: 'Inverter fotovoltaico',
   'dc-switch': 'Sezionatore DC',

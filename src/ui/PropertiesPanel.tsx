@@ -38,7 +38,7 @@ import { fmt, fmtCurrent, fmtPower } from './format';
 
 const CONDUCTORS: Conductor[] = ['L1', 'L2', 'L3', 'N', 'PE'];
 const COLORS: WireColor[] = ['marrone', 'nero', 'grigio', 'blu', 'giallo-verde'];
-const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'lavaggio', 'refrigerazione', 'riscaldamento', 'generico'];
+const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'lavaggio', 'ricarica', 'refrigerazione', 'riscaldamento', 'generico'];
 
 export function SeverityIcon({ s, size = 14 }: { s: Issue['severity']; size?: number }) {
   if (s === 'errore') return <AlertOctagon size={size} className="shrink-0 text-red-400" />;
@@ -342,6 +342,72 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             <TextInput value={pr.p.name} onChange={(v) => update(comp.id, { kind: 'button', p: { ...pr.p, name: v } })} />
           </Field>
         )}
+        {pr.kind === 'wall-switch' && (
+          <>
+            <Field label="Nome / posizione">
+              <TextInput value={pr.p.name} onChange={(v) => update(comp.id, { kind: 'wall-switch', p: { ...pr.p, name: v } })} />
+            </Field>
+            <Row k="Tipo" v={pr.p.type} />
+            <Row
+              k="Posizione"
+              v={pr.p.type === 'interruttore' ? (comp.closed ? 'chiuso (L-1)' : 'aperto') : pr.p.type === 'deviatore' ? (comp.closed ? 'C collegato a 2' : 'C collegato a 1') : comp.closed ? 'incrociato (1-4, 2-3)' : 'diritto (1-3, 2-4)'}
+            />
+            <button onClick={() => toggle(comp.id)} className="rounded-md bg-slate-800 px-3 py-1 text-[12px] font-semibold text-slate-100 ring-1 ring-slate-700 hover:bg-slate-700">
+              Cambia posizione
+            </button>
+          </>
+        )}
+        {pr.kind === 'contactor' && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Corrente dei contatti">
+              <Select value={pr.p.in} options={[16, 20, 25, 40, 63]} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'contactor', p: { ...pr.p, in: v } })} />
+            </Field>
+            <Field label="Tensione della bobina">
+              <Select value={pr.p.coilV} options={[230, 24, 12]} format={(v) => `${v} V~`} onChange={(v) => update(comp.id, { kind: 'contactor', p: { ...pr.p, coilV: v } })} />
+            </Field>
+            <p className="col-span-2 text-[10.5px] leading-snug text-slate-500">
+              Contatti chiusi solo con la bobina alimentata (almeno l'80% della tensione nominale, valore del modello). Senza manovra manuale: lo stato lo decide il circuito di comando.
+            </p>
+          </div>
+        )}
+        {pr.kind === 'voltage-relay' && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Soglia minima">
+              <NumberInput value={pr.p.umin} min={150} max={225} step={1} suffix="V" onChange={(v) => update(comp.id, { kind: 'voltage-relay', p: { ...pr.p, umin: v } })} />
+            </Field>
+            <Field label="Soglia massima">
+              <NumberInput value={pr.p.umax} min={235} max={300} step={1} suffix="V" onChange={(v) => update(comp.id, { kind: 'voltage-relay', p: { ...pr.p, umax: v } })} />
+            </Field>
+            <p className="col-span-2 text-[10.5px] leading-snug text-slate-500">
+              Il ritardo di intervento e di richiusura dei relè reali non è modellato: il contatto segue subito la tensione.
+            </p>
+          </div>
+        )}
+        {pr.kind === 'psu' && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Tensione di uscita">
+                <Select value={pr.p.vout} options={[12, 24]} format={(v) => `${v} V⎓`} onChange={(v) => update(comp.id, { kind: 'psu', p: { ...pr.p, vout: v } })} />
+              </Field>
+              <Field label="Potenza nominale">
+                <NumberInput value={pr.p.pmaxW} min={10} max={480} step={10} suffix="W" onChange={(v) => update(comp.id, { kind: 'psu', p: { ...pr.p, pmaxW: v } })} />
+              </Field>
+              <Field label="Carico in uscita">
+                <NumberInput value={pr.p.loadW} min={0} max={600} step={5} suffix="W" onChange={(v) => update(comp.id, { kind: 'psu', p: { ...pr.p, loadW: v } })} />
+              </Field>
+              <Field label="Rendimento">
+                <NumberInput value={pr.p.efficiency} min={60} max={96} suffix="%" onChange={(v) => update(comp.id, { kind: 'psu', p: { ...pr.p, efficiency: v } })} />
+              </Field>
+            </div>
+            <Row k="Corrente in uscita" v={`${fmt(Math.min(pr.p.loadW, pr.p.pmaxW) / pr.p.vout, 2)} A a ${pr.p.vout} V`} />
+            <Row k="Potenza assorbita dalla rete" v={`${fmt(Math.min(pr.p.loadW, pr.p.pmaxW) / (pr.p.efficiency / 100) + 0.5, 1)} W`} />
+            {pr.p.loadW > pr.p.pmaxW && (
+              <p className="rounded bg-red-500/15 px-2 py-1 text-[11.5px] text-red-200 ring-1 ring-red-500/40">
+                Il carico ({pr.p.loadW} W) supera la potenza nominale ({pr.p.pmaxW} W): l'alimentatore limita la corrente e la tensione di uscita cala (protezione da sovraccarico).
+              </p>
+            )}
+          </>
+        )}
         {pr.kind === 'pv-array' && <PvArrayEditor comp={comp} />}
         {pr.kind === 'inverter' && <InverterEditor comp={comp} />}
         {pr.kind === 'meter' && <MeterSection comp={comp} />}
@@ -466,6 +532,7 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
       </Section>
 
       {running && result && result.ok && <LiveValues comp={comp} />}
+      {pr.kind === 'load' && (pr.p.category === 'ricarica' || pr.p.evse) && <EvseSection comp={comp} />}
       {pr.kind === 'pv-array' && (
         <>
           {running && <PvArrayLive comp={comp} />}
@@ -537,6 +604,51 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
         </button>
       </div>
     </>
+  );
+}
+
+/** Wallbox: modalità di gestione della potenza e stato della ricarica. */
+function EvseSection({ comp }: { comp: ComponentInstance }) {
+  const update = useStore((s) => s.updateParams);
+  const running = useStore((s) => s.running);
+  const ev = useStore((s) => (s.result && s.result.ok ? s.result.evse?.get(comp.id) : undefined));
+  if (comp.params.kind !== 'load') return null;
+  const p = comp.params.p;
+  const cur = p.evse ?? { mode: 'fissa' as const, minW: 1400 };
+  const set = (patch: Partial<typeof cur>) => update(comp.id, { kind: 'load', p: { ...p, evse: { ...cur, ...patch } } });
+  const modes = [
+    { m: 'fissa' as const, label: 'Fissa', title: 'Carica sempre alla potenza impostata' },
+    { m: 'limitata' as const, label: 'Limitata al contratto', title: 'Riduce la potenza per non superare la potenza contrattuale al contatore' },
+    { m: 'solare' as const, label: 'Solo surplus FV', title: "Carica solo con l'energia del fotovoltaico che andrebbe in rete" },
+  ];
+  return (
+    <Section title="Ricarica: gestione della potenza">
+      <div className="flex flex-wrap gap-1" role="radiogroup" aria-label="Modalità di ricarica">
+        {modes.map((x) => (
+          <button
+            key={x.m}
+            role="radio"
+            aria-checked={cur.mode === x.m}
+            title={x.title}
+            onClick={() => set({ mode: x.m })}
+            className={`rounded px-2 py-0.5 text-[11.5px] ring-1 ${cur.mode === x.m ? 'bg-sky-500/15 text-sky-200 ring-sky-500/50' : 'text-slate-300 ring-slate-700 hover:bg-slate-800'}`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      <Field label="Potenza minima di ricarica" hint="Sotto questo valore la ricarica si sospende (circa 6 A = 1,4 kW in monofase)">
+        <NumberInput value={cur.minW} min={0} max={p.powerW} step={100} suffix="W" onChange={(v) => set({ minW: v })} />
+      </Field>
+      {running && ev ? (
+        <>
+          <Row k="Potenza di ricarica ora" v={`${fmt(ev.setW / 1000, 2)} kW su ${fmt(ev.maxW / 1000, 2)} kW`} />
+          <p className={`text-[12px] font-semibold ${ev.setW === 0 ? 'text-amber-300' : ev.setW < ev.maxW - 5 ? 'text-sky-300' : 'text-emerald-300'}`}>{ev.reason}</p>
+        </>
+      ) : (
+        <p className="text-[11.5px] text-slate-500">Avvia la simulazione per vedere la potenza regolata.</p>
+      )}
+    </Section>
   );
 }
 

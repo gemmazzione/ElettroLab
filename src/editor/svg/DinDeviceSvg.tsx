@@ -47,6 +47,10 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
       return { main: 'PP', sub: `${pr.p.in}A ${pr.p.coilV}V~`, lever: '#475569' };
     case 'dc-switch':
       return { main: 'DC', sub: `${pr.p.maxV}V ${pr.p.in}A`, lever: '#b42318' };
+    case 'contactor':
+      return { main: 'KM', sub: `${pr.p.in}A ${pr.p.coilV}V~`, lever: '#64748b' };
+    case 'voltage-relay':
+      return { main: 'U<>', sub: `${pr.p.umin}–${pr.p.umax}V`, lever: '#64748b' };
     default:
       return { main: '', sub: '', lever: '#22272e' };
   }
@@ -54,6 +58,7 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
 
 export function DinDeviceSvg({ comp, width: w, terminals, showLabels, onToggle, onTest, tripped, meter }: Props) {
   if (comp.params.kind === 'bar') return <BarSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} />;
+  if (comp.params.kind === 'psu') return <PsuSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} tripped={tripped} />;
   if (comp.params.kind === 'meter') return <MeterSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} meter={meter} />;
   if (comp.params.kind === 'fuse') return <FuseSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} onToggle={onToggle} />;
   if (comp.params.kind === 'spd') return <SpdSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} tripped={tripped} />;
@@ -341,6 +346,44 @@ function MeterSvg({ comp, width: w, terminals, showLabels, meter }: Omit<Props, 
       </text>
       <circle cx={w / 2} cy={112} r={3} fill={Math.abs(p) > 0.5 ? '#ef4444' : '#7f1d1d'}>
         <title>LED impulsi</title>
+      </circle>
+      <text x={w / 2} y={DEVICE_H - 42} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
+        {comp.label}
+      </text>
+    </svg>
+  );
+}
+
+/** Alimentatore: LED verde con uscita presente, rosso in sovraccarico. */
+function PsuSvg({ comp, width: w, terminals, showLabels, tripped }: Omit<Props, 'onToggle' | 'onTest' | 'meter'>) {
+  if (comp.params.kind !== 'psu') return null;
+  const p = comp.params.p;
+  const overload = p.loadW > p.pmaxW;
+  return (
+    <svg width={w} height={DEVICE_H} viewBox={`0 0 ${w} ${DEVICE_H}`} className="block">
+      <rect x={0.5} y={0.5} width={w - 1} height={DEVICE_H - 1} rx={3} fill="#e2e8f0" stroke={BODY_EDGE} />
+      <rect x={1} y={1} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      <rect x={1} y={DEVICE_H - 28} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      {terminals.map((t) => (
+        <Screw key={t.key} x={t.x} y={t.side === 'top' ? TERMINAL_Y_TOP : TERMINAL_Y_BOTTOM} />
+      ))}
+      {showLabels &&
+        terminals.map((t) => (
+          <text key={`l-${t.key}`} x={t.x} y={t.side === 'top' ? 37 : DEVICE_H - 33} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#39414b" fontFamily="ui-monospace, monospace">
+            {t.label}
+          </text>
+        ))}
+      <text x={w / 2} y={60} textAnchor="middle" fontSize={12} fontWeight={700} fill="#1f2630" fontFamily="ui-sans-serif, system-ui">
+        {p.vout} V⎓
+      </text>
+      <text x={w / 2} y={72} textAnchor="middle" fontSize={7.5} fill="#4a525c" fontFamily="ui-sans-serif, system-ui">
+        {p.pmaxW} W
+      </text>
+      <text x={w / 2} y={92} textAnchor="middle" fontSize={7} fill="#4a525c" fontFamily="ui-sans-serif, system-ui">
+        230 V~ → {p.vout} V⎓
+      </text>
+      <circle cx={w / 2} cy={108} r={3.5} fill={!tripped ? '#334155' : overload ? '#ef4444' : '#22c55e'}>
+        <title>{!tripped ? 'Uscita assente' : overload ? 'Sovraccarico: uscita limitata' : 'Uscita presente'}</title>
       </circle>
       <text x={w / 2} y={DEVICE_H - 42} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
         {comp.label}

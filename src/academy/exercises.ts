@@ -5,6 +5,7 @@ import { addLoad, appartamento, bridge, line, monolocale, ProjectBuilder, setMcb
 import { protectedCurrent } from '../protection/stepper';
 import type { RuleStatus } from '../rules/types';
 import type { CheckOutcome, Exercise, ExerciseCtx } from './types';
+import { L6_EXERCISES } from './exercisesL6';
 
 // ------------------------------------------------------------------ aiutanti per i controlli
 
@@ -940,6 +941,7 @@ export const EXERCISES: Exercise[] = [
   l5Tensioni,
   l5NeutroComune,
   l5Multipolari,
+  ...L6_EXERCISES,
 ];
 
 export const exerciseById = (id: string) => EXERCISES.find((e) => e.id === id);

@@ -29,6 +29,10 @@ export type ComponentKind =
   | 'spd'
   | 'relay'
   | 'button'
+  | 'wall-switch'
+  | 'contactor'
+  | 'voltage-relay'
+  | 'psu'
   | 'pv-array'
   | 'inverter'
   | 'dc-switch'
@@ -52,6 +56,7 @@ export type LoadCategory =
   | 'cucina'
   | 'scaldabagno'
   | 'climatizzazione'
+  | 'ricarica'
   | 'lavaggio'
   | 'generico';
 
@@ -156,6 +161,36 @@ export interface RelayParams {
   coilV: number;
 }
 
+/** Contattore modulare: contatti NA chiusi finché la bobina A1-A2 è alimentata. */
+export interface ContactorParams {
+  poles: '2NO' | '4NO';
+  in: number;
+  coilV: number;
+}
+
+/** Relè di controllo tensione: apre la fase verso l'utilizzatore se la tensione L-N esce dall'intervallo. */
+export interface VoltageRelayParams {
+  umin: number;
+  umax: number;
+}
+
+/** Alimentatore modulare 230 V AC → bassissima tensione DC. */
+export interface PsuParams {
+  vout: number;
+  /** Potenza nominale in uscita [W] */
+  pmaxW: number;
+  /** Potenza richiesta dal carico collegato all'uscita [W] */
+  loadW: number;
+  /** Rendimento [%] */
+  efficiency: number;
+}
+
+/** Comando luce a parete. Lo stato `closed` indica la posizione: interruttore chiuso, deviatore su 2, invertitore incrociato. */
+export interface WallSwitchParams {
+  type: 'interruttore' | 'deviatore' | 'invertitore';
+  name: string;
+}
+
 /** Pulsante di comando (contatto momentaneo, normalmente aperto). */
 export interface ButtonParams {
   name: string;
@@ -253,6 +288,21 @@ export interface LoadParams {
   cosPhi?: number;
   /** Verifica della caduta di tensione: considerato acceso insieme agli altri (default true) */
   designOn?: boolean;
+  /** Stazione di ricarica per veicoli elettrici: gestione della potenza */
+  evse?: EvseParams;
+}
+
+/**
+ * Gestione della potenza di una wallbox:
+ * - fissa: carica sempre alla potenza impostata;
+ * - limitata: riduce la potenza per non superare la potenza contrattuale al contatore;
+ * - solare: carica solo con l'energia del fotovoltaico che altrimenti andrebbe in rete.
+ * Sotto la potenza minima la ricarica si sospende.
+ */
+export interface EvseParams {
+  mode: 'fissa' | 'limitata' | 'solare';
+  /** Potenza minima di ricarica [W] (circa 6 A in monofase) */
+  minW: number;
 }
 
 export type ComponentParams =
@@ -267,6 +317,10 @@ export type ComponentParams =
   | { kind: 'spd'; p: SpdParams }
   | { kind: 'relay'; p: RelayParams }
   | { kind: 'button'; p: ButtonParams }
+  | { kind: 'wall-switch'; p: WallSwitchParams }
+  | { kind: 'contactor'; p: ContactorParams }
+  | { kind: 'voltage-relay'; p: VoltageRelayParams }
+  | { kind: 'psu'; p: PsuParams }
   | { kind: 'pv-array'; p: PvArrayParams }
   | { kind: 'inverter'; p: InverterParams }
   | { kind: 'dc-switch'; p: DcSwitchParams }

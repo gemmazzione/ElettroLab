@@ -1,6 +1,7 @@
 import { Panel } from '@xyflow/react';
 import { Volume2, X } from 'lucide-react';
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { insulationResistance, loopImpedance, rcdTest } from '../engine/verify';
 import { clampReading, dcVoltageBetween, resistanceBetween, voltageBetween } from '../engine/measure';
 import { getTerminals, parseTerminalId } from '../model/terminals';
 import type { Project } from '../model/types';
@@ -173,5 +174,103 @@ function Clamp() {
 export function Instruments() {
   const tool = useStore((s) => s.tool);
   if (tool === 'select') return null;
-  return <Panel position="top-left">{tool === 'multimeter' ? <Multimeter /> : <Clamp />}</Panel>;
+  return <Panel position="top-left">{tool === 'multimeter' ? <Multimeter /> : tool === 'tester' ? <Tester /> : <Clamp />}</Panel>;
+}
+
+/** Verificatore multifunzione per le verifiche iniziali, sulla linea dell'utilizzatore scelto. */
+function Tester() {
+  const project = useStore((s) => s.project);
+  const running = useStore((s) => s.running);
+  const target = useStore((s) => s.testerTarget);
+  const runTest = useStore((s) => s.instrumentRcdTest);
+  const [mode, setMode] = useState<'iso' | 'loop' | 'rcd'>('iso');
+  const load = target ? project.components.find((c) => c.id === target) : undefined;
+  const iso = useMemo(() => (load && mode === 'iso' && !running ? insulationResistance(project, load.id) : null), [project, load, mode, running]);
+  const loop = useMemo(() => (load && mode === 'loop' ? loopImpedance(project, load.id) : null), [project, load, mode]);
+  const rcd = useMemo(() => (load && mode === 'rcd' ? rcdTest(project, load.id) : null), [project, load, mode]);
+  const fmtR = (r: number) => (!Number.isFinite(r) || r > 999e6 ? { value: '>999', unit: 'MΩ' } : r >= 1e6 ? { value: fmt(r / 1e6, 2), unit: 'MΩ' } : r >= 1e3 ? { value: fmt(r / 1e3, 1), unit: 'kΩ' } : { value: fmt(r, 1), unit: 'Ω' });
+
+  let display: ReactNode;
+  if (!load || load.params.kind !== 'load') display = <Lcd value="----" unit="" note="Clic su un utilizzatore: le prove si fanno sulla sua linea" />;
+  else if (mode === 'iso') {
+    if (running) display = <Lcd value="Err" unit="MΩ" note="Misura d'isolamento solo a impianto disalimentato: interrompi la simulazione" />;
+    else {
+      const f = fmtR(iso ?? Infinity);
+      display = <Lcd value={f.value} unit={f.unit} note="500 V⎓ tra conduttori attivi e PE, apparecchi scollegati" />;
+    }
+  } else if (mode === 'loop') {
+    display = loop?.zLpe ? (
+      <Lcd value={fmt(loop.zLpe, loop.zLpe < 10 ? 2 : 1)} unit="Ω" note={`Anello di guasto L-PE · Ik ≈ ${fmt(loop.ikLpe ?? 0, 2)} A`} />
+    ) : (
+      <Lcd value="---" unit="Ω" note="Linea non collegata alla fornitura o massa senza PE" />
+    );
+  } else {
+    display = rcd?.rcd ? (
+      <Lcd value={`${rcd.idnMa}`} unit="mA" note={`${rcd.rcd.label}${rcd.selective ? ' (selettivo)' : ''} · Ut = RA·IΔn ≈ ${rcd.ut !== null ? fmt(rcd.ut, 1) : '—'} V`} />
+    ) : (
+      <Lcd value="---" unit="mA" note="Nessun differenziale a monte di questa linea" />
+    );
+  }
+
+  const modes: { m: typeof mode; label: string; title: string }[] = [
+    { m: 'iso', label: 'RISO', title: "Resistenza d'isolamento (impianto disalimentato)" },
+    { m: 'loop', label: 'ZS', title: "Impedenza dell'anello di guasto" },
+    { m: 'rcd', label: 'RCD', title: 'Prova del differenziale' },
+  ];
+  return (
+    <div className="w-[300px] rounded-xl border-2 border-sky-500/70 bg-[#2b2f36] p-3 shadow-2xl">
+      <div className="mb-2 flex items-center text-[11px] font-bold uppercase tracking-wider text-sky-300">
+        Verificatore multifunzione
+      </div>
+      {load && <div className="mb-1 truncate text-[11px] text-slate-300">Linea di {load.label}{load.params.kind === 'load' ? ` · ${load.params.p.name}` : ''}</div>}
+      {display}
+      <div className="mt-2 grid grid-cols-3 gap-1">
+        {modes.map((x) => (
+          <button
+            key={x.m}
+            title={x.title}
+            onClick={() => setMode(x.m)}
+            className={`rounded py-1 font-mono text-[12px] font-bold ${mode === x.m ? 'bg-sky-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+          >
+            {x.label}
+          </button>
+        ))}
+      </div>
+      {mode === 'loop' && loop && (
+        <div className="mt-2 space-y-0.5 font-mono text-[10.5px] text-slate-300">
+          <div>Anello L-N: {loop.zLn ? `${fmt(loop.zLn, 3)} Ω · Icc min ≈ ${loop.ikLn! >= 1000 ? `${fmt(loop.ikLn! / 1000, 2)} kA` : `${fmt(loop.ikLn!, 0)} A`}` : '—'}</div>
+          <div className="text-slate-400">Nel sistema TT l'anello L-PE comprende le resistenze di terra (RA e RB): la corrente di guasto è di pochi ampere, per questo serve il differenziale.</div>
+        </div>
+      )}
+      {mode === 'rcd' && rcd?.rcd && (
+        <div className="mt-2 space-y-1">
+          <table className="w-full font-mono text-[10.5px] text-slate-300">
+            <tbody>
+              {rcd.rows.map((r) => (
+                <tr key={r.mult}>
+                  <td className="pr-2">{fmt(r.mult, r.mult < 1 ? 1 : 0)}·IΔn</td>
+                  <td className="pr-2">{fmt(r.currentMa, 0)} mA</td>
+                  <td className={r.outcome === 'interviene' ? 'text-emerald-300' : r.outcome === 'incerto' ? 'text-amber-300' : 'text-slate-400'}>
+                    {r.outcome}
+                    {r.timeS !== null ? ` ≤ ${fmt(r.timeS * 1000, 0)} ms` : ''}
+                  </td>
+                  <td>
+                    <button
+                      className="rounded bg-slate-700 px-1.5 text-[10px] text-slate-100 hover:bg-slate-600 disabled:opacity-40"
+                      disabled={!running}
+                      title={running ? 'Esegue la prova sull\'impianto simulato' : 'Avvia la simulazione per eseguire la prova'}
+                      onClick={() => runTest(load!.id, r.mult)}
+                    >
+                      prova
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="text-[10px] leading-snug text-slate-400">Tempi: massimi della norma di prodotto usati dal modello. La prova verifica l'intervento; l'efficacia della protezione richiede anche la misura del dispersore.</p>
+        </div>
+      )}
+    </div>
+  );
 }

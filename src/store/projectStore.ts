@@ -6,6 +6,7 @@ import { DEFAULT_COLOR_FOR } from '../model/constants';
 import { createComponent, createWire, emptyProject, inferConductor } from '../model/factory';
 import { MODULE_W, nextPanelOrigin, PANEL_GAP, panelSize, positionToRail, railToPosition } from '../model/geometry';
 import { buildComb } from '../model/comb';
+import { rcdTest } from '../engine/verify';
 import { lineLoadOf, syncLineWires } from '../model/lineWires';
 import { canPlace, nearestFreeSlot, panelFits, panelOf } from '../model/placement';
 import { getTerminals, parseTerminalId } from '../model/terminals';
@@ -46,7 +47,7 @@ export interface ActiveExercise {
   answers: Record<string, string>;
   evaluation: Evaluation | null;
 }
-export type Tool = 'select' | 'multimeter' | 'clamp';
+export type Tool = 'select' | 'multimeter' | 'clamp' | 'tester';
 export type MeterMode = 'V' | 'Vdc' | 'R' | 'continuity';
 export type ClampTarget = { kind: 'wire' | 'line'; id: string } | null;
 
@@ -90,6 +91,11 @@ interface State {
   meterMode: MeterMode;
   probes: { red?: string; black?: string };
   clampTarget: ClampTarget;
+  /** Verificatore: utilizzatore su cui si eseguono le prove */
+  testerTarget: string | null;
+  setTesterTarget: (id: string | null) => void;
+  /** Prova del differenziale con lo strumento: corrente di prova = mult × IΔn */
+  instrumentRcdTest: (loadId: string, mult: number) => void;
   setSpeed: (v: number) => void;
   setTool: (t: Tool) => void;
   setMeterMode: (m: MeterMode) => void;
@@ -279,6 +285,37 @@ export const useStore = create<State>((set, get) => {
           next[c.id] = on;
         }
         set({ coil: next });
+        // Contattori: chiusi finché la bobina è alimentata. Relè di tensione: fase chiusa solo con la tensione nell'intervallo.
+        const follow: { c: ComponentInstance; closed: boolean; why: string }[] = [];
+        for (const c of s.project.components) {
+          if (c.params.kind === 'contactor') {
+            const va = res.terminalV.get(`${c.id}:A1`);
+            const vb = res.terminalV.get(`${c.id}:A2`);
+            const on = !!va && !!vb && abs(sub(va, vb)) >= 0.8 * c.params.p.coilV;
+            if (on !== c.closed) follow.push({ c, closed: on, why: on ? 'bobina alimentata → contatti chiusi' : 'bobina non alimentata → contatti aperti' });
+          } else if (c.params.kind === 'voltage-relay') {
+            const vl = res.terminalV.get(`${c.id}:p0_in`);
+            const vn = res.terminalV.get(`${c.id}:p1_in`);
+            const v = vl && vn ? abs(sub(vl, vn)) : 0;
+            const ok = v >= c.params.p.umin && v <= c.params.p.umax;
+            if (ok !== c.closed) {
+              follow.push({
+                c,
+                closed: ok,
+                why: ok ? `tensione ${v.toFixed(0)} V nell'intervallo → fase richiusa` : `tensione ${v.toFixed(0)} V fuori da ${c.params.p.umin}–${c.params.p.umax} V → fase aperta`,
+              });
+            }
+          }
+        }
+        // Gli impulsi dei relè passo-passo hanno la precedenza (lo stato delle bobine è già aggiornato); i contattori al giro successivo.
+        if (follow.length && !pulses.length) {
+          for (const x of follow) get().log(x.closed ? 'info' : 'attenzione', `${x.c.label}: ${x.why}`);
+          const target = new Map(follow.map((x) => [x.c.id, x.closed]));
+          get().commit((p) => {
+            for (const c of p.components) if (target.has(c.id)) c.closed = target.get(c.id)!;
+          }, false);
+          continue;
+        }
         if (!pulses.length) return;
         for (const c of pulses) get().log('info', `${c.label}: impulso sulla bobina → contatto ${c.closed ? 'aperto' : 'chiuso'}`);
         const ids = new Set(pulses.map((c) => c.id));
@@ -324,9 +361,11 @@ export const useStore = create<State>((set, get) => {
     meterMode: 'V',
     probes: {},
     clampTarget: null,
+    testerTarget: null,
+    setTesterTarget: (id) => set({ testerTarget: id }),
 
     setSpeed: (v) => set({ speed: v }),
-    setTool: (t) => set({ tool: t, probes: {}, clampTarget: null, wiringMode: false }),
+    setTool: (t) => set({ tool: t, probes: {}, clampTarget: null, testerTarget: null, wiringMode: false }),
     setMeterMode: (m) => set({ meterMode: m }),
     probe: (tid) => {
       const { red, black } = get().probes;
@@ -463,6 +502,37 @@ export const useStore = create<State>((set, get) => {
       });
     },
 
+    instrumentRcdTest: (loadId, mult) => {
+      const { project, running, result } = get();
+      const load = project.components.find((c) => c.id === loadId);
+      const t = rcdTest(project, loadId);
+      if (!load || !t.rcd) return;
+      const energized = !!(result && result.ok && result.loads.get(loadId)?.energized);
+      if (!running || !t.rcd.closed || !energized) {
+        get().toast('errore', 'La prova del differenziale si esegue con l\'impianto alimentato e il differenziale chiuso.');
+        return;
+      }
+      const row = t.rows.find((r) => r.mult === mult)!;
+      const where = `${load.label} (${load.params.kind === 'load' ? load.params.p.name : ''})`;
+      if (row.outcome !== 'interviene') {
+        get().log(
+          'info',
+          `Prova strumentale su ${where}: ${row.currentMa} mA (${mult}·IΔn) → ${t.rcd.label} ${row.outcome === 'incerto' ? 'può intervenire o no (zona di incertezza 0,5–1·IΔn)' : 'non interviene, come previsto'}.`,
+        );
+        return;
+      }
+      get().log(
+        'info',
+        `Prova strumentale su ${where}: ${row.currentMa} mA (${mult}·IΔn) → ${t.rcd.label} interviene entro ${Math.round((row.timeS ?? 0) * 1000)} ms (tempo massimo del modello). Tensione di contatto convenzionale RA·IΔn = ${t.ut !== null ? t.ut.toFixed(1).replace('.', ',') : '—'} V.`,
+      );
+      const rcdId = t.rcd.id;
+      set({ prot: { ...get().prot, [rcdId]: { ...(get().prot[rcdId] ?? { heat: 0 }), tripped: 'differenziale' } } });
+      get().commit((p) => {
+        const d = p.components.find((x) => x.id === rcdId);
+        if (d) d.closed = false;
+      }, false);
+    },
+
     testRcd: (id) => {
       const { project, result, running } = get();
       const c = project.components.find((x) => x.id === id);
@@ -542,6 +612,7 @@ export const useStore = create<State>((set, get) => {
         prot: {},
         probes: {},
         clampTarget: null,
+        testerTarget: null,
         exercise: null,
         issues: checkWiring(p),
       });
@@ -670,7 +741,12 @@ export const useStore = create<State>((set, get) => {
         delete rest.tripped;
         set({ prot: { ...get().prot, [id]: rest } });
       }
-      get().log('info', `${c.label} ${c.closed ? 'aperto (manovra manuale)' : 'chiuso (manovra manuale)'}`);
+      get().log(
+        'info',
+        c.params.kind === 'wall-switch' && c.params.p.type !== 'interruttore'
+          ? `${c.label} (${c.params.p.name}) commutato`
+          : `${c.label} ${c.closed ? 'aperto (manovra manuale)' : 'chiuso (manovra manuale)'}`,
+      );
       get().commit((p) => {
         const t = p.components.find((x) => x.id === id)!;
         t.closed = !t.closed;

@@ -7,6 +7,7 @@ export const FREE_NODE_SIZE: Partial<Record<ComponentKind, { w: number; h: numbe
   earth: { w: 140, h: 110 },
   load: { w: 176, h: 128 },
   button: { w: 120, h: 96 },
+  'wall-switch': { w: 140, h: 104 },
   'pv-array': { w: 210, h: 132 },
   inverter: { w: 190, h: 150 },
 };
@@ -21,7 +22,7 @@ export function parseTerminalId(id: string): { componentId: string; key: string 
 }
 
 export function isSwitchingDevice(kind: ComponentKind): boolean {
-  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse' || kind === 'dc-switch';
+  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse' || kind === 'dc-switch' || kind === 'contactor' || kind === 'voltage-relay';
 }
 
 export function isResidualDevice(kind: ComponentKind): boolean {
@@ -52,6 +53,16 @@ export function railYOffset(c: ComponentInstance): number {
 export function getPoles(c: ComponentInstance): PoleDef[] {
   const pr = c.params;
   if (pr.kind === 'relay') return [{ index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false }];
+  if (pr.kind === 'contactor') {
+    const n = pr.p.poles === '4NO' ? 4 : 2;
+    return Array.from({ length: n }, (_, i) => ({ index: i, fn: (i === n - 1 ? 'N' : 'L') as 'L' | 'N', inKey: `p${i}_in`, outKey: `p${i}_out`, protected: false }));
+  }
+  if (pr.kind === 'voltage-relay') {
+    return [
+      { index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false },
+      { index: 1, fn: 'N', inKey: 'p1_in', outKey: 'p1_out', protected: false },
+    ];
+  }
   if (pr.kind === 'meter') {
     return [
       { index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false },
@@ -169,6 +180,28 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'N', label: 'N', fn: 'N', role: 'out', side: 'bottom', x: w * 0.5 },
         { key: 'PE', label: 'PE', fn: 'PE', role: 'out', side: 'bottom', x: w * 0.75 },
       ];
+    case 'contactor': {
+      // Bobina A1/A2 a sinistra, contatti a destra (marcature 1-2, 3-4…; neutro N).
+      const poles = getPoles(c);
+      const pitch = w / (poles.length + 1);
+      const defs: TerminalDef[] = [
+        { key: 'A1', label: 'A1', fn: 'L', role: 'bus', side: 'top', x: pitch / 2 },
+        { key: 'A2', label: 'A2', fn: 'N', role: 'bus', side: 'bottom', x: pitch / 2 },
+      ];
+      poles.forEach((p, i) => {
+        const x = pitch * (i + 1.5);
+        defs.push({ key: p.inKey, label: p.fn === 'N' ? 'N' : `${2 * i + 1}`, fn: p.fn, role: 'in', side: 'top', pole: p.index, x });
+        defs.push({ key: p.outKey, label: p.fn === 'N' ? 'N' : `${2 * i + 2}`, fn: p.fn, role: 'out', side: 'bottom', pole: p.index, x });
+      });
+      return defs;
+    }
+    case 'psu':
+      return [
+        { key: 'L', label: 'L', fn: 'L', role: 'in', side: 'top', x: w * 0.3 },
+        { key: 'N', label: 'N', fn: 'N', role: 'in', side: 'top', x: w * 0.7 },
+        { key: 'V+', label: '+', fn: 'DC+', role: 'out', side: 'bottom', x: w * 0.3 },
+        { key: 'V-', label: '−', fn: 'DC-', role: 'out', side: 'bottom', x: w * 0.7 },
+      ];
     case 'dc-switch':
       return [
         { key: 'p0_in', label: '+', fn: 'DC+', role: 'in', side: 'top', pole: 0, x: w * 0.25 },
@@ -176,6 +209,11 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'p1_in', label: '−', fn: 'DC-', role: 'in', side: 'top', pole: 1, x: w * 0.75 },
         { key: 'p1_out', label: '−', fn: 'DC-', role: 'out', side: 'bottom', pole: 1, x: w * 0.75 },
       ];
+    case 'wall-switch': {
+      const keys = pr.p.type === 'interruttore' ? [['L', 'L'], ['1', '1']] : pr.p.type === 'deviatore' ? [['C', 'C'], ['1', '1'], ['2', '2']] : [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']];
+      const pitch = w / (keys.length + 1);
+      return keys.map(([key, label], i) => ({ key: key!, label: label!, fn: 'L' as const, role: 'bus' as const, side: 'top' as const, x: pitch * (i + 1) }));
+    }
     case 'button':
       return [
         { key: 'in', label: '1', fn: 'L', role: 'bus', side: 'top', x: 38 },
@@ -240,4 +278,28 @@ export function getTerminals(c: ComponentInstance): Terminal[] {
 export function describeTerminal(t: Terminal): string {
   const role = t.role === 'in' ? 'ingresso' : t.role === 'out' ? 'uscita' : 'morsetto';
   return `morsetto ${t.label} (${t.fn}, ${role})`;
+}
+
+/**
+ * Collegamenti interni di un comando luce: `when` è la posizione (stato closed) in cui il collegamento è chiuso.
+ * Interruttore: L-1 chiuso. Deviatore: C-1 (riposo) oppure C-2. Invertitore: 1-3 e 2-4 (diritto) oppure 1-4 e 2-3 (incrociato).
+ */
+export function wallSwitchLinks(c: ComponentInstance): { a: string; b: string; pole: number; when: boolean }[] {
+  if (c.params.kind !== 'wall-switch') return [];
+  switch (c.params.p.type) {
+    case 'interruttore':
+      return [{ a: 'L', b: '1', pole: 0, when: true }];
+    case 'deviatore':
+      return [
+        { a: 'C', b: '1', pole: 0, when: false },
+        { a: 'C', b: '2', pole: 1, when: true },
+      ];
+    case 'invertitore':
+      return [
+        { a: '1', b: '3', pole: 0, when: false },
+        { a: '2', b: '4', pole: 1, when: false },
+        { a: '1', b: '4', pole: 0, when: true },
+        { a: '2', b: '3', pole: 1, when: true },
+      ];
+  }
 }
