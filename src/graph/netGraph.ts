@@ -42,7 +42,8 @@ export function buildNetGraph(project: Project): NetGraph {
 
   const poleEdges: PoleEdge[] = [];
   for (const c of project.components) {
-    if (!isSwitchingDevice(c.params.kind)) continue;
+    // Il misuratore è in serie come un dispositivo di manovra sempre chiuso.
+    if (!isSwitchingDevice(c.params.kind) && c.params.kind !== 'meter') continue;
     for (const p of getPoles(c)) {
       poleEdges.push({
         deviceId: c.id,

@@ -47,7 +47,7 @@ export interface ActiveExercise {
   evaluation: Evaluation | null;
 }
 export type Tool = 'select' | 'multimeter' | 'clamp';
-export type MeterMode = 'V' | 'R' | 'continuity';
+export type MeterMode = 'V' | 'Vdc' | 'R' | 'continuity';
 export type ClampTarget = { kind: 'wire' | 'line'; id: string } | null;
 
 export interface WirePreset {
@@ -69,6 +69,8 @@ interface State {
   wirePreset: WirePreset;
   running: boolean;
   simTime: number;
+  /** Energia contata dai misuratori nel tempo simulato [Wh]: fwd = ingresso → uscita, rev = verso opposto */
+  meterEnergy: Record<string, { fwd: number; rev: number }>;
   result: SimResult | null;
   events: SimEvent[];
   issues: Issue[];
@@ -178,7 +180,32 @@ function initialProject(): Project {
 
 const alertKey = (a: { code: string; componentIds: string[] }) => `${a.code}:${a.componentIds.join(',')}`;
 
+/** Potenza attiva che attraversa un misuratore, verso ingresso → uscita [W] (0 se non alimentato). */
+export function meterPower(result: SimResult | null, c: ComponentInstance): number {
+  if (!result || !result.ok || c.params.kind !== 'meter') return 0;
+  const vl = result.terminalV.get(`${c.id}:p0_in`);
+  const vn = result.terminalV.get(`${c.id}:p1_in`);
+  const i = result.poleI.get(c.id)?.[0];
+  if (!vl || !vn || !i) return 0;
+  const v = sub(vl, vn);
+  return v.re * i.re + v.im * i.im;
+}
+
 export const useStore = create<State>((set, get) => {
+  /** Integra la potenza dei misuratori nell'intervallo di tempo simulato. */
+  const accumulateMeters = (dtSim: number) => {
+    const { project, result, meterEnergy } = get();
+    const meters = project.components.filter((c) => c.params.kind === 'meter');
+    if (!meters.length || dtSim <= 0) return;
+    const next = { ...meterEnergy };
+    for (const c of meters) {
+      const p = meterPower(result, c);
+      const e = next[c.id] ?? { fwd: 0, rev: 0 };
+      next[c.id] = p >= 0 ? { ...e, fwd: e.fwd + (p * dtSim) / 3600 } : { ...e, rev: e.rev + (-p * dtSim) / 3600 };
+    }
+    set({ meterEnergy: next });
+  };
+
   /** Ricalcola verifiche e (se attiva) simulazione dopo ogni modifica. Gli allarmi si registrano in settle(). */
   const recompute = (project: Project, running: boolean) => {
     const issues = checkWiring(project);
@@ -277,6 +304,7 @@ export const useStore = create<State>((set, get) => {
     wirePreset: { conductor: 'auto', section: 2.5, length: 0.25 },
     running: false,
     simTime: 0,
+    meterEnergy: {},
     result: null,
     events: [],
     issues: checkWiring(first),
@@ -508,6 +536,7 @@ export const useStore = create<State>((set, get) => {
         selection: null,
         running: false,
         simTime: 0,
+        meterEnergy: {},
         result: null,
         events: [],
         prot: {},
@@ -770,7 +799,7 @@ export const useStore = create<State>((set, get) => {
 
     startSimulation: () => {
       const { project } = get();
-      set({ running: true, simTime: 0, events: [], prot: {} });
+      set({ running: true, simTime: 0, events: [], prot: {}, meterEnergy: {} });
       get().log('info', 'Simulazione avviata: rete di distribuzione in tensione al punto di consegna.');
       set({ result: simulate(project), coil: {} });
       settle(null);
@@ -790,6 +819,7 @@ export const useStore = create<State>((set, get) => {
         return;
       }
       applyStep(advance(s.project, s.prot, s.result, dt * s.speed, 'step'));
+      accumulateMeters(dt * s.speed);
     },
 
     log: (level, text, t) => {

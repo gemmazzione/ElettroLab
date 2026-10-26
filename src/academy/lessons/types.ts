@@ -4,7 +4,7 @@
  * e (dove possibile) un collegamento al laboratorio: esercizio, progetto o scheda di un componente.
  */
 
-export type TrackId = 'elettricita' | 'sicurezza' | 'protezioni' | 'cavi' | 'quadro' | 'comandi' | 'trifase' | 'misure';
+export type TrackId = 'elettricita' | 'sicurezza' | 'protezioni' | 'cavi' | 'quadro' | 'comandi' | 'trifase' | 'misure' | 'fotovoltaico';
 
 export type LessonLevel = 0 | 1 | 2 | 3;
 
@@ -62,7 +62,7 @@ export interface Track {
   title: string;
   description: string;
   /** Nome dell'icona (lucide) mostrata nell'elenco dei percorsi */
-  icon: 'zap' | 'shield' | 'shield-check' | 'cable' | 'layout-grid' | 'toggle-right' | 'triangle' | 'gauge';
+  icon: 'zap' | 'shield' | 'shield-check' | 'cable' | 'layout-grid' | 'toggle-right' | 'triangle' | 'gauge' | 'sun';
 }
 
 export const TRACKS: Track[] = [
@@ -73,5 +73,6 @@ export const TRACKS: Track[] = [
   { id: 'quadro', title: 'Il quadro elettrico', description: 'Dispositivi modulari, guide DIN, morsettiere, pettini, ordine del cablaggio e schema unifilare.', icon: 'layout-grid' },
   { id: 'comandi', title: 'Circuiti e comandi', description: 'Utilizzatori, prese, comandi luce, pulsanti e relè passo-passo.', icon: 'toggle-right' },
   { id: 'trifase', title: 'Sistema trifase', description: 'Tre fasi e neutro, tensioni concatenate, squilibri, neutro comune e protezioni multipolari.', icon: 'triangle' },
+  { id: 'fotovoltaico', title: 'Fotovoltaico', description: 'Moduli e stringhe, inverter e MPPT, dimensionamento, connessione alla rete, sicurezza in continua e accumulo.', icon: 'sun' },
   { id: 'misure', title: 'Misure e ricerca guasti', description: 'Multimetro e pinza, misure in sicurezza, metodo per trovare un guasto.', icon: 'gauge' },
 ];

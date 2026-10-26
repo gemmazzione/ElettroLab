@@ -14,6 +14,8 @@ interface Props {
   onToggle?: () => void;
   onTest?: () => void;
   tripped?: boolean;
+  /** Solo misuratori: potenza attuale [W] ed energia nei due versi [Wh] */
+  meter?: { p: number; fwd: number; rev: number } | null;
 }
 
 const BODY = '#dfe3e8';
@@ -43,13 +45,16 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
       return { main: `${pr.p.in}A`, sub: 'I-0', lever: '#b42318' };
     case 'relay':
       return { main: 'PP', sub: `${pr.p.in}A ${pr.p.coilV}V~`, lever: '#475569' };
+    case 'dc-switch':
+      return { main: 'DC', sub: `${pr.p.maxV}V ${pr.p.in}A`, lever: '#b42318' };
     default:
       return { main: '', sub: '', lever: '#22272e' };
   }
 }
 
-export function DinDeviceSvg({ comp, width: w, terminals, showLabels, onToggle, onTest, tripped }: Props) {
+export function DinDeviceSvg({ comp, width: w, terminals, showLabels, onToggle, onTest, tripped, meter }: Props) {
   if (comp.params.kind === 'bar') return <BarSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} />;
+  if (comp.params.kind === 'meter') return <MeterSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} meter={meter} />;
   if (comp.params.kind === 'fuse') return <FuseSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} onToggle={onToggle} />;
   if (comp.params.kind === 'spd') return <SpdSvg comp={comp} width={w} terminals={terminals} showLabels={showLabels} tripped={tripped} />;
   const r = rating(comp);
@@ -294,6 +299,50 @@ function FuseSvg({ comp, width: w, terminals, showLabels, onToggle }: Omit<Props
         </rect>
       )}
       <text x={w / 2} y={142} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
+        {comp.label}
+      </text>
+    </svg>
+  );
+}
+
+const fmtW = (w: number) => (Math.abs(w) >= 1000 ? `${(w / 1000).toFixed(2).replace('.', ',')} kW` : `${Math.round(w)} W`);
+const fmtWh = (wh: number) => (wh >= 1000 ? `${(wh / 1000).toFixed(2).replace('.', ',')} kWh` : `${wh.toFixed(1).replace('.', ',')} Wh`);
+
+/** Misuratore di energia: display con potenza istantanea ed energia nei due versi. */
+function MeterSvg({ comp, width: w, terminals, showLabels, meter }: Omit<Props, 'onToggle' | 'onTest' | 'tripped'>) {
+  if (comp.params.kind !== 'meter') return null;
+  const p = meter?.p ?? 0;
+  return (
+    <svg width={w} height={DEVICE_H} viewBox={`0 0 ${w} ${DEVICE_H}`} className="block">
+      <rect x={0.5} y={0.5} width={w - 1} height={DEVICE_H - 1} rx={3} fill="#e5e7eb" stroke={BODY_EDGE} />
+      <rect x={1} y={1} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      <rect x={1} y={DEVICE_H - 28} width={w - 2} height={27} rx={2} fill={TERM_ZONE} />
+      {terminals.map((t) => (
+        <Screw key={t.key} x={t.x} y={t.side === 'top' ? TERMINAL_Y_TOP : TERMINAL_Y_BOTTOM} />
+      ))}
+      {showLabels &&
+        terminals.map((t) => (
+          <text key={`l-${t.key}`} x={t.x} y={t.side === 'top' ? 37 : DEVICE_H - 33} textAnchor="middle" fontSize={8.5} fontWeight={600} fill="#39414b" fontFamily="ui-monospace, monospace">
+            {t.label}
+          </text>
+        ))}
+      <text x={w / 2} y={50} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-sans-serif, system-ui">
+        kWh
+      </text>
+      <rect x={5} y={56} width={w - 10} height={46} rx={2} fill="#0d1a12" stroke="#334155" strokeWidth={0.6} />
+      <text x={w / 2} y={70} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={p < -0.5 ? '#fbbf24' : '#6ee7b7'} fontFamily="ui-monospace, monospace">
+        {meter ? (p < -0.5 ? '◄ ' : '► ') + fmtW(Math.abs(p)) : '—'}
+      </text>
+      <text x={w / 2} y={83} textAnchor="middle" fontSize={7} fill="#6ee7b7" fontFamily="ui-monospace, monospace">
+        ► {fmtWh(meter?.fwd ?? 0)}
+      </text>
+      <text x={w / 2} y={95} textAnchor="middle" fontSize={7} fill="#fbbf24" fontFamily="ui-monospace, monospace">
+        ◄ {fmtWh(meter?.rev ?? 0)}
+      </text>
+      <circle cx={w / 2} cy={112} r={3} fill={Math.abs(p) > 0.5 ? '#ef4444' : '#7f1d1d'}>
+        <title>LED impulsi</title>
+      </circle>
+      <text x={w / 2} y={DEVICE_H - 42} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1f2630" fontFamily="ui-monospace, monospace">
         {comp.label}
       </text>
     </svg>

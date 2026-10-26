@@ -76,6 +76,8 @@ export function inferConductor(project: Project, from: string, to: string): Cond
   const fa = terminalFunction(project, from);
   const fb = terminalFunction(project, to);
   if (fa === 'PE' || fb === 'PE') return 'PE';
+  if (fa === 'DC+' || fb === 'DC+') return 'DC+';
+  if (fa === 'DC-' || fb === 'DC-') return 'DC-';
   if (fa === 'N' || fb === 'N') return 'N';
   // Fase: si risale il circuito fino al punto di fornitura (L1, L2 o L3).
   const ph = tracePhase(project, from) ?? tracePhase(project, to);

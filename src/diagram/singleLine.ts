@@ -9,7 +9,7 @@ import type { ComponentInstance, Project } from '../model/types';
  * topologica usata dalle verifiche): lo schema è sempre coerente con i collegamenti reali.
  */
 
-export type SLKind = 'supply' | 'device' | 'load' | 'spd';
+export type SLKind = 'supply' | 'device' | 'load' | 'spd' | 'inverter';
 
 export interface SLNode {
   id: string;
@@ -60,7 +60,10 @@ export function buildSingleLine(project: Project): SingleLine | null {
   const parentOf = new Map<string, string>();
 
   // Dispositivi di manovra alimentati dalla fornitura.
-  const devices = project.components.filter((c) => isSwitchingDevice(c.params.kind)).sort((a, b) => railKey(a) - railKey(b));
+  // (il sezionatore DC del fotovoltaico non fa parte del circuito in alternata; il misuratore è in serie come un dispositivo)
+  const devices = project.components
+    .filter((c) => (isSwitchingDevice(c.params.kind) && c.params.kind !== 'dc-switch') || c.params.kind === 'meter')
+    .sort((a, b) => railKey(a) - railKey(b));
   for (const d of devices) {
     const poles = getPoles(d);
     const lPole = poles.find((p) => p.fn === 'L');
@@ -111,8 +114,21 @@ export function buildSingleLine(project: Project): SingleLine | null {
   }
 
   // Scaricatori: derivazione dal dispositivo che alimenta il loro morsetto di fase.
+  // Inverter fotovoltaici: generatori in fondo alla loro linea.
   for (const c of project.components) {
-    if (c.params.kind !== 'spd') continue;
+    if (c.params.kind !== 'inverter') continue;
+    const net = g.netOf(terminalId(c.id, 'L'));
+    if (phaseOfNet(g, net) === null) {
+      orphans.push(c);
+      continue;
+    }
+    const chain = seriesDevices(g, net, 'L');
+    parentOf.set(c.id, chain[chain.length - 1] ?? supply.id);
+    byId.set(c.id, { id: c.id, kind: 'inverter', comp: c, children: [], conductors: 2, depth: 0, x: 0, y: 0 });
+  }
+
+  for (const c of project.components) {
+    if (c.params.kind !== 'spd' || c.params.p.poles === 'DC') continue;
     const lKey = c.params.p.poles === '3P+N' ? 'L1' : 'L';
     const net = g.netOf(terminalId(c.id, lKey));
     if (phaseOfNet(g, net) === null) {
@@ -129,7 +145,7 @@ export function buildSingleLine(project: Project): SingleLine | null {
     p.children.push(byId.get(child)!);
   }
   // Prima i dispositivi (in ordine di guida), poi gli utilizzatori diretti.
-  const order = (n: SLNode) => (n.kind === 'device' || n.kind === 'spd' ? railKey(n.comp) : 1e7 + n.comp.position.x);
+  const order = (n: SLNode) => (n.kind === 'device' || n.kind === 'spd' ? railKey(n.comp) : (n.kind === 'inverter' ? 2e7 : 1e7) + n.comp.position.x);
   const sortRec = (n: SLNode) => {
     n.children.sort((a, b) => order(a) - order(b));
     n.children.forEach(sortRec);
@@ -161,7 +177,7 @@ export function buildSingleLine(project: Project): SingleLine | null {
     n.children.forEach(collect);
   };
   collect(root);
-  for (const n of nodes) if (n.kind === 'load' || n.kind === 'spd') n.depth = maxDeviceDepth + 1;
+  for (const n of nodes) if (n.kind === 'load' || n.kind === 'spd' || n.kind === 'inverter') n.depth = maxDeviceDepth + 1;
 
   // x: una colonna per ogni foglia; i nodi interni al centro dei figli.
   let leaf = 0;

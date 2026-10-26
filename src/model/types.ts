@@ -7,12 +7,12 @@
 export type XY = { x: number; y: number };
 
 /** Funzione elettrica di un morsetto. "L" indica un conduttore di fase generico. */
-export type TerminalFunction = 'L' | 'N' | 'PE';
+export type TerminalFunction = 'L' | 'N' | 'PE' | 'DC+' | 'DC-';
 
 /** Identificazione del conduttore (funzione + fase). */
-export type Conductor = 'L1' | 'L2' | 'L3' | 'N' | 'PE';
+export type Conductor = 'L1' | 'L2' | 'L3' | 'N' | 'PE' | 'DC+' | 'DC-';
 
-export type WireColor = 'marrone' | 'nero' | 'grigio' | 'blu' | 'giallo-verde';
+export type WireColor = 'marrone' | 'nero' | 'grigio' | 'blu' | 'giallo-verde' | 'rosso';
 
 export const WIRE_SECTIONS = [1.5, 2.5, 4, 6, 10, 16, 25] as const;
 export type WireSection = (typeof WIRE_SECTIONS)[number];
@@ -29,6 +29,10 @@ export type ComponentKind =
   | 'spd'
   | 'relay'
   | 'button'
+  | 'pv-array'
+  | 'inverter'
+  | 'dc-switch'
+  | 'meter'
   | 'load';
 
 export type MountType = 'din' | 'free';
@@ -132,8 +136,8 @@ export interface RcboParams {
 
 /** Scaricatore di sovratensione (SPD) */
 export interface SpdParams {
-  /** '1P+N' (L, N, PE) oppure '3P+N' (L1, L2, L3, N, PE) */
-  poles: '1P+N' | '3P+N';
+  /** '1P+N' (L, N, PE), '3P+N' (L1, L2, L3, N, PE) oppure 'DC' (lato continua del fotovoltaico: +, −, PE) */
+  poles: '1P+N' | '3P+N' | 'DC';
   /** Tipo di prova secondo la norma di prodotto: 1, 2 o 3 */
   spdType: 1 | 2 | 3;
   /** Tensione massima continuativa Uc [V] */
@@ -155,6 +159,68 @@ export interface RelayParams {
 /** Pulsante di comando (contatto momentaneo, normalmente aperto). */
 export interface ButtonParams {
   name: string;
+}
+
+/** Generatore fotovoltaico: stringhe uguali di moduli in serie, collegate in parallelo. */
+export interface PvArrayParams {
+  name: string;
+  /** Dati di targa del modulo in condizioni STC (1000 W/m², cella a 25 °C) */
+  moduleWp: number;
+  vmp: number;
+  imp: number;
+  voc: number;
+  isc: number;
+  /** Coefficienti di temperatura [%/°C] */
+  tcVoc: number;
+  tcPmax: number;
+  tcIsc: number;
+  /** Temperatura nominale di funzionamento della cella (NOCT) [°C] */
+  noct: number;
+  modulesPerString: number;
+  strings: number;
+}
+
+/** Inverter fotovoltaico monofase connesso alla rete (eventualmente ibrido con accumulo). */
+export interface InverterParams {
+  /** Potenza nominale in uscita AC [W] */
+  pacW: number;
+  /** Rendimento europeo [%] */
+  efficiency: number;
+  /** Massima tensione DC in ingresso [V] */
+  maxDcV: number;
+  /** Intervallo di tensione dell'inseguitore MPPT [V] */
+  mpptMinV: number;
+  mpptMaxV: number;
+  /** Massima corrente DC in ingresso [A] */
+  maxDcA: number;
+  /** Capacità della batteria [kWh] (0 = senza accumulo) */
+  batteryKWh: number;
+  /** Potenza massima di carica e scarica della batteria [W] */
+  batteryW: number;
+}
+
+/** Sezionatore per corrente continua (lato DC del fotovoltaico). */
+export interface DcSwitchParams {
+  in: number;
+  /** Tensione DC nominale di impiego [V] */
+  maxV: number;
+}
+
+/** Misuratore di energia monofase (es. contatore di produzione). */
+export interface MeterParams {
+  name: string;
+}
+
+/** Condizioni ambientali per il fotovoltaico. */
+export interface PvEnvironment {
+  /** Irraggiamento sul piano dei moduli [W/m²] */
+  irradiance: number;
+  /** Temperatura ambiente attuale [°C] */
+  ambientC: number;
+  /** Temperatura minima di progetto del sito [°C] (tensione a vuoto massima) */
+  minAmbientC: number;
+  /** Temperatura massima di progetto del sito [°C] (tensione minima) */
+  maxAmbientC: number;
 }
 
 export interface BarParams {
@@ -201,6 +267,10 @@ export type ComponentParams =
   | { kind: 'spd'; p: SpdParams }
   | { kind: 'relay'; p: RelayParams }
   | { kind: 'button'; p: ButtonParams }
+  | { kind: 'pv-array'; p: PvArrayParams }
+  | { kind: 'inverter'; p: InverterParams }
+  | { kind: 'dc-switch'; p: DcSwitchParams }
+  | { kind: 'meter'; p: MeterParams }
   | { kind: 'load'; p: LoadParams };
 
 export interface RailPlacement {
@@ -307,6 +377,8 @@ export interface Project {
   faults?: Fault[];
   /** Contesto normativo (assente = valori predefiniti) */
   norm?: NormSettings;
+  /** Condizioni ambientali per il fotovoltaico (assente = valori predefiniti) */
+  pv?: PvEnvironment;
   updatedAt: string;
 }
 

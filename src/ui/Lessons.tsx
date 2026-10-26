@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Shield,
   ShieldCheck,
+  Sun,
   ToggleRight,
   Triangle,
   XCircle,
@@ -46,6 +47,7 @@ const TRACK_ICON: Record<Track['icon'], typeof Zap> = {
   'toggle-right': ToggleRight,
   triangle: Triangle,
   gauge: Gauge,
+  sun: Sun,
 };
 
 const LEVEL_STYLE = ['bg-emerald-500/15 text-emerald-300', 'bg-sky-500/15 text-sky-300', 'bg-amber-500/15 text-amber-300', 'bg-rose-500/15 text-rose-300'];

@@ -1,12 +1,13 @@
 import { emitPersist, storageKey } from '../../persistence/space';
 import { BASICS_LESSONS } from './basics';
 import { PROTECTION_LESSONS } from './protection';
+import { SOLAR_LESSONS } from './solar';
 import { SYSTEM_LESSONS } from './systems';
 import { TRACKS, type Lesson, type TrackId } from './types';
 
 export * from './types';
 
-export const LESSONS: Lesson[] = [...BASICS_LESSONS, ...PROTECTION_LESSONS, ...SYSTEM_LESSONS];
+export const LESSONS: Lesson[] = [...BASICS_LESSONS, ...PROTECTION_LESSONS, ...SYSTEM_LESSONS, ...SOLAR_LESSONS];
 
 export function lessonById(id: string): Lesson | undefined {
   return LESSONS.find((l) => l.id === id);

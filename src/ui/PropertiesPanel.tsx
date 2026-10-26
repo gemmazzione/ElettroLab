@@ -27,6 +27,7 @@ import { COMB_LABEL, COMB_RATED_A, COMB_SECTION, combDevices } from '../model/co
 import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { InstallSection } from './InstallSection';
+import { DayProfileSection, InverterEditor, InverterLive, MeterSection, PvArrayEditor, PvArrayLive, PvEnvironmentSection, StringChecksSection } from './PvPanels';
 import { TripCurveSection } from './TripCurveSection';
 import { InfoTab } from './InfoPanel';
 import { ExercisePanel } from './Academy';
@@ -341,15 +342,28 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             <TextInput value={pr.p.name} onChange={(v) => update(comp.id, { kind: 'button', p: { ...pr.p, name: v } })} />
           </Field>
         )}
+        {pr.kind === 'pv-array' && <PvArrayEditor comp={comp} />}
+        {pr.kind === 'inverter' && <InverterEditor comp={comp} />}
+        {pr.kind === 'meter' && <MeterSection comp={comp} />}
+        {pr.kind === 'dc-switch' && (
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Corrente nominale">
+              <NumberInput value={pr.p.in} min={10} max={63} suffix="A" onChange={(v) => update(comp.id, { kind: 'dc-switch', p: { ...pr.p, in: v } })} />
+            </Field>
+            <Field label="Tensione DC di impiego">
+              <NumberInput value={pr.p.maxV} min={100} max={1500} step={50} suffix="V" onChange={(v) => update(comp.id, { kind: 'dc-switch', p: { ...pr.p, maxV: v } })} />
+            </Field>
+          </div>
+        )}
         {pr.kind === 'spd' && (
           <>
-            <Row k="Configurazione" v={pr.p.poles} />
+            <Row k="Configurazione" v={pr.p.poles === 'DC' ? 'DC (+, −, PE)' : pr.p.poles} />
             <div className="grid grid-cols-2 gap-2">
               <Field label="Tipo (classe di prova)" hint="Tipo 1: correnti da fulminazione diretta; tipo 2: quadri di distribuzione; tipo 3: vicino agli apparecchi">
                 <Select value={pr.p.spdType} options={[1, 2, 3] as const} format={(v) => `Tipo ${v}`} onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, spdType: v } })} />
               </Field>
               <Field label="Uc (tensione max continuativa)">
-                <NumberInput value={pr.p.uc} min={150} max={760} step={5} suffix="V" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, uc: v } })} />
+                <NumberInput value={pr.p.uc} min={150} max={pr.p.poles === 'DC' ? 1500 : 760} step={5} suffix="V" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, uc: v } })} />
               </Field>
               <Field label="Up (livello di protezione)">
                 <NumberInput value={pr.p.up} min={0.5} max={6} step={0.1} suffix="kV" onChange={(v) => update(comp.id, { kind: 'spd', p: { ...pr.p, up: v } })} />
@@ -452,6 +466,20 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
       </Section>
 
       {running && result && result.ok && <LiveValues comp={comp} />}
+      {pr.kind === 'pv-array' && (
+        <>
+          {running && <PvArrayLive comp={comp} />}
+          <PvEnvironmentSection />
+        </>
+      )}
+      {pr.kind === 'inverter' && (
+        <>
+          <InverterLive comp={comp} />
+          <PvEnvironmentSection />
+          <StringChecksSection comp={comp} />
+          <DayProfileSection comp={comp} />
+        </>
+      )}
       <ProtectionSection comp={comp} />
       <TripCurveSection comp={comp} />
       {pr.kind === 'load' && (

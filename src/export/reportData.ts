@@ -7,6 +7,8 @@ import type { Project } from '../model/types';
 import { PROTECTION_ASSUMPTIONS } from '../protection/curves';
 import { buildNormContext } from '../rules/context';
 import { runRules } from '../rules/engine';
+import { inverterDcLink } from '../engine/dc';
+import { pvEnv, stringChecks } from '../engine/pv';
 import { STATUS_LABEL } from '../rules/types';
 
 /** Contenuto della relazione, indipendente dal formato di uscita. */
@@ -148,6 +150,31 @@ export function buildReport(project: Project, now = new Date()): ReportData {
   };
 
   const tables = [devices, circuits, norm, wiring];
+  // Impianto fotovoltaico: configurazione e verifiche stringa-inverter sui dati di targa.
+  const env = pvEnv(project.pv);
+  const pvRows: string[][] = [];
+  for (const inv of project.components) {
+    if (inv.params.kind !== 'inverter') continue;
+    const ip = inv.params.p;
+    const link = inverterDcLink(project, inv, () => true);
+    const gens =
+      link.arrays.map((a) => (a.params.kind === 'pv-array' ? `${a.label}: ${a.params.p.strings} × ${a.params.p.modulesPerString} × ${a.params.p.moduleWp} Wp` : a.label)).join('; ') ||
+      'nessun generatore collegato';
+    pvRows.push([inv.label, `Inverter ${f(ip.pacW / 1000, 1)} kW${ip.batteryKWh > 0 ? ` con batteria ${f(ip.batteryKWh, 1)} kWh` : ''}`, gens, '—']);
+    for (const a of link.arrays) {
+      if (a.params.kind !== 'pv-array') continue;
+      for (const c of stringChecks(a.params.p, ip, env)) pvRows.push([inv.label, c.title, c.detail, c.ok === true ? 'sì' : c.ok === false ? 'NO' : 'da valutare']);
+    }
+  }
+  if (pvRows.length) {
+    tables.push({
+      title: 'Impianto fotovoltaico',
+      intro: `Verifiche sui dati di targa di moduli e inverter con temperature di progetto del sito da ${f(env.minAmbientC, 0)} a ${f(env.maxAmbientC, 0)} °C (modello semplificato, non sono prescrizioni normative). Connessione alla rete e protezione di interfaccia: da verificare secondo le norme vigenti e con il distributore.`,
+      head: ['Inverter', 'Voce', 'Dettaglio', 'Esito'],
+      widths: [12, 26, 50, 12],
+      body: pvRows,
+    });
+  }
   const visibleFaults = (project.faults ?? []).filter((x) => !x.hidden);
   if (visibleFaults.length) {
     tables.push({

@@ -7,6 +7,8 @@ export const FREE_NODE_SIZE: Partial<Record<ComponentKind, { w: number; h: numbe
   earth: { w: 140, h: 110 },
   load: { w: 176, h: 128 },
   button: { w: 120, h: 96 },
+  'pv-array': { w: 210, h: 132 },
+  inverter: { w: 190, h: 150 },
 };
 
 export function terminalId(componentId: string, key: string): string {
@@ -19,7 +21,7 @@ export function parseTerminalId(id: string): { componentId: string; key: string 
 }
 
 export function isSwitchingDevice(kind: ComponentKind): boolean {
-  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse';
+  return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse' || kind === 'dc-switch';
 }
 
 export function isResidualDevice(kind: ComponentKind): boolean {
@@ -50,6 +52,12 @@ export function railYOffset(c: ComponentInstance): number {
 export function getPoles(c: ComponentInstance): PoleDef[] {
   const pr = c.params;
   if (pr.kind === 'relay') return [{ index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false }];
+  if (pr.kind === 'meter') {
+    return [
+      { index: 0, fn: 'L', inKey: 'p0_in', outKey: 'p0_out', protected: false },
+      { index: 1, fn: 'N', inKey: 'p1_in', outKey: 'p1_out', protected: false },
+    ];
+  }
   if (pr.kind !== 'switch' && pr.kind !== 'mcb' && pr.kind !== 'rcd' && pr.kind !== 'rcbo' && pr.kind !== 'fuse') return [];
   const overcurrent = pr.kind === 'mcb' || pr.kind === 'rcbo' || pr.kind === 'fuse';
   const pole = (index: number, fn: 'L' | 'N', prot: boolean): PoleDef => ({
@@ -147,18 +155,46 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'A2', label: 'A2', fn: 'N', role: 'bus', side: 'bottom', x: w * 0.27 },
         { key: 'p0_out', label: '2', fn: 'L', role: 'out', side: 'bottom', pole: 0, x: w * 0.73 },
       ];
+    case 'pv-array':
+      return [
+        { key: 'DC+', label: '+', fn: 'DC+', role: 'bus', side: 'bottom', x: w * 0.3 },
+        { key: 'DC-', label: '−', fn: 'DC-', role: 'bus', side: 'bottom', x: w * 0.55 },
+        { key: 'PE', label: 'PE', fn: 'PE', role: 'bus', side: 'bottom', x: w * 0.82 },
+      ];
+    case 'inverter':
+      return [
+        { key: 'DC+', label: '+', fn: 'DC+', role: 'in', side: 'top', x: w * 0.3 },
+        { key: 'DC-', label: '−', fn: 'DC-', role: 'in', side: 'top', x: w * 0.55 },
+        { key: 'L', label: 'L', fn: 'L', role: 'out', side: 'bottom', x: w * 0.25 },
+        { key: 'N', label: 'N', fn: 'N', role: 'out', side: 'bottom', x: w * 0.5 },
+        { key: 'PE', label: 'PE', fn: 'PE', role: 'out', side: 'bottom', x: w * 0.75 },
+      ];
+    case 'dc-switch':
+      return [
+        { key: 'p0_in', label: '+', fn: 'DC+', role: 'in', side: 'top', pole: 0, x: w * 0.25 },
+        { key: 'p0_out', label: '+', fn: 'DC+', role: 'out', side: 'bottom', pole: 0, x: w * 0.25 },
+        { key: 'p1_in', label: '−', fn: 'DC-', role: 'in', side: 'top', pole: 1, x: w * 0.75 },
+        { key: 'p1_out', label: '−', fn: 'DC-', role: 'out', side: 'bottom', pole: 1, x: w * 0.75 },
+      ];
     case 'button':
       return [
         { key: 'in', label: '1', fn: 'L', role: 'bus', side: 'top', x: 38 },
         { key: 'out', label: '2', fn: 'L', role: 'bus', side: 'top', x: 82 },
       ];
     case 'spd': {
+      if (pr.p.poles === 'DC') {
+        return [
+          { key: 'DC+', label: '+', fn: 'DC+', role: 'bus', side: 'top', x: w / 4 },
+          { key: 'DC-', label: '−', fn: 'DC-', role: 'bus', side: 'top', x: (w * 3) / 4 },
+          { key: 'PE', label: 'PE', fn: 'PE', role: 'bus', side: 'bottom', x: w / 2 },
+        ];
+      }
       const keys = pr.p.poles === '3P+N' ? ['L1', 'L2', 'L3', 'N'] : ['L', 'N'];
       const pitch = w / keys.length;
       const defs: TerminalDef[] = keys.map((k, i) => ({
         key: k,
         label: k,
-        fn: k === 'N' ? 'N' : 'L',
+        fn: (k === 'N' ? 'N' : 'L') as 'N' | 'L',
         role: 'bus',
         side: 'top',
         x: (i + 0.5) * pitch,

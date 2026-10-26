@@ -25,6 +25,7 @@ export const AREAS = [
   'Suddivisione dei circuiti',
   'Protezione dalle sovratensioni',
   'Prescrizioni per ambienti residenziali',
+  'Impianti fotovoltaici',
   'Verifiche iniziali',
 ] as const;
 

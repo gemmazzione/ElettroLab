@@ -2,6 +2,7 @@ import { catalogItem } from '../model/catalog';
 import { WIRE_COLOR_LABEL } from '../model/constants';
 import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId, terminalId } from '../model/terminals';
 import type { ComponentInstance, Project, Terminal, TerminalFunction } from '../model/types';
+import { inverterDcLink } from '../engine/dc';
 import { analyzeCircuits, buildNetGraph, netsConnected, phaseOfNet, residualDevicesIn } from './netGraph';
 
 /**
@@ -24,7 +25,7 @@ export interface Issue {
   terminalIds: string[];
 }
 
-const FN_NAME: Record<TerminalFunction, string> = { L: 'fase', N: 'neutro', PE: 'protezione (PE)' };
+const FN_NAME: Record<TerminalFunction, string> = { L: 'fase', N: 'neutro', PE: 'protezione (PE)', 'DC+': 'positivo DC', 'DC-': 'negativo DC' };
 
 export function checkWiring(project: Project): Issue[] {
   const issues: Issue[] = [];
@@ -154,7 +155,18 @@ export function checkWiring(project: Project): Issue[] {
         wireIds: [w.id],
       });
     }
-    const expectedConductor = fn === 'PE' ? ['PE'] : fn === 'N' ? ['N'] : ['L1', 'L2', 'L3'];
+    const expectedConductor = fn === 'PE' ? ['PE'] : fn === 'N' ? ['N'] : fn === 'DC+' ? ['DC+'] : fn === 'DC-' ? ['DC-'] : ['L1', 'L2', 'L3'];
+    if ((fn === 'DC+' || fn === 'DC-') && (w.color === 'blu' || w.color === 'giallo-verde')) {
+      push({
+        code: 'COLOR_DC',
+        severity: 'attenzione',
+        title: 'Conduttore in corrente continua con colore riservato',
+        message: `${where}: conduttore ${FN_NAME[fn]} di colore ${WIRE_COLOR_LABEL[w.color].toLowerCase()}.`,
+        explanation:
+          'Il blu chiaro identifica il neutro e il giallo-verde il conduttore di protezione: usarli per i conduttori del fotovoltaico induce in errore. Per il lato DC si usano cavi solari con marcatura del positivo e del negativo.',
+        wireIds: [w.id],
+      });
+    }
     if (ta.fn === tb.fn && !expectedConductor.includes(w.conductor)) {
       push({
         code: 'CONDUCTOR_ID',
@@ -311,6 +323,63 @@ export function checkWiring(project: Project): Issue[] {
     }
   }
 
+  // Fotovoltaico: lato DC (polarità, sezionamento) e collegamento dell'inverter alla rete.
+  for (const c of project.components) {
+    if (c.params.kind !== 'inverter') continue;
+    const link = inverterDcLink(project, c, () => true);
+    if (link.reversed.length) {
+      push({
+        code: 'PV_POLARITY',
+        severity: 'errore',
+        title: 'Polarità DC invertita',
+        message: `${lbl(c)}: il + di ${link.reversed.map((a) => a.label).join(', ')} arriva al − dell'inverter.`,
+        explanation: 'Con la polarità invertita l\'inverter non può funzionare e, a seconda del modello, può danneggiarsi. Prima di collegare si verifica la polarità della stringa con il multimetro (in DC i moduli al sole sono sempre in tensione).',
+        componentIds: [c.id, ...link.reversed.map((a) => a.id)],
+      });
+    } else if (!link.arrays.length) {
+      push({
+        code: 'PV_DC_OPEN',
+        severity: 'attenzione',
+        title: 'Inverter senza generatore fotovoltaico',
+        message: `${lbl(c)}: gli ingressi + e − non sono collegati a un generatore fotovoltaico.`,
+        explanation: 'Collega il + e il − della stringa ai morsetti DC dell\'inverter, di norma passando da un sezionatore DC.',
+        componentIds: [c.id],
+      });
+    } else if (!link.switches.length) {
+      push({
+        code: 'PV_NO_DC_ISOLATOR',
+        severity: 'info',
+        title: 'Nessun sezionatore sul lato DC',
+        message: `${lbl(c)}: tra moduli e inverter non c'è un sezionatore DC.`,
+        explanation: 'Serve un modo per separare l\'inverter dalla stringa per la manutenzione: molti inverter integrano un sezionatore DC (verifica la scheda tecnica), altrimenti se ne installa uno dedicato.',
+        componentIds: [c.id],
+      });
+    }
+    const path = g.supplyNet.L ? pathToSupply(g, g.netOf(terminalId(c.id, 'L')), g.supplyNet.L) : null;
+    if (!path) {
+      push({
+        code: 'PV_AC_NOT_CONNECTED',
+        severity: 'attenzione',
+        title: 'Inverter non collegato alla rete',
+        message: `${lbl(c)}: il morsetto L non raggiunge il punto di fornitura.`,
+        explanation: 'L\'uscita in alternata dell\'inverter va collegata all\'impianto (di norma a valle del generale) con una linea protetta.',
+        componentIds: [c.id],
+      });
+    } else {
+      const devs = path.map((id) => byId.get(id)!).filter(Boolean);
+      if (!devs.some((d) => d.params.kind === 'mcb' || d.params.kind === 'rcbo' || d.params.kind === 'fuse')) {
+        push({
+          code: 'PV_AC_NO_OCP',
+          severity: 'attenzione',
+          title: 'Linea dell\'inverter senza protezione contro le sovracorrenti',
+          message: `${lbl(c)}: nessun magnetotermico o fusibile sulla linea in alternata.`,
+          explanation: 'La linea tra quadro e inverter è una conduttura come le altre: va protetta contro sovraccarico e cortocircuito con un dispositivo dimensionato sulla corrente nominale dell\'inverter e sulla portata del cavo.',
+          componentIds: [c.id],
+        });
+      }
+    }
+  }
+
   // Circuiti utilizzatori.
   for (const info of analyzeCircuits(project, g)) {
     const load = byId.get(info.loadId)!;
@@ -382,6 +451,35 @@ export function checkWiring(project: Project): Issue[] {
   }
 
   return issues;
+}
+
+/** Dispositivi attraversati dalla rete `from` fino alla rete `to` (null se non collegate). */
+function pathToSupply(g: ReturnType<typeof buildNetGraph>, from: string, to: string): string[] | null {
+  if (from === to) return [];
+  const prev = new Map<string, { net: string; device: string }>();
+  const seen = new Set([from]);
+  const queue = [from];
+  while (queue.length) {
+    const n = queue.shift()!;
+    for (const e of g.poleEdges) {
+      const other = e.netIn === n ? e.netOut : e.netOut === n ? e.netIn : null;
+      if (!other || seen.has(other)) continue;
+      seen.add(other);
+      prev.set(other, { net: n, device: e.deviceId });
+      if (other === to) {
+        const devs: string[] = [];
+        let cur = to;
+        while (cur !== from) {
+          const p = prev.get(cur)!;
+          devs.push(p.device);
+          cur = p.net;
+        }
+        return devs;
+      }
+      queue.push(other);
+    }
+  }
+  return null;
 }
 
 export function issuesFor(issues: Issue[], componentId: string): Issue[] {

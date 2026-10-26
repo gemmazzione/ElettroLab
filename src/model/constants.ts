@@ -69,6 +69,7 @@ export const WIRE_COLOR_HEX: Record<WireColor, string> = {
   grigio: '#9ca3af',
   blu: '#4f9cf5',
   'giallo-verde': '#22a447',
+  rosso: '#dc2626',
 };
 
 export const WIRE_COLOR_LABEL: Record<WireColor, string> = {
@@ -77,6 +78,7 @@ export const WIRE_COLOR_LABEL: Record<WireColor, string> = {
   grigio: 'Grigio',
   blu: 'Blu chiaro',
   'giallo-verde': 'Giallo-verde',
+  rosso: 'Rosso',
 };
 
 export const DEFAULT_COLOR_FOR: Record<Conductor, WireColor> = {
@@ -85,6 +87,8 @@ export const DEFAULT_COLOR_FOR: Record<Conductor, WireColor> = {
   L3: 'grigio',
   N: 'blu',
   PE: 'giallo-verde',
+  'DC+': 'rosso',
+  'DC-': 'nero',
 };
 
 export const CONDUCTOR_LABEL: Record<Conductor, string> = {
@@ -93,12 +97,16 @@ export const CONDUCTOR_LABEL: Record<Conductor, string> = {
   L3: 'L3 — Fase 3',
   N: 'N — Neutro',
   PE: 'PE — Protezione',
+  'DC+': 'DC+ — Positivo (corrente continua)',
+  'DC-': 'DC− — Negativo (corrente continua)',
 };
 
 export const FN_COLOR_HEX: Record<TerminalFunction, string> = {
   L: '#c47a3c',
   N: '#4f9cf5',
   PE: '#22c55e',
+  'DC+': '#dc2626',
+  'DC-': '#e2e8f0',
 };
 
 export const WIRE_STROKE_FOR_SECTION: Record<WireSection, number> = {

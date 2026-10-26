@@ -39,6 +39,8 @@ function ratingLines(c: ComponentInstance): string[] {
       return [`${pr.p.poles} ${pr.p.in} A`, 'Sezionatore'];
     case 'relay':
       return ['Relè passo-passo', `${pr.p.in} A`];
+    case 'meter':
+      return ['Misuratore', pr.p.name];
     case 'fuse':
       return [`${pr.p.poles} gG ${pr.p.in} A`, `10×38 · ${pr.p.icn} kA`];
     default:
@@ -51,6 +53,18 @@ function DeviceSymbol({ node, p }: { node: SLNode; p: DiagramPalette }) {
   const breaker = k === 'mcb' || k === 'rcbo';
   const residual = k === 'rcd' || k === 'rcbo';
   const H = SL.symbolH;
+  if (k === 'meter') {
+    return (
+      <g>
+        <line x1={0} y1={0} x2={0} y2={18} stroke={p.line} strokeWidth={1.6} />
+        <rect x={-13} y={18} width={26} height={26} fill="none" stroke={p.line} strokeWidth={1.5} />
+        <text x={0} y={35} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={p.text} fontFamily="Arial, sans-serif">
+          Wh
+        </text>
+        <line x1={0} y1={44} x2={0} y2={H} stroke={p.line} strokeWidth={1.6} />
+      </g>
+    );
+  }
   if (k === 'fuse') {
     // sezionatore con fusibile: rettangolo del fusibile sulla lama
     return (
@@ -151,7 +165,7 @@ function Slashes({ x, y, n, p }: { x: number; y: number; n: number; p: DiagramPa
   return <g>{items}</g>;
 }
 
-const bottomOf = (n: SLNode) => n.y + (n.kind === 'supply' ? SUPPLY_H : n.kind === 'device' ? SL.symbolH : n.kind === 'spd' ? 36 : 22);
+const bottomOf = (n: SLNode) => n.y + (n.kind === 'supply' ? SUPPLY_H : n.kind === 'device' ? SL.symbolH : n.kind === 'spd' ? 36 : n.kind === 'inverter' ? 30 : 22);
 
 export interface SingleLineSvgProps {
   sl: SingleLine;
@@ -268,6 +282,32 @@ export function SingleLineSvg({ sl, project, palette: p, live, selectedId, onSel
           </text>
           <text x={0} y={62} textAnchor="middle" fontSize={9} fill={p.muted} fontFamily={font}>
             Uc {sp.uc} V · Up {n1(sp.up, 1)} kV
+          </text>
+        </g>,
+      );
+    } else if (n.kind === 'inverter' && n.comp.params.kind === 'inverter') {
+      const ip = n.comp.params.p;
+      labels.push(
+        <g key={n.id} transform={`translate(${n.x} ${n.y})`} {...click}>
+          {sel && <rect x={-60} y={-6} width={120} height={SL.loadH} rx={4} fill="none" stroke={p.select} strokeWidth={2} />}
+          <rect x={-60} y={-4} width={120} height={SL.loadH - 4} fill="transparent" />
+          {/* convertitore: quadrato con diagonale, continua in alto a sinistra e alternata in basso a destra */}
+          <rect x={-14} y={0} width={28} height={28} fill="none" stroke={p.line} strokeWidth={1.5} />
+          <line x1={-14} y1={28} x2={14} y2={0} stroke={p.line} strokeWidth={1.2} />
+          <text x={-7} y={11} textAnchor="middle" fontSize={9} fontWeight={700} fill={p.text} fontFamily={font}>
+            =
+          </text>
+          <text x={7} y={24} textAnchor="middle" fontSize={9} fontWeight={700} fill={p.text} fontFamily={font}>
+            ~
+          </text>
+          <text x={0} y={42} textAnchor="middle" fontSize={10} fontWeight={700} fill={p.text} fontFamily={font}>
+            {n.comp.label} Inverter FV
+          </text>
+          <text x={0} y={54} textAnchor="middle" fontSize={9} fill={p.muted} fontFamily={font}>
+            {kw(ip.pacW)}{ip.batteryKWh > 0 ? ` · batteria ${n1(ip.batteryKWh, 1)} kWh` : ''}
+          </text>
+          <text x={0} y={66} textAnchor="middle" fontSize={9} fill={p.muted} fontFamily={font}>
+            generatore (immette in rete)
           </text>
         </g>,
       );

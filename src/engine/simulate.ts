@@ -6,14 +6,51 @@ import type { Phase, Project } from '../model/types';
 import { abs, add, conj, div, mul, sub, type Complex, ZERO } from './complex';
 import { solveNodal, SingularMatrixError, type Branch, type CurrentInjection } from './mna';
 import { buildNetlist, innerNode, NODE_EARTH, NODE_STAR, starNode, type LineKey, type NetElement, type NetlistOptions } from './netlist';
+import { inverterDcLink } from './dc';
+import {
+  arrayOperatingPoint,
+  GRID_MAX_RATIO,
+  GRID_MIN_RATIO,
+  INVERTER_STATE_TEXT,
+  inverterOutput,
+  pvEnv,
+  type InverterState,
+  type PvOperatingPoint,
+} from './pv';
 
 export type AlertSeverity = 'errore' | 'attenzione' | 'info';
 
 export interface SimAlert {
-  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE' | 'SPD_TOV';
+  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE' | 'SPD_TOV' | 'PV_FAULT' | 'PV_EXPORT';
   severity: AlertSeverity;
   message: string;
   componentIds: string[];
+}
+
+/** Stato di un inverter fotovoltaico nel punto di lavoro calcolato. */
+export interface InverterResult {
+  state: InverterState;
+  /** Potenza DC dai moduli (al netto delle perdite nei cavi DC) [W] */
+  pdc: number;
+  /** Potenza attiva immessa nell'impianto [W] */
+  pac: number;
+  vdc: number;
+  idc: number;
+  /** Tensione e corrente lato rete [V, A] */
+  vac: number;
+  iac: number;
+  /** Potenza limitata dalla taglia dell'inverter */
+  clipped: boolean;
+  dcLossW: number;
+  /** Generatori collegati */
+  arrayIds: string[];
+}
+
+/** Punto di lavoro di un generatore fotovoltaico. */
+export interface PvArrayResult extends PvOperatingPoint {
+  inverterId: string | null;
+  /** Potenza effettivamente prelevata dall'inverter [W] */
+  pOut: number;
 }
 
 export interface LoadResult {
@@ -74,6 +111,8 @@ export type SimResult =
       /** Tensione della massa di ciascun utilizzatore verso terra [V] (null se indeterminata) */
       touchV: Map<string, number | null>;
       supply: SupplyResult;
+      inverters: Map<string, InverterResult>;
+      pvArrays: Map<string, PvArrayResult>;
       alerts: SimAlert[];
     }
   | { ok: false; reason: string };
@@ -120,12 +159,137 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
     injections.push({ node: e.b, i: { re: -isrc.re, im: -isrc.im } });
   }
 
+  // ------------------------------------------------------------ fotovoltaico
+  // Ogni inverter è un generatore di corrente che immette la potenza disponibile dai moduli: I = conj(P / V).
+  // La corrente dipende dalla tensione, quindi si risolve per iterazioni successive.
+  const env = pvEnv(project.pv);
+  const isClosed = (c: (typeof project.components)[number]) => (opts.closed ? opts.closed(c) : c.closed);
+  const inverters = new Map<string, InverterResult>();
+  const pvArrays = new Map<string, PvArrayResult>();
+  interface InvPlan {
+    id: string;
+    nodeL: string | null;
+    nodeN: string | null;
+    pac: number;
+    current: Complex;
+  }
+  const plans: InvPlan[] = [];
+  for (const c of project.components) {
+    if (c.params.kind === 'pv-array') {
+      pvArrays.set(c.id, { ...arrayOperatingPoint(c.params.p, env.irradiance, env.ambientC), inverterId: null, pOut: 0 });
+    }
+  }
+  for (const c of project.components) {
+    if (c.params.kind !== 'inverter') continue;
+    const inv = c.params.p;
+    const link = inverterDcLink(project, c, isClosed);
+    const base: InverterResult = { state: 'dc scollegato', pdc: 0, pac: 0, vdc: 0, idc: 0, vac: 0, iac: 0, clipped: false, dcLossW: 0, arrayIds: link.arrays.map((a) => a.id) };
+    for (const a of [...link.arrays, ...link.reversed]) {
+      const r = pvArrays.get(a.id);
+      if (r) r.inverterId = c.id;
+    }
+    let state: InverterState | null = null;
+    let pac = 0;
+    if (link.reversed.length) state = 'polarità invertita';
+    else if (!link.arrays.length || link.shorted) state = 'dc scollegato';
+    else {
+      // Generatori in parallelo sullo stesso ingresso: potenze sommate, tensione del primo (stringhe uguali).
+      const ops = link.arrays.map((a) => (a.params.kind === 'pv-array' ? arrayOperatingPoint(a.params.p, env.irradiance, env.ambientC) : null)).filter((x): x is PvOperatingPoint => !!x);
+      const op: PvOperatingPoint = ops.reduce((acc, o) => ({ ...acc, pmp: acc.pmp + o.pmp, imp: acc.imp + o.imp, isc: acc.isc + o.isc, pstc: acc.pstc + o.pstc }));
+      const out = inverterOutput(inv, op, link.rLoop);
+      state = out.state;
+      pac = opts.noGeneration ? 0 : out.pac;
+      base.pdc = out.pdc;
+      base.vdc = out.state ? op.voc : op.vmp;
+      base.idc = out.state ? 0 : Math.min(op.imp, inv.maxDcA);
+      base.clipped = out.clipped;
+      base.dcLossW = out.dcLossW;
+      for (const a of link.arrays) {
+        const r = pvArrays.get(a.id);
+        if (r && op.pmp > 0) r.pOut = out.state ? 0 : (out.pdc + out.dcLossW) * (r.pmp / op.pmp);
+      }
+    }
+    base.state = state ?? 'produzione';
+    inverters.set(c.id, base);
+    if (!state && pac > 0) {
+      plans.push({ id: c.id, nodeL: net.terminalNode.get(`${c.id}:L`) ?? null, nodeN: net.terminalNode.get(`${c.id}:N`) ?? null, pac, current: ZERO });
+    }
+  }
+  const u0 = sp.voltage;
+  const solveWith = (): Map<string, Complex> => {
+    const inj = [...injections];
+    for (const pl of plans) {
+      if (abs(pl.current) < 1e-9 || !pl.nodeL || !pl.nodeN) continue;
+      inj.push({ node: pl.nodeL, i: pl.current });
+      inj.push({ node: pl.nodeN, i: { re: -pl.current.re, im: -pl.current.im } });
+    }
+    return solveNodal([...nodes], NODE_STAR, branches, inj);
+  };
+  const invVoltage = (Vm: Map<string, Complex>, pl: InvPlan): Complex | null => {
+    if (!pl.nodeL || !pl.nodeN || !live(pl.nodeL) || !live(pl.nodeN)) return null;
+    const a = Vm.get(pl.nodeL);
+    const b = Vm.get(pl.nodeN);
+    return a && b ? sub(a, b) : null;
+  };
+
   let V: Map<string, Complex>;
   try {
-    V = solveNodal([...nodes], NODE_STAR, branches, injections);
+    V = solveWith();
+    if (plans.length) {
+      for (let iter = 0; iter < 30; iter++) {
+        let delta = 0;
+        for (const pl of plans) {
+          const v = invVoltage(V, pl);
+          let next: Complex = ZERO;
+          if (v && abs(v) >= GRID_MIN_RATIO * u0) next = conj(div({ re: pl.pac, im: 0 }, v));
+          delta = Math.max(delta, abs(sub(next, pl.current)));
+          pl.current = next;
+        }
+        V = solveWith();
+        if (delta < 1e-6) break;
+      }
+      // Distacco per rete assente o tensione troppo alta (decisione presa sul punto di lavoro finale).
+      let tripped = false;
+      for (const pl of plans) {
+        const v = invVoltage(V, pl);
+        const r = inverters.get(pl.id)!;
+        if (!v || abs(v) < GRID_MIN_RATIO * u0) {
+          r.state = 'rete assente';
+          pl.current = ZERO;
+          tripped = true;
+        } else if (abs(v) > GRID_MAX_RATIO * u0) {
+          r.state = 'sovratensione rete';
+          pl.current = ZERO;
+          tripped = true;
+        }
+      }
+      if (tripped) V = solveWith();
+    }
   } catch (err) {
     if (err instanceof SingularMatrixError) return { ok: false, reason: err.message };
     throw err;
+  }
+  for (const pl of plans) {
+    const r = inverters.get(pl.id)!;
+    const v = invVoltage(V, pl);
+    r.vac = v ? abs(v) : 0;
+    r.iac = abs(pl.current);
+    r.pac = v ? mul(v, conj(pl.current)).re : 0;
+    if (r.state === 'rete assente' || r.state === 'sovratensione rete') {
+      r.pdc = 0;
+      r.idc = 0;
+      for (const id of r.arrayIds) {
+        const a = pvArrays.get(id);
+        if (a) a.pOut = 0;
+      }
+    }
+  }
+  // Inverter con produzione ma senza piano (es. senza sole) restano nello stato calcolato; quelli esclusi dall'opzione noGeneration non immettono.
+  for (const [id, r] of inverters) {
+    if (!plans.some((p) => p.id === id) && r.state === 'produzione') {
+      r.pac = 0;
+      r.iac = 0;
+    }
   }
 
   const vEarth = V.get(NODE_EARTH) ?? ZERO;
@@ -261,6 +425,20 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
   };
 
   const alerts: SimAlert[] = [];
+  for (const [id, r] of inverters) {
+    const c = project.components.find((x) => x.id === id)!;
+    if (r.state === 'polarità invertita' || r.state === 'tensione dc eccessiva' || r.state === 'sovratensione rete') {
+      alerts.push({ code: 'PV_FAULT', severity: r.state === 'sovratensione rete' ? 'attenzione' : 'errore', message: `${c.label}: ${INVERTER_STATE_TEXT[r.state]}.`, componentIds: [id, ...r.arrayIds] });
+    }
+  }
+  if (supplyResult.p < -1) {
+    alerts.push({
+      code: 'PV_EXPORT',
+      severity: 'info',
+      message: `Immissione in rete: ${n(-supplyResult.p, 0)} W prodotti dal fotovoltaico e non consumati nell'impianto.`,
+      componentIds: [supply.id],
+    });
+  }
   if (supplyResult.zExt !== null && supplyResult.zExt < SHORT_CIRCUIT_Z_THRESHOLD) {
     alerts.push({
       code: 'SHORT_CIRCUIT',
@@ -399,6 +577,8 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
     extraI,
     touchV,
     supply: supplyResult,
+    inverters,
+    pvArrays,
     alerts,
   };
 }

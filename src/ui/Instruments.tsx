@@ -1,7 +1,7 @@
 import { Panel } from '@xyflow/react';
 import { Volume2, X } from 'lucide-react';
 import { useMemo, type ReactNode } from 'react';
-import { clampReading, resistanceBetween, voltageBetween } from '../engine/measure';
+import { clampReading, dcVoltageBetween, resistanceBetween, voltageBetween } from '../engine/measure';
 import { getTerminals, parseTerminalId } from '../model/terminals';
 import type { Project } from '../model/types';
 import { useStore, type MeterMode } from '../store/projectStore';
@@ -50,13 +50,21 @@ function Multimeter() {
   const both = !!probes.red && !!probes.black;
 
   const resistance = useMemo(
-    () => (both && !running && mode !== 'V' ? resistanceBetween(project, probes.red!, probes.black!) : null),
+    () => (both && !running && (mode === 'R' || mode === 'continuity') ? resistanceBetween(project, probes.red!, probes.black!) : null),
     [both, running, mode, project, probes.red, probes.black],
   );
 
   let display: ReactNode;
-  if (!both) display = <Lcd value="----" unit={mode === 'V' ? 'V~' : 'Ω'} note="Appoggia i due puntali su due morsetti" />;
-  else if (mode === 'V') {
+  if (!both) display = <Lcd value="----" unit={mode === 'V' ? 'V~' : mode === 'Vdc' ? 'V⎓' : 'Ω'} note="Appoggia i due puntali su due morsetti" />;
+  else if (mode === 'Vdc') {
+    const v = dcVoltageBetween(project, probes.red!, probes.black!, running ? result : null);
+    display =
+      v === null ? (
+        <Lcd value="---" unit="V⎓" note="I puntali non sono ai capi di un generatore fotovoltaico" />
+      ) : (
+        <Lcd value={fmt(v, 1)} unit="V⎓" note={v < -0.5 ? 'Valore negativo: il puntale rosso è sul negativo (polarità invertita)' : 'Con la luce i moduli sono in tensione anche a impianto spento'} />
+      );
+  } else if (mode === 'V') {
     if (!running) display = <Lcd value={fmt(0, 1)} unit="V~" note="Impianto disalimentato" />;
     else if (!result || !result.ok) display = <Lcd value="Err" unit="V~" note="Circuito non risolvibile" />;
     else {
@@ -85,6 +93,7 @@ function Multimeter() {
 
   const modes: { m: MeterMode; label: string; title: string }[] = [
     { m: 'V', label: 'V~', title: 'Tensione alternata' },
+    { m: 'Vdc', label: 'V⎓', title: 'Tensione continua (lato DC del fotovoltaico)' },
     { m: 'R', label: 'Ω', title: 'Resistenza (solo a impianto disalimentato)' },
     { m: 'continuity', label: '·)))', title: 'Continuità (solo a impianto disalimentato)' },
   ];
@@ -98,7 +107,7 @@ function Multimeter() {
         </button>
       </div>
       {display}
-      <div className="mt-2 grid grid-cols-3 gap-1">
+      <div className="mt-2 grid grid-cols-4 gap-1">
         {modes.map((x) => (
           <button
             key={x.m}

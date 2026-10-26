@@ -60,6 +60,8 @@ export interface NetlistOptions {
   noSource?: boolean;
   /** Ignora i guasti del progetto */
   ignoreFaults?: boolean;
+  /** Esclude la produzione degli inverter fotovoltaici (calcoli di progetto: caso senza sole) */
+  noGeneration?: boolean;
 }
 
 /**
@@ -159,6 +161,12 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         // Bobina sempre presente tra A1 e A2: impedenza costante dai dati tipici di assorbimento.
         elements.push({ a: tid('A1'), b: tid('A2'), z: loadBranchImpedance(COIL_POWER_W, COIL_COS_PHI), tag: { t: 'coil', componentId: c.id } });
         if (!(opts.closed ? opts.closed(c) : c.closed)) break;
+        for (const p of getPoles(c)) {
+          elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
+        }
+        break;
+      case 'meter':
+        // Misuratore: contatti sempre chiusi (non è un dispositivo di manovra).
         for (const p of getPoles(c)) {
           elements.push({ a: tid(p.inKey), b: tid(p.outKey), z: C(CONTACT_RESISTANCE), tag: { t: 'contact', componentId: c.id, pole: p.index } });
         }

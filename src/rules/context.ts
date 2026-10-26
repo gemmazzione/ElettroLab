@@ -76,7 +76,8 @@ export function buildNormContext(project: Project): NormCtx {
   const k = Math.min(1, Math.max(0.05, settings.simultaneity ?? 1));
   const loads = project.components.filter((c) => c.params.kind === 'load');
   const shared = k === 1 && loads.every((c) => c.params.kind === 'load' && c.params.p.designOn !== false);
-  const opts = { closed: () => true, ignoreFaults: true };
+  // Calcoli di progetto senza produzione fotovoltaica (caso peggiore: nessun sole).
+  const opts = { closed: () => true, ignoreFaults: true, noGeneration: true };
   const sharedDesign = shared ? simulate(dropScenario(project, null, 1), opts) : null;
   const designFor = (id: string) => sharedDesign ?? simulate(dropScenario(project, id, k), opts);
 

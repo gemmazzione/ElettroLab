@@ -344,6 +344,77 @@ export function luceScale(): Project {
   return b.project;
 }
 
+/** Abitazione con impianto fotovoltaico da 3,2 kWp e inverter da 3 kW. */
+export function fotovoltaico(): Project {
+  const b = new ProjectBuilder('Casa con fotovoltaico 3,2 kWp', 3, 12);
+  b.project.description =
+    'Impianto domestico con fotovoltaico: 8 moduli da 400 Wp in una stringa, sezionatore e scaricatore lato DC, inverter da 3 kW collegato a valle del generale con un magnetotermico differenziale dedicato e il contatore di produzione. ' +
+    'Avvia la simulazione, chiudi Q1 e cambia l\'irraggiamento nelle proprietà dell\'inverter: guarda l\'energia immessa in rete al contatore e cosa succede se apri il generale (l\'inverter si stacca).';
+  b.project.pv = { irradiance: 800, ambientC: 25, minAmbientC: -10, maxAmbientC: 40 };
+  const cnt = b.add('supply-mono', { position: { x: -270, y: 40 } }, (c) => {
+    if (c.params.kind === 'supply') c.params.p.contractKW = 3;
+  });
+  const earth = b.add('earth', { position: { x: -250, y: 520 } });
+  const q1 = b.add('mcb-2p', { rail: { row: 0, slot: 0 } }, (c) => {
+    setMcb(c, 25, 'C', 6);
+    c.label = 'Q1';
+  });
+  const q2 = b.add('rcd-2p', { rail: { row: 0, slot: 3 } }, (c) => (c.closed = true));
+  const q3 = b.add('mcb-1pn', { rail: { row: 0, slot: 6 } }, (c) => {
+    setMcb(c, 10);
+    c.closed = true;
+  });
+  const q4 = b.add('mcb-1pn', { rail: { row: 0, slot: 7 } }, (c) => {
+    setMcb(c, 16);
+    c.closed = true;
+  });
+  const q5 = b.add('mcb-1pn', { rail: { row: 0, slot: 8 } }, (c) => {
+    setMcb(c, 16);
+    c.closed = true;
+  });
+  const qfv = b.add('rcbo-1pn', { rail: { row: 0, slot: 10 } }, (c) => {
+    setMcb(c, 16);
+    c.label = 'QFV';
+    c.closed = true;
+  });
+  const xpe = b.add('bar-pe-8', { rail: { row: 1, slot: 0 } });
+  const pm = b.add('energy-meter', { rail: { row: 1, slot: 6 } }, (c) => {
+    if (c.params.kind === 'meter') c.params.p.name = 'Contatore di produzione';
+    c.label = 'M2';
+  });
+  const qdc = b.add('dc-switch-2p', { rail: { row: 2, slot: 0 } }, (c) => (c.closed = true));
+  const fdc = b.add('spd-dc', { rail: { row: 2, slot: 3 } });
+  const arr = b.add('pv-string', { position: { x: 600, y: -300 } }, (c) => {
+    if (c.params.kind === 'pv-array') c.params.p.name = 'Tetto, falda sud';
+  });
+  const inv = b.add('pv-inverter', { position: { x: 640, y: 330 } });
+
+  const u1 = addLoad(b, { catalogId: 'load-luce', name: 'Luci', powerW: 300, section: 1.5, length: 18 }, -20, 700, 3);
+  const u2 = addLoad(b, { catalogId: 'load-prese', name: 'Prese', powerW: 1000, section: 2.5, length: 20, sockets: true }, 180, 700, 3);
+  const u3 = addLoad(b, { catalogId: 'load-generico', name: 'Lavatrice', powerW: 2000, section: 2.5, length: 12, on: false, sockets: true }, 380, 700, 3);
+
+  // fornitura → generale → differenziale → circuiti
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
+  b.wire(t(q1, 'p0_out'), t(q2, 'p0_in'), 6).wire(t(q1, 'p1_out'), t(q2, 'p1_in'), 6);
+  b.wire(t(q2, 'p0_out'), t(q3, 'p0_in'), 4).wire(t(q2, 'p1_out'), t(q3, 'p1_in'), 4);
+  bridge(b, [q3, q4, q5], 4);
+  line(b, q3, u1, xpe, 1, 1.5);
+  line(b, q4, u2, xpe, 2, 2.5);
+  line(b, q5, u3, xpe, 3, 2.5);
+  // linea dell'inverter: dal generale, magnetotermico differenziale dedicato e contatore di produzione
+  b.wire(t(q1, 'p0_out'), t(qfv, 'p0_in'), 6, 0.3).wire(t(q1, 'p1_out'), t(qfv, 'p1_in'), 6, 0.3);
+  b.wire(t(qfv, 'p0_out'), t(pm, 'p0_in'), 4, 0.3).wire(t(qfv, 'p1_out'), t(pm, 'p1_in'), 4, 0.3);
+  b.wire(t(pm, 'p0_out'), t(inv, 'L'), 4, 5).wire(t(pm, 'p1_out'), t(inv, 'N'), 4, 5);
+  // lato DC: stringa → sezionatore DC → inverter, SPD DC a valle del sezionatore
+  b.wire(t(arr, 'DC+'), t(qdc, 'p0_in'), 6, 20).wire(t(arr, 'DC-'), t(qdc, 'p1_in'), 6, 20);
+  b.wire(t(qdc, 'p0_out'), t(inv, 'DC+'), 6, 2).wire(t(qdc, 'p1_out'), t(inv, 'DC-'), 6, 2);
+  b.wire(t(qdc, 'p0_out'), t(fdc, 'DC+'), 6, 0.2).wire(t(qdc, 'p1_out'), t(fdc, 'DC-'), 6, 0.2);
+  // protezione: masse, cornici dei moduli e SPD al collettore di terra
+  b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5);
+  b.wire(t(xpe, 't4'), t(inv, 'PE'), 4, 5).wire(t(xpe, 't5'), t(arr, 'PE'), 6, 20).wire(t(xpe, 't6'), t(fdc, 'PE'), 6, 0.5);
+  return b.project;
+}
+
 export const DEMO_PROJECTS: DemoProject[] = [
   {
     id: 'demo-monolocale',
@@ -374,6 +445,12 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Luce scale da tre punti (relè passo-passo)',
     summary: 'Magnetotermico differenziale, relè passo-passo e tre pulsanti in parallelo che comandano la stessa luce.',
     build: luceScale,
+  },
+  {
+    id: 'demo-fotovoltaico',
+    name: 'Casa con fotovoltaico 3,2 kWp',
+    summary: 'Stringa da 8 moduli, sezionatore e SPD lato DC, inverter da 3 kW con linea dedicata e contatore di produzione.',
+    build: fotovoltaico,
   },
   {
     id: 'demo-trifase',

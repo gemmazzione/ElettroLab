@@ -1,5 +1,5 @@
 import type { NodeProps } from '@xyflow/react';
-import { Activity, AirVent, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, WashingMachine, Zap } from 'lucide-react';
+import { Activity, AirVent, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, Sun, WashingMachine, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { deviceCurrent } from '../../engine/simulate';
 import { TERMINAL_Y_BOTTOM, TERMINAL_Y_TOP } from '../../model/geometry';
@@ -9,7 +9,7 @@ import type { TripCause } from '../../protection/stepper';
 const TRIP_LABEL: Record<TripCause, string> = { termico: 'scatto termico', magnetico: 'scatto magnetico', differenziale: 'scatto diff.', prova: 'prova T', fusione: 'fusibile fuso' };
 import { componentHeight, componentWidth, getTerminals } from '../../model/terminals';
 import type { ComponentInstance, LoadCategory } from '../../model/types';
-import { useStore } from '../../store/projectStore';
+import { meterPower, useStore } from '../../store/projectStore';
 import { fmt, fmtCurrent, fmtPower } from '../../ui/format';
 import { DinDeviceSvg } from '../svg/DinDeviceSvg';
 import { TerminalHandle } from './TerminalHandle';
@@ -68,6 +68,11 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const heat = useStore((s) => s.prot[id]?.heat ?? 0);
   const melt = useStore((s) => Math.max(0, ...(s.prot[id]?.melt ?? []).filter((m) => m < 1)));
   const testRcd = useStore((s) => s.testRcd);
+  const meterP = useStore((s) => {
+    const c = s.project.components.find((x) => x.id === id);
+    return c ? meterPower(s.result, c) : 0;
+  });
+  const meterE = useStore((s) => s.meterEnergy[id]);
   if (!comp) return null;
   const w = componentWidth(comp);
   const residual = comp.params.kind === 'rcd' || comp.params.kind === 'rcbo';
@@ -75,7 +80,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const heatPct = isFuse ? Math.min(100, melt * 100) : Math.min(100, (heat / H_TRIP) * 100);
   const blown = isFuse && !!comp.blown?.length;
   const terms = getTerminals(comp);
-  const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd';
+  const hasLever = comp.params.kind !== 'bar' && comp.params.kind !== 'spd' && comp.params.kind !== 'meter';
   return (
     <div className={`relative rounded-[3px] ${selected ? 'node-selected' : linked ? 'node-linked' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
       <IssueDot level={issue} />
@@ -87,6 +92,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         tripped={!!tripped || spdOver}
         onToggle={hasLever ? () => toggle(id) : undefined}
         onTest={residual ? () => testRcd(id) : undefined}
+        meter={comp.params.kind === 'meter' && running ? { p: meterP, fwd: meterE?.fwd ?? 0, rev: meterE?.rev ?? 0 } : null}
       />
       {running && (comp.params.kind === 'mcb' || comp.params.kind === 'rcbo' || isFuse) && heatPct > 1 && (
         <div className="pointer-events-none absolute bottom-[30px] left-[3px] right-[3px] h-[3px] rounded bg-slate-500/50" title={isFuse ? 'Consumo della cartuccia' : 'Stato termico'}>
@@ -148,7 +154,7 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
                 </div>
               ))}
               <div>
-                N {fmtCurrent(res.iN)} · {fmtPower(res.p)}
+                N {fmtCurrent(res.iN)} · {res.p < -1 ? `◄ immette ${fmtPower(-res.p)}` : fmtPower(res.p)}
               </div>
             </>
           ) : (
@@ -156,7 +162,7 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
               <div>
                 {fmt(res.v, 1)} V · {fmtCurrent(res.i)}
               </div>
-              <div>{fmtPower(res.p)}</div>
+              <div className={res.p < -1 ? 'text-amber-300' : undefined}>{res.p < -1 ? `◄ immette ${fmtPower(-res.p)}` : fmtPower(res.p)}</div>
             </>
           )
         ) : (
@@ -364,4 +370,136 @@ export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps
   );
 });
 
-export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode, button: ButtonNode };
+/** Generatore fotovoltaico: griglia di moduli con il punto di lavoro attuale. */
+export const PvArrayNode = memo(function PvArrayNode({ data, selected }: NodeProps) {
+  const id = (data as CompNodeData).componentId;
+  const comp = useComponent(id);
+  const running = useStore((s) => s.running);
+  const res = useStore((s) => (s.result && s.result.ok ? s.result.pvArrays.get(id) : undefined));
+  const irr = useStore((s) => s.project.pv?.irradiance ?? 1000);
+  const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
+  if (!comp || comp.params.kind !== 'pv-array') return null;
+  const p = comp.params.p;
+  const terms = getTerminals(comp);
+  const w = componentWidth(comp);
+  const h = componentHeight(comp);
+  const n = Math.max(1, Math.round(p.modulesPerString));
+  const cols = Math.min(n, 8);
+  const lit = irr > 0;
+  return (
+    <div
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
+      style={{ width: w, height: h }}
+    >
+      <IssueDot level={issue} />
+      <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
+        <Sun size={13} className={lit ? 'text-amber-300' : 'text-slate-500'} />
+        <span className="truncate">
+          {comp.label} · {p.name}
+        </span>
+        <span className="ml-auto font-mono text-[9.5px] font-normal text-slate-400">{fmt(irr, 0)} W/m²</span>
+      </div>
+      <div className="mx-2.5 mt-1.5 grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }} title={`${p.strings} × ${n} moduli da ${p.moduleWp} Wp`}>
+        {Array.from({ length: Math.min(n * p.strings, 16) }, (_, k) => (
+          <div
+            key={k}
+            className="h-[15px] rounded-[2px] border border-sky-300/30"
+            style={{ background: lit ? 'linear-gradient(135deg,#1e3a8a,#1d4ed8 60%,#60a5fa)' : '#172036' }}
+          />
+        ))}
+      </div>
+      <div className="mx-2.5 mt-1.5 rounded bg-slate-950/70 px-2 py-0.5 font-mono text-[10px] leading-4 text-slate-300">
+        {fmt((p.moduleWp * n * p.strings) / 1000, 2)} kWp · {p.strings}×{n}
+        {running && res ? (
+          <span className={res.pOut > 1 ? 'text-amber-200' : 'text-slate-400'}>
+            {' '}
+            · {res.pOut > 1 ? `${fmtPower(res.pOut)} DC` : `Voc ${fmt(res.voc, 0)} V`}
+          </span>
+        ) : null}
+      </div>
+      {terms.map((t) => (
+        <TerminalHandle key={t.key} t={t} y={h - 6} ownerLabel={comp.label} />
+      ))}
+      {terms.map((t) => (
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: h - 24 }}>
+          {t.label}
+        </span>
+      ))}
+    </div>
+  );
+});
+
+const INV_STATE_STYLE: Record<string, string> = {
+  produzione: 'text-emerald-300',
+  notte: 'text-slate-400',
+  'rete assente': 'text-amber-300',
+  'dc scollegato': 'text-slate-400',
+  'polarità invertita': 'text-red-300',
+  'tensione dc bassa': 'text-amber-300',
+  'tensione dc eccessiva': 'text-red-300',
+  'sovratensione rete': 'text-amber-300',
+};
+
+/** Inverter: ingressi DC in alto, uscita AC in basso, stato e potenza immessa. */
+export const InverterNode = memo(function InverterNode({ data, selected }: NodeProps) {
+  const id = (data as CompNodeData).componentId;
+  const comp = useComponent(id);
+  const running = useStore((s) => s.running);
+  const res = useStore((s) => (s.result && s.result.ok ? s.result.inverters.get(id) : undefined));
+  const issue = useHasIssue(id);
+  const linked = useLinkedToSelection(id);
+  if (!comp || comp.params.kind !== 'inverter') return null;
+  const p = comp.params.p;
+  const terms = getTerminals(comp);
+  const w = componentWidth(comp);
+  const h = componentHeight(comp);
+  const producing = running && res?.state === 'produzione' && res.pac > 1;
+  return (
+    <div
+      className={`relative rounded-lg border bg-slate-800 shadow-lg ${selected ? 'node-selected border-sky-400' : linked ? 'node-linked border-amber-400' : 'border-slate-600'}`}
+      style={{ width: w, height: h }}
+    >
+      <IssueDot level={issue} />
+      {terms.map((t) => (
+        <TerminalHandle key={t.key} t={t} y={t.side === 'top' ? 6 : h - 6} ownerLabel={comp.label} />
+      ))}
+      {terms.map((t) => (
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: t.side === 'top' ? 13 : h - 24 }}>
+          {t.label}
+        </span>
+      ))}
+      <div className="mt-7 flex items-center gap-2 px-2.5">
+        <div className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded border font-mono text-[10px] leading-3 ${producing ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>
+          <span>=</span>
+          <span>~</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[11px] font-semibold text-slate-100">
+            {comp.label} · Inverter {fmtPower(p.pacW)}
+          </div>
+          <div className="font-mono text-[9.5px] text-slate-400">
+            MPPT {p.mpptMinV}–{p.mpptMaxV} V{p.batteryKWh > 0 ? ` · batteria ${fmt(p.batteryKWh, 1)} kWh` : ''}
+          </div>
+        </div>
+      </div>
+      <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[10px] leading-4">
+        {!running || !res ? (
+          <span className="text-slate-500">spento (simulazione ferma)</span>
+        ) : (
+          <>
+            <div className={INV_STATE_STYLE[res.state] ?? 'text-slate-300'}>{res.state === 'produzione' ? `▲ immette ${fmtPower(res.pac)}` : res.state}</div>
+            {res.state === 'produzione' && (
+              <div className="text-slate-400">
+                DC {fmt(res.vdc, 0)} V · {fmtCurrent(res.idc)}
+                {res.clipped ? ' · limitato' : ''}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
+export const nodeTypes = { din: DinNode, supply: SupplyNode, earth: EarthNode, load: LoadNode, button: ButtonNode, 'pv-array': PvArrayNode, inverter: InverterNode };

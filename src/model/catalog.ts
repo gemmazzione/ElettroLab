@@ -12,6 +12,7 @@ export type CatalogCategory =
   | 'Utilizzatori'
   | 'Protezione dalle sovratensioni'
   | 'Comando'
+  | 'Fotovoltaico'
   | 'Altri dispositivi';
 
 export interface CatalogItem {
@@ -464,6 +465,68 @@ export const CATALOG: CatalogItem[] = [
     labelPrefix: 'F',
     defaults: { kind: 'spd', p: { poles: '3P+N', spdType: 2, uc: 275, up: 1.5, inKA: 20 } },
   },
+  {
+    id: 'pv-string',
+    kind: 'pv-array',
+    name: 'Generatore fotovoltaico (stringhe di moduli)',
+    category: 'Fotovoltaico',
+    description:
+      'Moduli fotovoltaici in serie (stringa) e stringhe in parallelo. Produce corrente continua in funzione di irraggiamento e temperatura. Dati di targa di un modulo da 400 Wp tipico, modificabili.',
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'PV',
+    defaults: {
+      kind: 'pv-array',
+      p: { name: 'Falda sud', moduleWp: 400, vmp: 34, imp: 11.77, voc: 41, isc: 12.5, tcVoc: -0.27, tcPmax: -0.35, tcIsc: 0.05, noct: 45, modulesPerString: 8, strings: 1 },
+    },
+  },
+  {
+    id: 'pv-inverter',
+    kind: 'inverter',
+    name: 'Inverter fotovoltaico monofase',
+    category: 'Fotovoltaico',
+    description:
+      "Converte la corrente continua dei moduli in alternata a 230 V e la immette nell'impianto. Insegue il punto di massima potenza (MPPT) e si spegne se manca la rete. Dati tipici di un 3 kW, modificabili.",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'INV',
+    defaults: { kind: 'inverter', p: { pacW: 3000, efficiency: 97, maxDcV: 600, mpptMinV: 90, mpptMaxV: 550, maxDcA: 16, batteryKWh: 0, batteryW: 0 } },
+  },
+  {
+    id: 'pv-inverter-hybrid',
+    kind: 'inverter',
+    name: 'Inverter ibrido con accumulo',
+    category: 'Fotovoltaico',
+    description:
+      "Inverter fotovoltaico con batteria: l'energia prodotta in più viene accumulata e usata quando i moduli non bastano. L'accumulo è considerato nell'analisi della giornata tipo.",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'INV',
+    defaults: { kind: 'inverter', p: { pacW: 3000, efficiency: 97, maxDcV: 600, mpptMinV: 90, mpptMaxV: 550, maxDcA: 16, batteryKWh: 5, batteryW: 2500 } },
+  },
+  {
+    id: 'dc-switch-2p',
+    kind: 'dc-switch',
+    name: 'Sezionatore DC 2P (fotovoltaico)',
+    category: 'Fotovoltaico',
+    description:
+      "Sezionatore per corrente continua tra moduli e inverter: permette di separare l'inverter dalla stringa. Va aperto solo a inverter spento: un arco in continua non si estingue da solo come in alternata.",
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'QDC',
+    defaults: { kind: 'dc-switch', p: { in: 25, maxV: 1000 } },
+  },
+  {
+    id: 'spd-dc',
+    kind: 'spd',
+    name: 'Scaricatore di sovratensione DC (fotovoltaico)',
+    category: 'Fotovoltaico',
+    description: 'SPD per il lato in corrente continua del fotovoltaico, collegato tra +, − e terra. Valori tipici di un tipo 2 per 1000 V DC, modificabili.',
+    mount: 'din',
+    modules: 3,
+    labelPrefix: 'FDC',
+    defaults: { kind: 'spd', p: { poles: 'DC', spdType: 2, uc: 1000, up: 4, inKA: 20 } },
+  },
   unavailable('contactor', 'Contattore modulare', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
   {
     id: 'step-relay',
@@ -489,7 +552,18 @@ export const CATALOG: CatalogItem[] = [
     defaults: { kind: 'button', p: { name: 'Pulsante' } },
   },
   unavailable('voltage-relay', 'Relè di controllo tensione', 'Altri dispositivi', 'richiede circuiti di comando ausiliari'),
-  unavailable('energy-meter', 'Misuratore di energia', 'Altri dispositivi', "l'integrazione dell'energia nel tempo non è modellata"),
+  {
+    id: 'energy-meter',
+    kind: 'meter',
+    name: 'Misuratore di energia 1P+N',
+    category: 'Distribuzione',
+    description:
+      'Misura potenza ed energia che lo attraversano nei due versi (prelievo e immissione). Usato come contatore di produzione del fotovoltaico o per misurare un circuito.',
+    mount: 'din',
+    modules: 2,
+    labelPrefix: 'P',
+    defaults: { kind: 'meter', p: { name: 'Contatore' } },
+  },
   unavailable('psu', 'Alimentatore modulare', 'Altri dispositivi', 'i circuiti in bassissima tensione non sono modellati'),
 ];
 
@@ -513,6 +587,10 @@ export const KIND_LABEL: Record<ComponentKind, string> = {
   spd: 'Scaricatore di sovratensione (SPD)',
   relay: 'Relè passo-passo',
   button: 'Pulsante',
+  'pv-array': 'Generatore fotovoltaico',
+  inverter: 'Inverter fotovoltaico',
+  'dc-switch': 'Sezionatore DC',
+  meter: 'Misuratore di energia',
   load: 'Utilizzatore',
 };
 

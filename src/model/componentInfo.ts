@@ -419,7 +419,64 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
     ],
   },
   'voltage-relay': { title: 'Relè di controllo tensione', summary: 'Interviene se la tensione esce dai limiti impostati, proteggendo gli apparecchi.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
-  'energy-meter': { title: 'Misuratore di energia', summary: 'Contatore modulare per misurare i consumi di un circuito.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
+  'energy-meter': {
+    title: 'Misuratore di energia',
+    summary: "Conta l'energia che lo attraversa nei due versi: prelievo e immissione.",
+    sections: [
+      S('A cosa serve', "Misura la potenza istantanea e integra nel tempo l'energia (kWh) di un circuito. Nel fotovoltaico si usa come contatore di produzione, tra la protezione della linea e l'inverter."),
+      S('Collegamento', "Fase e neutro entrano dall'alto ed escono dal basso, come un interruttore. Il verso della misura dipende dal collegamento: con l'alimentazione dall'alto, l'energia prodotta dall'inverter collegato sotto risulta nel verso uscita → ingresso."),
+      S('Nel simulatore', "Contatti sempre chiusi (5 mΩ). La potenza è P = Re(V × I*) ai morsetti d'ingresso; l'energia si accumula durante la simulazione nel tempo simulato e si può azzerare dalle proprietà. Il contatore fiscale di scambio con la rete è quello del distributore."),
+    ],
+  },
+  'pv-string': {
+    title: 'Generatore fotovoltaico',
+    summary: 'Moduli in serie (stringa) e stringhe in parallelo: trasformano la luce in corrente continua.',
+    sections: [
+      S('Come funziona', "Ogni cella genera una corrente proporzionale alla luce che riceve, a una tensione di circa mezzo volt. Le celle sono collegate in serie nel modulo; i moduli in serie formano una stringa, che somma le tensioni; più stringhe in parallelo sommano le correnti."),
+      S('Grandezze di targa', "Le condizioni standard di prova (STC) sono 1000 W/m² e cella a 25 °C. Pmax è la potenza di picco (Wp), Vmp e Imp tensione e corrente nel punto di massima potenza, Voc la tensione a vuoto, Isc la corrente di cortocircuito. Con il freddo la tensione sale, con il caldo la potenza cala."),
+      S('Sicurezza', "Con la luce i moduli sono SEMPRE in tensione: aprire il sezionatore DC o spegnere l'inverter non toglie tensione alla stringa. Una stringa di molti moduli supera facilmente qualche centinaio di volt in continua. Si lavora coprendo i moduli o di notte, con DPI e strumenti adatti."),
+      S('Nel simulatore', "Modello semplificato: temperatura di cella dal NOCT, potenza proporzionale all'irraggiamento corretta con il coefficiente di temperatura, tensione con il coefficiente della Voc. Niente ombreggiamenti, mismatch o dipendenza logaritmica della tensione dalla luce. Il lato DC non fa parte del calcolo in alternata."),
+    ],
+  },
+  'pv-inverter': {
+    title: 'Inverter fotovoltaico',
+    summary: "Converte la corrente continua dei moduli in alternata e la immette nell'impianto.",
+    sections: [
+      S('Come funziona', "Un inseguitore del punto di massima potenza (MPPT) regola la tensione della stringa per estrarre la potenza massima; lo stadio di uscita genera una corrente sinusoidale in fase con la tensione di rete. La potenza prodotta alimenta prima gli utilizzatori di casa; l'eccedenza va in rete attraverso il contatore del distributore."),
+      S('Protezione di interfaccia', "Se manca la rete l'inverter deve smettere di immettere (anti-isola): altrimenti chi lavora sulla linea del distributore la troverebbe in tensione. La protezione di interfaccia controlla tensione e frequenza e stacca l'inverter fuori dalle soglie; per gli impianti piccoli la regola tecnica di connessione (CEI 0-21) ne ammette l'integrazione nell'inverter. Le soglie e i limiti di potenza vanno verificati sulla norma vigente."),
+      S('Dimensionamento', "La tensione a vuoto della stringa alla temperatura minima del sito deve restare sotto la massima tensione DC dell'inverter; la tensione MPP deve stare nell'intervallo MPPT sia con la cella calda sia con la cella fredda; la corrente non deve superare la massima ammessa. Il rapporto tra potenza DC e AC di solito è vicino a 1."),
+      S('Collegamento lato AC', "Linea dedicata dal quadro, protetta contro le sovracorrenti e, se richiesto dal costruttore dell'inverter, con un differenziale del tipo indicato (A o B). Il PE dell'inverter va al collettore di terra."),
+      S('Nel simulatore', "Generatore di corrente che immette la potenza disponibile dai moduli (rendimento costante, limitata alla potenza nominale), calcolato per iterazioni sulla tensione di rete. Si stacca se la tensione ai suoi morsetti è sotto 0,85 o sopra 1,1 volte la nominale (soglie del modello). Nei calcoli di progetto (caduta di tensione, cortocircuito) la produzione è esclusa."),
+    ],
+  },
+  'pv-inverter-hybrid': {
+    title: 'Inverter ibrido con accumulo',
+    summary: "Inverter fotovoltaico con batteria: accumula l'energia in eccesso e la restituisce quando serve.",
+    sections: [
+      S('A cosa serve', "Senza accumulo l'energia prodotta e non consumata va in rete. Con la batteria l'eccedenza di mezzogiorno viene immagazzinata e usata la sera, aumentando l'autoconsumo e riducendo il prelievo."),
+      S('Grandezze', "Capacità utile (kWh), potenza di carica e scarica (W), rendimento di andata e ritorno. La batteria ha un suo sistema di gestione (BMS) e prescrizioni di installazione del costruttore (ventilazione, locale, protezioni lato DC)."),
+      S('Nel simulatore', "In tempo reale si comporta come l'inverter fotovoltaico. La batteria è considerata nell'analisi della giornata tipo: carica con l'eccedenza, scarica per coprire i consumi, rendimento complessivo 90% (valore indicativo)."),
+    ],
+  },
+  'dc-switch-2p': {
+    title: 'Sezionatore DC',
+    summary: "Separa l'inverter dalla stringa sul lato in corrente continua.",
+    sections: [
+      S('A cosa serve', "Permette la manutenzione dell'inverter separandolo dai moduli. Molti inverter lo hanno integrato; in alternativa se ne installa uno modulare vicino all'inverter."),
+      S('Perché è diverso', "In corrente continua la tensione non passa mai per lo zero: l'arco che si forma aprendo i contatti sotto carico non si spegne da solo come in alternata. Per questo i dispositivi per il fotovoltaico hanno tensioni DC di impiego dichiarate (es. 1000 V) e si manovrano preferibilmente a inverter spento."),
+      S('Attenzione', "Aprire il sezionatore non toglie tensione ai moduli e ai cavi lato stringa: restano in tensione finché c'è luce."),
+      S('Nel simulatore', "Due poli (+ e −) che collegano o separano le reti DC tra stringa e inverter."),
+    ],
+  },
+  'spd-dc': {
+    title: 'Scaricatore di sovratensione DC',
+    summary: 'Protegge il lato in continua del fotovoltaico dalle sovratensioni impulsive.',
+    sections: [
+      S('A cosa serve', "Le stringhe sul tetto sono esposte alle sovratensioni indotte dai fulmini. L'SPD DC, collegato tra +, − e terra vicino all'inverter (ed eventualmente vicino ai moduli se i cavi sono lunghi), devia la corrente impulsiva verso terra."),
+      S('Scelta', "La tensione massima continuativa in DC (Ucpv) deve superare la tensione a vuoto massima della stringa; il livello di protezione Up deve essere coordinato con la tenuta a impulso dell'inverter. La necessità di protezione si valuta come per gli altri SPD."),
+      S('Nel simulatore', "Non conduce in funzionamento ordinario; la verifica di cablaggio controlla che il morsetto PE raggiunga l'impianto di terra."),
+    ],
+  },
   psu: { title: 'Alimentatore modulare', summary: 'Fornisce bassissima tensione (es. 12/24 V) per circuiti ausiliari.', sections: [S('Stato', 'Funzionalità non implementata in questa versione.')] },
 };
 

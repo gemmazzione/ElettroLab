@@ -675,6 +675,36 @@ const sovratensioni: R = {
   },
 };
 
+// ------------------------------------------------------------------ 9b. fotovoltaico
+
+const fotovoltaicoRule: R = {
+  id: 'FV-712',
+  version: '1.0',
+  title: 'Impianto fotovoltaico: verifiche da completare con le norme specifiche',
+  description: 'Sezionamento lato DC, protezioni lato AC, connessione alla rete e protezione di interfaccia.',
+  area: 'Impianti fotovoltaici',
+  scope: 'Impianti con generatori fotovoltaici collegati alla rete',
+  severity: 'attenzione',
+  explanation:
+    'Gli impianti fotovoltaici hanno prescrizioni dedicate nella CEI 64-8 (parte 7, sezione sui sistemi fotovoltaici) e la connessione alla rete di bassa tensione segue la regola tecnica CEI 0-21 (protezione di interfaccia, dispositivi di interfaccia e generale, misura dell\'energia). Il simulatore controlla collegamenti, polarità, protezioni della linea e compatibilità stringa-inverter sui dati di targa, ma non verifica queste prescrizioni: il testo di riferimento non è stato controllato.',
+  refs: [
+    rIX('712'),
+    { edition: 'CEI 0-21', article: 'Regola tecnica di connessione degli utenti attivi alla rete BT', verified: false, note: 'Riferimento non verificato sul testo: requisiti di connessione, protezione di interfaccia e misura.' },
+  ],
+  requiredData: ['Schema di connessione approvato dal distributore', 'Dati di targa e certificazioni dell\'inverter', 'Tarature della protezione di interfaccia'],
+  evaluate: (ctx) => {
+    const invs = ctx.project.components.filter((c) => c.params.kind === 'inverter');
+    if (!invs.length) return [];
+    return invs.map((c) => ({
+      ruleId: 'FV-712',
+      status: 'verifica-campo' as const,
+      subject: c.label,
+      message: `Impianto con ${c.label}: connessione alla rete, protezione di interfaccia e prescrizioni specifiche del fotovoltaico vanno verificate con le norme vigenti e con il distributore.`,
+      componentIds: [c.id],
+    }));
+  },
+};
+
 // ------------------------------------------------------------------ 10. residenziale
 
 const addizionale30mA: R = {
@@ -790,6 +820,7 @@ export const RULESET_2007: RuleSet<NormCtx> = {
     sezionamento,
     suddivisione,
     sovratensioni,
+    fotovoltaicoRule,
     addizionale30mA,
     sezione37,
     verificheIniziali,

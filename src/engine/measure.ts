@@ -5,6 +5,7 @@ import { abs, add, C, sub, type Complex, ZERO } from './complex';
 import { solveNodal } from './mna';
 import { buildNetlist, innerNode } from './netlist';
 import { simulate, type SimResult } from './simulate';
+import { arrayOperatingPoint, pvEnv } from './pv';
 
 /**
  * Misura di resistenza tra due morsetti con l'impianto disalimentato e scollegato dalla rete:
@@ -45,6 +46,7 @@ export function prospectiveShortCircuit(project: Project, a: string, b: string):
     extra: [{ a, b, r: 0.001 }],
     closed: () => true,
     loadsOff: true,
+    noGeneration: true,
     ignoreFaults: true,
   });
   if (!r.ok) return null;
@@ -74,6 +76,7 @@ export function deviceShortCircuit(project: Project, c: ComponentInstance): numb
       ],
       closed: () => true,
       loadsOff: true,
+    noGeneration: true,
       ignoreFaults: true,
     });
     if (r.ok) {
@@ -127,4 +130,33 @@ export function voltageBetween(result: SimResult, a: string, b: string): number 
   const vb = result.terminalV.get(b);
   if (!va || !vb) return null;
   return abs(sub(va as Complex, vb as Complex));
+}
+
+/**
+ * Tensione continua tra due morsetti del lato DC del fotovoltaico (puntale rosso − puntale nero) [V].
+ * I moduli generano tensione con la luce anche a impianto spento: a vuoto si legge la Voc, con l'inverter
+ * in produzione la tensione del punto di lavoro. null se i puntali non sono ai capi di un generatore.
+ */
+export function dcVoltageBetween(project: Project, a: string, b: string, result: SimResult | null): number | null {
+  const uf = new UnionFind();
+  for (const w of project.wires) uf.union(w.from, w.to);
+  for (const c of project.components) {
+    if (c.params.kind === 'dc-switch' && c.closed) {
+      uf.union(terminalId(c.id, 'p0_in'), terminalId(c.id, 'p0_out'));
+      uf.union(terminalId(c.id, 'p1_in'), terminalId(c.id, 'p1_out'));
+    }
+  }
+  if (uf.same(a, b)) return 0;
+  const env = pvEnv(project.pv);
+  for (const c of project.components) {
+    if (c.params.kind !== 'pv-array') continue;
+    const op = arrayOperatingPoint(c.params.p, env.irradiance, env.ambientC);
+    const live = result && result.ok ? result.pvArrays.get(c.id) : undefined;
+    const v = live && live.pOut > 1 ? live.vmp : op.voc;
+    const plus = terminalId(c.id, 'DC+');
+    const minus = terminalId(c.id, 'DC-');
+    if (uf.same(a, plus) && uf.same(b, minus)) return v;
+    if (uf.same(a, minus) && uf.same(b, plus)) return -v;
+  }
+  return null;
 }
