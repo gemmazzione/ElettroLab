@@ -16,6 +16,7 @@ import {
   Save,
   Square,
   Stethoscope,
+  Sun,
   Tags,
   Undo2,
   Zap,
@@ -78,14 +79,14 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
         </div>
       </div>
       <div className="mr-2 flex rounded-md bg-slate-950 p-0.5 text-[12px] font-semibold">
-        {(['lab', 'academy'] as const).map((m) => (
+        {(['lab', 'pv', 'academy'] as const).map((m) => (
           <button
             key={m}
             onClick={() => s.setMode(m)}
             className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${s.mode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            {m === 'lab' ? <Zap size={13} /> : <GraduationCap size={13} />}
-            {m === 'lab' ? 'Laboratorio' : 'Accademia'}
+            {m === 'lab' ? <Zap size={13} /> : m === 'pv' ? <Sun size={13} /> : <GraduationCap size={13} />}
+            {m === 'lab' ? 'Laboratorio' : m === 'pv' ? 'Progetta FV' : 'Accademia'}
           </button>
         ))}
       </div>

@@ -10,6 +10,7 @@ import { Dashboard } from './ui/Dashboard';
 import { InfoDialog, OpenDialog, Toasts } from './ui/Dialogs';
 import { CatalogInfoDialog } from './ui/InfoPanel';
 import { AcademyView } from './ui/Academy';
+import { PvDesignView } from './ui/PvDesignView';
 import { PropertiesPanel } from './ui/PropertiesPanel';
 import { TopBar } from './ui/TopBar';
 
@@ -61,6 +62,8 @@ export default function App() {
       <TopBar onOpen={() => setOpenDlg(true)} onInfo={() => setInfoDlg(true)} />
       {mode === 'academy' ? (
         <AcademyView key={dataVersion} />
+      ) : mode === 'pv' ? (
+        <PvDesignView key={dataVersion} />
       ) : (
       <div className="flex min-h-0 flex-1">
         <CatalogPanel />
