@@ -73,7 +73,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
     return c ? meterPower(s.result, c) : 0;
   });
   const meterE = useStore((s) => s.meterEnergy[id]);
-  // Alimentatore: uscita presente se l'ingresso ha tensione (LED acceso)
+  // Alimentatore e trasformatore: uscita presente se l'ingresso ha tensione (LED acceso)
   const psuOn = useStore((s) => {
     if (!s.running || !s.result || !s.result.ok) return false;
     const a = s.result.terminalV.get(`${id}:L`);
@@ -88,7 +88,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
   const blown = isFuse && !!comp.blown?.length;
   const terms = getTerminals(comp);
   // Dispositivi automatici o senza manovra: niente leva da cliccare.
-  const hasLever = !['bar', 'spd', 'meter', 'contactor', 'voltage-relay', 'psu'].includes(comp.params.kind);
+  const hasLever = !['bar', 'spd', 'meter', 'contactor', 'voltage-relay', 'psu', 'transformer'].includes(comp.params.kind);
   return (
     <div className={`relative rounded-[3px] ${selected ? 'node-selected' : linked ? 'node-linked' : ''}`} style={{ width: w, height: componentHeight(comp) }}>
       <IssueDot level={issue} />

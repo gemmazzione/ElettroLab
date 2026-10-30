@@ -33,6 +33,7 @@ export type ComponentKind =
   | 'contactor'
   | 'voltage-relay'
   | 'psu'
+  | 'transformer'
   | 'pv-array'
   | 'inverter'
   | 'dc-switch'
@@ -175,6 +176,25 @@ export interface VoltageRelayParams {
 }
 
 /** Alimentatore modulare 230 V AC → bassissima tensione DC. */
+/**
+ * Trasformatore monofase (di sicurezza o per campanelli): primario a 230 V, secondario isolato in bassissima tensione.
+ * Modello: trasformatore ideale con l'impedenza di cortocircuito riportata al secondario e le perdite a vuoto sul primario.
+ */
+export interface TransformerParams {
+  /** Potenza nominale [VA] */
+  sn: number;
+  /** Tensione nominale primaria [V] */
+  u1: number;
+  /** Tensione nominale secondaria a pieno carico [V] */
+  u2: number;
+  /** Tensione di cortocircuito [%] */
+  ukPct: number;
+  /** Parte resistiva della tensione di cortocircuito (perdite nel rame) [%] */
+  ukrPct: number;
+  /** Potenza assorbita a vuoto [W] */
+  noLoadW: number;
+}
+
 export interface PsuParams {
   vout: number;
   /** Potenza nominale in uscita [W] */
@@ -268,6 +288,8 @@ export interface LoadParams {
   category: LoadCategory;
   /** Potenza nominale alla tensione nominale [W] */
   powerW: number;
+  /** Tensione nominale dell'apparecchio [V] (default 230; fino a 50 V è un apparecchio in bassissima tensione) */
+  ratedV?: number;
   /** Utilizzatore acceso (interruttore locale/apparecchio in funzione) */
   on: boolean;
   /** Lunghezza della conduttura quadro → utilizzatore [m] */
@@ -321,6 +343,7 @@ export type ComponentParams =
   | { kind: 'contactor'; p: ContactorParams }
   | { kind: 'voltage-relay'; p: VoltageRelayParams }
   | { kind: 'psu'; p: PsuParams }
+  | { kind: 'transformer'; p: TransformerParams }
   | { kind: 'pv-array'; p: PvArrayParams }
   | { kind: 'inverter'; p: InverterParams }
   | { kind: 'dc-switch'; p: DcSwitchParams }

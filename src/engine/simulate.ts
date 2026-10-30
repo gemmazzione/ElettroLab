@@ -3,9 +3,9 @@ import { catalogItem } from '../model/catalog';
 import { LIVE_THRESHOLD_V, SHORT_CIRCUIT_Z_THRESHOLD } from '../model/constants';
 import { getPoles, isResidualDevice, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys } from '../model/terminals';
 import type { Phase, Project } from '../model/types';
-import { abs, add, conj, div, mul, sub, type Complex, ZERO } from './complex';
+import { abs, add, C, conj, div, mul, sub, type Complex, ZERO } from './complex';
 import { solveNodal, SingularMatrixError, type Branch, type CurrentInjection } from './mna';
-import { buildNetlist, innerNode, NODE_EARTH, NODE_STAR, starNode, type LineKey, type NetElement, type NetlistOptions } from './netlist';
+import { buildNetlist, innerNode, LOAD_RATED_VOLTAGE_OF as ratedOf, NODE_EARTH, NODE_STAR, starNode, type LineKey, type NetElement, type NetlistOptions } from './netlist';
 import { inverterDcLink } from './dc';
 import {
   arrayOperatingPoint,
@@ -21,7 +21,7 @@ import {
 export type AlertSeverity = 'errore' | 'attenzione' | 'info';
 
 export interface SimAlert {
-  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE' | 'SPD_TOV' | 'PV_FAULT' | 'PV_EXPORT';
+  code: 'SHORT_CIRCUIT' | 'OVERCURRENT' | 'FAULT_CURRENT' | 'RESIDUAL' | 'OVER_CONTRACT' | 'VOLTAGE_RANGE' | 'TOUCH_VOLTAGE' | 'NEUTRAL_LIVE' | 'SPD_TOV' | 'PV_FAULT' | 'PV_EXPORT' | 'TRANSFORMER_OVERLOAD';
   severity: AlertSeverity;
   message: string;
   componentIds: string[];
@@ -51,6 +51,19 @@ export interface PvArrayResult extends PvOperatingPoint {
   inverterId: string | null;
   /** Potenza effettivamente prelevata dall'inverter [W] */
   pOut: number;
+}
+
+export interface TransformerResult {
+  /** Tensione primaria e secondaria [V] */
+  v1: number;
+  v2: number;
+  /** Corrente primaria (escluso l'assorbimento a vuoto) e secondaria [A] */
+  i1: number;
+  i2: number;
+  /** Potenza apparente erogata dal secondario [VA] */
+  s2: number;
+  /** Carico rispetto alla potenza nominale [%] */
+  loadingPct: number;
 }
 
 export interface LoadResult {
@@ -113,6 +126,7 @@ export type SimResult =
       supply: SupplyResult;
       inverters: Map<string, InverterResult>;
       pvArrays: Map<string, PvArrayResult>;
+      transformers: Map<string, TransformerResult>;
       /** Wallbox con gestione della potenza */
       evse?: Map<string, EvseResult>;
       alerts: SimAlert[];
@@ -211,13 +225,18 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
   // Solo i nodi galvanicamente connessi alla sorgente hanno un potenziale determinato.
   const uf = new UnionFind();
   for (const e of net.elements) uf.union(e.a, e.b);
+  // Il secondario di un trasformatore è separato galvanicamente ma ha un potenziale determinato se il primario è alimentato.
+  const primaryLive = new Set(net.couplings.filter((k) => uf.same(k.p1, NODE_STAR) && uf.same(k.p2, NODE_STAR)).map((k) => k.componentId));
+  for (const k of net.couplings) if (primaryLive.has(k.componentId)) uf.union(k.s1, NODE_STAR);
   const live = (n: string) => uf.same(n, NODE_STAR);
   const active = net.elements.filter((e) => live(e.a));
+  const couplings = net.couplings.filter((k) => primaryLive.has(k.componentId));
   const nodes = new Set<string>();
   for (const e of active) {
     nodes.add(e.a);
     nodes.add(e.b);
   }
+  for (const k of couplings) for (const x of [k.p1, k.p2, k.s1, k.s2]) nodes.add(x);
 
   const branches: Branch[] = active.map((e) => ({ a: e.a, b: e.b, z: e.z }));
   const injections: CurrentInjection[] = [];
@@ -292,7 +311,7 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
       inj.push({ node: pl.nodeL, i: pl.current });
       inj.push({ node: pl.nodeN, i: { re: -pl.current.re, im: -pl.current.im } });
     }
-    return solveNodal([...nodes], NODE_STAR, branches, inj);
+    return solveNodal([...nodes], NODE_STAR, branches, inj, couplings);
   };
   const invVoltage = (Vm: Map<string, Complex>, pl: InvPlan): Complex | null => {
     if (!pl.nodeL || !pl.nodeN || !live(pl.nodeL) || !live(pl.nodeN)) return null;
@@ -457,7 +476,7 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
       v: vAvg,
       i: Math.max(...phaseI),
       p,
-      dropPct: ((sp.voltage - vAvg) / sp.voltage) * 100,
+      dropPct: ((ratedOf(c) - vAvg) / ratedOf(c)) * 100,
       energized: phaseV.some((v) => v > 1),
       ...(keys.length > 1 ? { phaseV, phaseI } : {}),
       vN: vs ? sub(vs, vEarth) : null,
@@ -493,7 +512,31 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
     lineV,
   };
 
+  // Trasformatori: correnti dal punto di lavoro del doppio bipolo.
+  const transformers = new Map<string, TransformerResult>();
+  for (const k of net.couplings) {
+    const c = project.components.find((x) => x.id === k.componentId);
+    if (!c || c.params.kind !== 'transformer') continue;
+    const g = (x: string) => V.get(x) ?? ZERO;
+    const on = primaryLive.has(k.componentId);
+    const vp = on ? sub(g(k.p1), g(k.p2)) : ZERO;
+    const vs = on ? sub(g(k.s1), g(k.s2)) : ZERO;
+    const is = on ? div(sub(div(vp, C(k.n)), vs), k.z) : ZERO;
+    const s2 = abs(vs) * abs(is);
+    transformers.set(c.id, { v1: abs(vp), v2: abs(vs), i1: abs(is) / k.n, i2: abs(is), s2, loadingPct: (s2 / c.params.p.sn) * 100 });
+  }
+
   const alerts: SimAlert[] = [];
+  for (const [id, t] of transformers) {
+    if (t.loadingPct <= 105) continue;
+    const c = project.components.find((x) => x.id === id)!;
+    alerts.push({
+      code: 'TRANSFORMER_OVERLOAD',
+      severity: t.loadingPct > 150 ? 'errore' : 'attenzione',
+      message: `${c.label}: carico ${n(t.s2, 0)} VA, ${n(t.loadingPct, 0)}% della potenza nominale. Un trasformatore sovraccarico si scalda e, se ha la protezione termica, si spegne.`,
+      componentIds: [id],
+    });
+  }
   for (const [id, r] of inverters) {
     const c = project.components.find((x) => x.id === id)!;
     if (r.state === 'polarità invertita' || r.state === 'tensione dc eccessiva' || r.state === 'sovratensione rete') {
@@ -565,11 +608,12 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
   for (const c of project.components) {
     if (c.params.kind !== 'load') continue;
     const r = loads.get(c.id);
-    if (r && r.energized && (r.v < sp.voltage * 0.9 || r.v > sp.voltage * 1.1)) {
+    const ur = ratedOf(c);
+    if (r && r.energized && (r.v < ur * 0.9 || r.v > ur * 1.1)) {
       alerts.push({
         code: 'VOLTAGE_RANGE',
         severity: 'attenzione',
-        message: `${c.label} (${c.params.p.name}): tensione ${n(r.v, 1)} V fuori dall'intervallo ${sp.voltage} V ± 10%.`,
+        message: `${c.label} (${c.params.p.name}): tensione ${n(r.v, 1)} V fuori dall'intervallo ${ur} V ± 10%.`,
         componentIds: [c.id],
       });
     }
@@ -648,6 +692,7 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
     supply: supplyResult,
     inverters,
     pvArrays,
+    transformers,
     alerts,
   };
 }

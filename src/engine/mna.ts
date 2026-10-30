@@ -23,6 +23,20 @@ export interface CurrentInjection {
   i: Complex;
 }
 
+/**
+ * Trasformatore ideale con rapporto n = U1/U2 e impedenza z riportata al secondario (p = primario, s = secondario).
+ * Corrente erogata dal secondario: Is = (Vp/n − Vs)/z; corrente assorbita dal primario: Ip = Is/n.
+ * Entra nella matrice delle ammettenze come un doppio bipolo simmetrico.
+ */
+export interface Coupling {
+  p1: string;
+  p2: string;
+  s1: string;
+  s2: string;
+  n: number;
+  z: Complex;
+}
+
 export class SingularMatrixError extends Error {}
 
 export function solveNodal(
@@ -30,6 +44,7 @@ export function solveNodal(
   ground: string,
   branches: Branch[],
   injections: CurrentInjection[],
+  couplings: Coupling[] = [],
 ): Map<string, Complex> {
   const index = new Map<string, number>();
   for (const n of nodes) if (n !== ground && !index.has(n)) index.set(n, index.size);
@@ -51,6 +66,21 @@ export function solveNodal(
     if (ia !== undefined && ib !== undefined) {
       put(ia, ib, neg(y));
       put(ib, ia, neg(y));
+    }
+  }
+  for (const k of couplings) {
+    const y = div(C(1), k.z);
+    const nodesK = [k.p1, k.p2, k.s1, k.s2].map((x) => index.get(x));
+    // Coefficienti: righe/colonne p1, p2, s1, s2; segno +1/−1 sui morsetti, fattore 1/n sul lato primario.
+    const w = [1 / k.n, -1 / k.n, -1, 1];
+    for (let r = 0; r < 4; r++) {
+      const ir = nodesK[r];
+      if (ir === undefined) continue;
+      for (let c = 0; c < 4; c++) {
+        const ic = nodesK[c];
+        if (ic === undefined) continue;
+        put(ir, ic, mul(y, C(w[r]! * w[c]!)));
+      }
     }
   }
   for (const inj of injections) {

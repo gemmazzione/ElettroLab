@@ -1,6 +1,6 @@
 import { catalogItem } from '../model/catalog';
 import { WIRE_COLOR_LABEL } from '../model/constants';
-import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId, terminalId } from '../model/terminals';
+import { getPoles, getTerminals, isElvLoad, isResidualDevice, isSwitchingDevice, parseTerminalId, terminalId } from '../model/terminals';
 import type { ComponentInstance, Project, Terminal, TerminalFunction } from '../model/types';
 import { inverterDcLink } from '../engine/dc';
 import { analyzeCircuits, buildNetGraph, netsConnected, phaseOfNet, residualDevicesIn } from './netGraph';
@@ -60,7 +60,7 @@ export function checkWiring(project: Project): Issue[] {
       explanation: 'Aggiungi "Fornitura monofase 230 V" dalla categoria Alimentazione e collegane i morsetti L e N all\'interruttore generale.',
     });
   }
-  if (loads.length > 0 && !project.components.some((c) => c.params.kind === 'earth')) {
+  if (loads.some((c) => !isElvLoad(c)) && !project.components.some((c) => c.params.kind === 'earth')) {
     push({
       code: 'NO_EARTH',
       severity: 'errore',
@@ -219,7 +219,8 @@ export function checkWiring(project: Project): Issue[] {
   // ------------------------------------------------------------ morsetti non collegati
   for (const c of project.components) {
     if (c.params.kind === 'bar') continue;
-    const free = getTerminals(c).filter((t) => !wireCount.has(t.id));
+    // Gli apparecchi in bassissima tensione (classe III) non hanno conduttore di protezione.
+    const free = getTerminals(c).filter((t) => !wireCount.has(t.id) && !(t.fn === 'PE' && isElvLoad(c)));
     if (free.length === 0) continue;
     push({
       code: 'UNCONNECTED',
@@ -377,6 +378,94 @@ export function checkWiring(project: Project): Issue[] {
           componentIds: [c.id],
         });
       }
+    }
+  }
+
+  // Bassissima tensione: trasformatori e utilizzatori a 12/24 V.
+  const elvEdges = [
+    ...g.poleEdges.map((e) => ({ a: e.netIn, b: e.netOut, device: e.deviceId })),
+    ...project.components.filter((c) => c.params.kind === 'button').map((c) => ({ a: g.netOf(terminalId(c.id, 'in')), b: g.netOf(terminalId(c.id, 'out')), device: c.id })),
+  ];
+  const elvReach = (from: string, to: string) => {
+    const seen = new Set([from]);
+    const queue = [from];
+    while (queue.length) {
+      const n = queue.shift()!;
+      if (n === to) return true;
+      for (const e of elvEdges) {
+        const o = e.a === n ? e.b : e.b === n ? e.a : null;
+        if (o && !seen.has(o)) {
+          seen.add(o);
+          queue.push(o);
+        }
+      }
+    }
+    return false;
+  };
+  const toMains = (net: string) => [...g.supplyPhaseNets.map((x) => x.net), g.supplyNet.N].some((m) => m && elvReach(net, m));
+  const transformers = project.components.filter((c) => c.params.kind === 'transformer');
+  for (const t of transformers) {
+    const sec = ['S1', 'S2'].map((k) => g.netOf(terminalId(t.id, k)));
+    if (sec.some(toMains)) {
+      push({
+        code: 'ELV_MAINS',
+        severity: 'errore',
+        title: 'Secondario del trasformatore collegato alla rete',
+        message: `${lbl(t)}: un morsetto del secondario raggiunge la fase o il neutro della fornitura.`,
+        explanation: 'Il secondario deve restare separato dalla rete: collegandolo alla rete si perde la separazione di sicurezza e il trasformatore può essere attraversato da correnti di cortocircuito.',
+        componentIds: [t.id],
+      });
+    } else if (sec.some((n) => g.earthNets.has(n))) {
+      push({
+        code: 'ELV_EARTHED',
+        severity: 'info',
+        title: 'Secondario collegato a terra',
+        message: `${lbl(t)}: un morsetto del secondario è collegato all'impianto di terra.`,
+        explanation: 'Un circuito SELV non va collegato a terra. Con un punto a terra diventa un sistema PELV, ammesso in casi particolari con prescrizioni diverse.',
+        componentIds: [t.id],
+      });
+    }
+  }
+  for (const c of project.components) {
+    if (!isElvLoad(c) || c.params.kind !== 'load') continue;
+    const name = `${c.label} (${c.params.p.name})`;
+    const nl = g.netOf(terminalId(c.id, 'L'));
+    const nn = g.netOf(terminalId(c.id, 'N'));
+    if (toMains(nl) || toMains(nn)) {
+      push({
+        code: 'ELV_LOAD_ON_MAINS',
+        severity: 'errore',
+        title: 'Apparecchio in bassissima tensione collegato alla rete',
+        message: `${name}: è un apparecchio a ${c.params.p.ratedV} V ma è collegato alla rete a 230 V.`,
+        explanation: 'Gli apparecchi in bassissima tensione si alimentano dal secondario di un trasformatore (o di un alimentatore). A 230 V sarebbero attraversati da una corrente molte volte superiore a quella di targa.',
+        componentIds: [c.id],
+      });
+      continue;
+    }
+    const fed = transformers.some((t) => {
+      const s1 = g.netOf(terminalId(t.id, 'S1'));
+      const s2 = g.netOf(terminalId(t.id, 'S2'));
+      return (elvReach(nl, s1) && elvReach(nn, s2)) || (elvReach(nl, s2) && elvReach(nn, s1));
+    });
+    if (!fed) {
+      push({
+        code: 'LOAD_NOT_FED',
+        severity: 'attenzione',
+        title: 'Apparecchio in bassissima tensione non alimentato',
+        message: `${name}: i morsetti non raggiungono i due morsetti del secondario di un trasformatore.`,
+        explanation: `Collega i due conduttori dell'apparecchio ai morsetti del secondario di un trasformatore da ${c.params.p.ratedV} V (eventualmente passando da un pulsante o da un interruttore).`,
+        componentIds: [c.id],
+      });
+    }
+    if (g.earthNets.has(g.netOf(terminalId(c.id, 'PE')))) {
+      push({
+        code: 'ELV_PE',
+        severity: 'info',
+        title: 'Apparecchio in bassissima tensione collegato a terra',
+        message: `${name}: il morsetto PE è collegato all'impianto di terra.`,
+        explanation: 'Gli apparecchi alimentati in SELV (classe III) non si collegano al conduttore di protezione: la sicurezza viene dalla bassissima tensione e dalla separazione dalla rete.',
+        componentIds: [c.id],
+      });
     }
   }
 

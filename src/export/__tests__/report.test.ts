@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEMO_PROJECTS, trifase } from '../../projects/demos';
+import { isElvLoad } from '../../model/terminals';
 import { buildReport, DISCLAIMER, pdfSafe } from '../reportData';
 
 describe('relazione PDF: contenuti', () => {
@@ -11,7 +12,7 @@ describe('relazione PDF: contenuti', () => {
       const titles = r.tables.map((t) => t.title);
       expect(titles).toEqual(expect.arrayContaining(['Elenco dei dispositivi', 'Circuiti utilizzatori', 'Verifiche normative', 'Verifiche di cablaggio']));
       const circuits = r.tables.find((t) => t.title === 'Circuiti utilizzatori')!;
-      expect(circuits.body).toHaveLength(p.components.filter((c) => c.params.kind === 'load').length);
+      expect(circuits.body).toHaveLength(p.components.filter((c) => c.params.kind === 'load' && !isElvLoad(c)).length);
       for (const t of r.tables) for (const row of t.body) expect(row).toHaveLength(t.head.length);
       expect(r.disclaimer).toBe(DISCLAIMER);
       expect(r.normSummary).not.toMatch(/^Conforme/);

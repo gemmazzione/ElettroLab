@@ -27,6 +27,7 @@ import { COMB_LABEL, COMB_RATED_A, COMB_SECTION, combDevices } from '../model/co
 import { WIRE_SECTIONS, type PanelDef, type ComponentInstance, type Conductor, type LoadCategory, type Wire, type WireColor } from '../model/types';
 import { useStore } from '../store/projectStore';
 import { InstallSection } from './InstallSection';
+import { TransformerEditor, TransformerLive } from './TransformerPanels';
 import { DayProfileSection, InverterEditor, InverterLive, MeterSection, PvArrayEditor, PvArrayLive, PvEnvironmentSection, StringChecksSection } from './PvPanels';
 import { TripCurveSection } from './TripCurveSection';
 import { InfoTab } from './InfoPanel';
@@ -383,6 +384,7 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             </p>
           </div>
         )}
+        {pr.kind === 'transformer' && <TransformerEditor comp={comp} />}
         {pr.kind === 'psu' && (
           <>
             <div className="grid grid-cols-2 gap-2">
@@ -496,6 +498,16 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
               <Field label="Potenza nominale">
                 <NumberInput value={pr.p.powerW} min={0} max={20000} step={50} suffix="W" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, powerW: v } })} />
               </Field>
+              {pr.p.phases !== 3 && (
+                <Field label="Tensione nominale" hint="12 e 24 V: apparecchi in bassissima tensione, da alimentare con un trasformatore">
+                  <Select
+                    value={pr.p.ratedV ?? 230}
+                    options={[230, 24, 12]}
+                    format={(v) => `${v} V~`}
+                    onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, ratedV: v === 230 ? undefined : v } })}
+                  />
+                </Field>
+              )}
               <Field label="Fattore di potenza cos φ" hint="1 = carico resistivo; motori e compressori hanno cos φ minore di 1 (dato di targa)">
                 <NumberInput value={pr.p.cosPhi ?? 1} min={0.3} max={1} step={0.01} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cosPhi: v } })} />
               </Field>
@@ -518,7 +530,7 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             )}
             {(() => {
               if (pr.p.powerW <= 0) return <Row k="Impedenza equivalente" v="—" />;
-              const z = loadBranchImpedance(pr.p.powerW / (pr.p.phases === 3 ? 3 : 1), pr.p.cosPhi ?? 1);
+              const z = loadBranchImpedance(pr.p.powerW / (pr.p.phases === 3 ? 3 : 1), pr.p.cosPhi ?? 1, pr.p.ratedV ?? 230);
               const lbl = pr.p.phases === 3 ? 'Impedenza per ramo della stella' : 'Impedenza equivalente';
               return <Row k={lbl} v={z.im > 0.001 ? `${fmt(z.re, 2)} + j${fmt(z.im, 2)} Ω` : `${fmt(z.re, 2)} Ω`} />;
             })()}
@@ -533,6 +545,7 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
 
       {running && result && result.ok && <LiveValues comp={comp} />}
       {pr.kind === 'load' && (pr.p.category === 'ricarica' || pr.p.evse) && <EvseSection comp={comp} />}
+      {pr.kind === 'transformer' && running && <TransformerLive comp={comp} />}
       {pr.kind === 'pv-array' && (
         <>
           {running && <PvArrayLive comp={comp} />}

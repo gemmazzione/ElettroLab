@@ -25,6 +25,14 @@ export function isSwitchingDevice(kind: ComponentKind): boolean {
   return kind === 'switch' || kind === 'mcb' || kind === 'rcd' || kind === 'rcbo' || kind === 'relay' || kind === 'fuse' || kind === 'dc-switch' || kind === 'contactor' || kind === 'voltage-relay';
 }
 
+/** Tensione massima della bassissima tensione in alternata [V]. */
+export const ELV_MAX_V = 50;
+
+/** Utilizzatore in bassissima tensione (alimentato da un trasformatore, non dalla rete). */
+export function isElvLoad(c: ComponentInstance): boolean {
+  return c.params.kind === 'load' && (c.params.p.ratedV ?? 230) <= ELV_MAX_V;
+}
+
 export function isResidualDevice(kind: ComponentKind): boolean {
   return kind === 'rcd' || kind === 'rcbo';
 }
@@ -201,6 +209,14 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
         { key: 'N', label: 'N', fn: 'N', role: 'in', side: 'top', x: w * 0.7 },
         { key: 'V+', label: '+', fn: 'DC+', role: 'out', side: 'bottom', x: w * 0.3 },
         { key: 'V-', label: '−', fn: 'DC-', role: 'out', side: 'bottom', x: w * 0.7 },
+      ];
+    case 'transformer':
+      // Primario in alto (230 V), secondario in basso (bassissima tensione, isolato dalla rete).
+      return [
+        { key: 'L', label: 'L', fn: 'L', role: 'in', side: 'top', x: w * 0.3 },
+        { key: 'N', label: 'N', fn: 'N', role: 'in', side: 'top', x: w * 0.7 },
+        { key: 'S1', label: '~', fn: 'L', role: 'out', side: 'bottom', x: w * 0.3 },
+        { key: 'S2', label: '~', fn: 'N', role: 'out', side: 'bottom', x: w * 0.7 },
       ];
     case 'dc-switch':
       return [

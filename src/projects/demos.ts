@@ -433,6 +433,47 @@ export function contattore(): Project {
   return b.project;
 }
 
+/** Trasformatori: campanello a 12 V e faretti in bassissima tensione di sicurezza. */
+export function trasformatori(): Project {
+  const b = new ProjectBuilder('Campanello e faretti a 12 V', 2, 12);
+  b.project.description =
+    'Due trasformatori nel quadro: TR1 (8 VA) alimenta la suoneria del campanello attraverso il pulsante, TR2 (63 VA) i faretti a 12 V. Il secondario è separato dalla rete: misura la tensione tra un morsetto del secondario e la terra, poi tra i due morsetti. ' +
+    'Prova ad aumentare la potenza dei faretti oltre i 63 VA o a mettere in cortocircuito il secondario: guarda la tensione che cala e l\'avviso di sovraccarico.';
+  const cnt = b.add('supply-mono', { position: { x: -280, y: 30 } });
+  const q1 = b.add('mcb-2p', { rail: { row: 0, slot: 0 } }, (c) => {
+    setMcb(c, 25, 'C', 6);
+    c.label = 'Q1';
+  });
+  const q2 = b.add('rcd-2p', { rail: { row: 0, slot: 3 } }, (c) => (c.closed = true));
+  const q3 = b.add('mcb-1pn', { rail: { row: 0, slot: 6 } }, (c) => {
+    setMcb(c, 6);
+    c.closed = true;
+  });
+  const q4 = b.add('mcb-1pn', { rail: { row: 0, slot: 7 } }, (c) => {
+    setMcb(c, 6);
+    c.closed = true;
+  });
+  const t1 = b.add('transformer-bell', { rail: { row: 1, slot: 0 } });
+  const t2 = b.add('transformer-safety', { rail: { row: 1, slot: 3 } });
+  const xpe = b.add('bar-pe-8', { rail: { row: 1, slot: 8 } });
+  const earth = b.add('earth', { position: { x: -260, y: 420 } });
+  const pb = b.add('pushbutton', { position: { x: 300, y: 560 } });
+  const bell = b.add('load-campanello', { position: { x: 120, y: 700 } });
+  const spots = b.add('load-faretti-12v', { position: { x: 420, y: 700 } });
+  b.wire(t(cnt, 'L'), t(q1, 'p0_in'), 6, 8).wire(t(cnt, 'N'), t(q1, 'p1_in'), 6, 8);
+  b.wire(t(q1, 'p0_out'), t(q2, 'p0_in'), 6).wire(t(q1, 'p1_out'), t(q2, 'p1_in'), 6);
+  b.wire(t(q2, 'p0_out'), t(q3, 'p0_in'), 4).wire(t(q2, 'p1_out'), t(q3, 'p1_in'), 4);
+  bridge(b, [q3, q4], 4);
+  b.wire(t(q3, 'p0_out'), t(t1, 'L'), 1.5, 0.3).wire(t(q3, 'p1_out'), t(t1, 'N'), 1.5, 0.3);
+  b.wire(t(q4, 'p0_out'), t(t2, 'L'), 1.5, 0.3).wire(t(q4, 'p1_out'), t(t2, 'N'), 1.5, 0.3);
+  // bassissima tensione: TR1 → pulsante → suoneria; TR2 → faretti. Gli apparecchi in classe III non hanno PE.
+  b.wire(t(t1, 'S1'), t(pb, 'in'), 1.5, 8).wire(t(pb, 'out'), t(bell, 'L'), 1.5, 8).wire(t(t1, 'S2'), t(bell, 'N'), 1.5, 10);
+  b.wire(t(t2, 'S1'), t(spots, 'L'), 2.5, 6).wire(t(t2, 'S2'), t(spots, 'N'), 2.5, 6);
+  // Impianto di terra del quadro (sistema TT): collettore di terra pronto per le masse dei circuiti a 230 V.
+  b.wire(t(earth, 'PE'), t(xpe, 't0'), 6, 5);
+  return b.project;
+}
+
 /** Abitazione con impianto fotovoltaico da 3,2 kWp e inverter da 3 kW. */
 export function fotovoltaico(): Project {
   const b = new ProjectBuilder('Casa con fotovoltaico 3,2 kWp', 3, 12);
@@ -563,6 +604,12 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Casa con fotovoltaico 3,2 kWp',
     summary: 'Stringa da 8 moduli, sezionatore e SPD lato DC, inverter da 3 kW con linea dedicata e contatore di produzione.',
     build: fotovoltaico,
+  },
+  {
+    id: 'demo-trasformatori',
+    name: 'Campanello e faretti a 12 V',
+    summary: 'Trasformatore per campanello con pulsante e suoneria, trasformatore di sicurezza da 63 VA per i faretti: secondario isolato dalla rete.',
+    build: trasformatori,
   },
   {
     id: 'demo-trifase',

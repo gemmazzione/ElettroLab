@@ -4,6 +4,7 @@ import { CONTACT_RESISTANCE, LOAD_RATED_VOLTAGE, MIN_FAULT_RESISTANCE, MIN_WIRE_
 import { getPoles, getTerminals, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId, wallSwitchLinks } from '../model/terminals';
 import type { ComponentInstance, Phase, Project } from '../model/types';
 import { C, polar, type Complex } from './complex';
+import type { Coupling } from './mna';
 
 /** Centro stella del trasformatore di cabina: riferimento dei potenziali. */
 export const NODE_STAR = '§STAR';
@@ -21,7 +22,8 @@ export type ElementTag =
   | { t: 'ra'; componentId: string }
   | { t: 'fault'; faultId: string }
   | { t: 'extra'; index: number }
-  | { t: 'coil'; componentId: string };
+  | { t: 'coil'; componentId: string }
+  | { t: 'insulation'; componentId: string };
 
 /**
  * Elemento a due morsetti: impedenza z in serie a una f.e.m. (con il "+" verso a).
@@ -40,6 +42,23 @@ export interface Netlist {
   /** Nodo elettrico di ciascun morsetto */
   terminalNode: Map<string, string>;
   supplyId: string | null;
+  /** Trasformatori: accoppiamento tra primario e secondario */
+  couplings: (Coupling & { componentId: string })[];
+}
+
+/** Resistenza d'isolamento verso terra di ciascun morsetto del secondario di un trasformatore [Ω] (valore indicativo). */
+export const SECONDARY_INSULATION = 10e6;
+/** Fattore di potenza dell'assorbimento a vuoto di un trasformatore (corrente magnetizzante, valore indicativo). */
+export const NO_LOAD_COS_PHI = 0.3;
+
+/** Rapporto spire e impedenza di cortocircuito riportata al secondario. */
+export function transformerModel(p: { sn: number; u1: number; u2: number; ukPct: number; ukrPct: number }): { n: number; z: Complex; u20: number } {
+  // La tensione secondaria di targa è a pieno carico (resistivo): a vuoto è più alta circa della caduta resistiva.
+  const u20 = p.u2 / (1 - Math.min(0.5, p.ukrPct / 100));
+  const zb = (p.u2 * p.u2) / p.sn;
+  const zk = (p.ukPct / 100) * zb;
+  const r = Math.min(zk, (p.ukrPct / 100) * zb);
+  return { n: p.u1 / u20, z: C(Math.max(r, 1e-4), Math.sqrt(Math.max(0, zk * zk - r * r))), u20 };
 }
 
 /** Ramo aggiuntivo tra due punti (morsetti "<comp>:<key>" o nodi interni "<comp>#L"). */
@@ -73,9 +92,12 @@ export interface NetlistOptions {
 /** Resistenza di collegamento dei conduttori che rappresentano la linea di un utilizzatore [Ω] (trascurabile, come un serraggio). */
 export const LINE_LINK_RESISTANCE = 1e-3;
 
-export function loadBranchImpedance(powerW: number, cosPhi: number): Complex {
+/** Tensione nominale di un utilizzatore [V]. */
+export const LOAD_RATED_VOLTAGE_OF = (c: ComponentInstance): number => (c.params.kind === 'load' ? (c.params.p.ratedV ?? LOAD_RATED_VOLTAGE) : LOAD_RATED_VOLTAGE);
+
+export function loadBranchImpedance(powerW: number, cosPhi: number, ratedV = LOAD_RATED_VOLTAGE): Complex {
   const pf = Math.min(1, Math.max(0.1, cosPhi));
-  const zMag = (LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE * pf) / powerW;
+  const zMag = (ratedV * ratedV * pf) / powerW;
   return C(zMag * pf, zMag * Math.sqrt(1 - pf * pf));
 }
 
@@ -101,6 +123,7 @@ export const PHASE_ANGLE: Record<Phase, number> = { 1: 0, 2: -120, 3: 120 };
 export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netlist {
   const uf = new UnionFind();
   const elements: NetElement[] = [];
+  const couplings: Netlist['couplings'] = [];
   let supplyId: string | null = null;
   const faults = opts.ignoreFaults ? [] : (project.faults ?? []);
   const loadFaults = (id: string) => faults.filter((f) => f.targetId === id);
@@ -195,6 +218,15 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         elements.push({ a: tid('L'), b: tid('N'), z: loadBranchImpedance(pin, 0.95), tag: { t: 'coil', componentId: c.id } });
         break;
       }
+      case 'transformer': {
+        // Perdite a vuoto e corrente magnetizzante sul primario, accoppiamento ideale con l'impedenza di cortocircuito,
+        // secondario isolato: verso terra solo la resistenza d'isolamento (che fissa il potenziale del circuito flottante).
+        const m = transformerModel(pr.p);
+        if (pr.p.noLoadW > 0) elements.push({ a: tid('L'), b: tid('N'), z: loadBranchImpedance(pr.p.noLoadW, NO_LOAD_COS_PHI, pr.p.u1), tag: { t: 'coil', componentId: c.id } });
+        couplings.push({ p1: tid('L'), p2: tid('N'), s1: tid('S1'), s2: tid('S2'), n: m.n, z: m.z, componentId: c.id });
+        for (const k of ['S1', 'S2']) elements.push({ a: tid(k), b: NODE_EARTH, z: C(SECONDARY_INSULATION), tag: { t: 'insulation', componentId: c.id } });
+        break;
+      }
       case 'meter':
         // Misuratore: contatti sempre chiusi (non è un dispositivo di manovra).
         for (const p of getPoles(c)) {
@@ -235,7 +267,7 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         if (pr.p.on && powerW > 0 && !opts.loadsOff) {
           // Potenza di targa riferita alla tensione nominale degli apparecchi (230 V fase-neutro).
           // Trifase a stella: ogni ramo assorbe P/3 sotto 230 V.
-          const z = loadBranchImpedance(powerW / phaseKeys.length, pr.p.cosPhi ?? 1);
+          const z = loadBranchImpedance(powerW / phaseKeys.length, pr.p.cosPhi ?? 1, pr.p.ratedV ?? LOAD_RATED_VOLTAGE);
           const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
           for (const k of phaseKeys) {
             elements.push({ a: innerNode(c.id, k), b: star, z, tag: { t: 'load', componentId: c.id, key: k } });
@@ -248,7 +280,7 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
             // Carico resistivo aggiuntivo alla tensione nominale, ripartito sui rami della stella.
             const per = (f.powerW ?? 0) / phaseKeys.length;
             const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
-            for (const k of phaseKeys) elements.push({ a: innerNode(c.id, k), b: star, z: C((LOAD_RATED_VOLTAGE * LOAD_RATED_VOLTAGE) / per), tag });
+            for (const k of phaseKeys) elements.push({ a: innerNode(c.id, k), b: star, z: C(((pr.p.ratedV ?? LOAD_RATED_VOLTAGE) ** 2) / per), tag });
           }
           if (f.type === 'short-LN' && hasN) elements.push({ a: innerNode(c.id, main), b: innerNode(c.id, 'N'), z: rf, tag });
           if (f.type === 'short-LL' && phaseKeys.length === 3) elements.push({ a: innerNode(c.id, 'L1'), b: innerNode(c.id, 'L2'), z: rf, tag });
@@ -266,5 +298,5 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
     elements.push({ a: resolve(x.a), b: resolve(x.b), z: C(Math.max(x.r, MIN_FAULT_RESISTANCE)), tag: { t: 'extra', index } });
   });
 
-  return { elements, terminalNode, supplyId };
+  return { elements, terminalNode, supplyId, couplings };
 }

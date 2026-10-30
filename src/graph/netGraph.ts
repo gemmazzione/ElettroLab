@@ -1,4 +1,4 @@
-import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId, wallSwitchLinks } from '../model/terminals';
+import { getPoles, getTerminals, isElvLoad, isResidualDevice, isSwitchingDevice, loadHasNeutral, loadPhaseKeys, supplyPhaseKeys, terminalId, wallSwitchLinks } from '../model/terminals';
 import type { ComponentInstance, Phase, Project, TerminalFunction } from '../model/types';
 import { UnionFind } from './unionFind';
 
@@ -156,7 +156,8 @@ export interface CircuitInfo {
 export function analyzeCircuits(project: Project, g: NetGraph = buildNetGraph(project)): CircuitInfo[] {
   const out: CircuitInfo[] = [];
   for (const c of project.components) {
-    if (c.params.kind !== 'load') continue;
+    // Gli utilizzatori in bassissima tensione sono alimentati da un trasformatore: non sono circuiti della rete.
+    if (c.params.kind !== 'load' || isElvLoad(c)) continue;
     const keys = loadPhaseKeys(c);
     const hasNeutral = loadHasNeutral(c);
     const lNet = g.netOf(terminalId(c.id, keys[0]!));

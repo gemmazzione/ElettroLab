@@ -47,6 +47,8 @@ export function itemSpec(c: ComponentInstance): string {
       return `soglie ${pr.p.umin}–${pr.p.umax} V`;
     case 'psu':
       return `${pr.p.vout} V⎓, ${pr.p.pmaxW} W`;
+    case 'transformer':
+      return `${pr.p.u1}/${pr.p.u2} V~, ${pr.p.sn} VA, uk ${f(pr.p.ukPct, 0)}%`;
     case 'dc-switch':
       return `${pr.p.in} A, ${pr.p.maxV} V DC`;
     case 'meter':

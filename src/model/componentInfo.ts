@@ -308,6 +308,23 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Trascina il pettine sul primo dispositivo della fila: collega gli ingressi di quel dispositivo e di quelli adiacenti compatibili, senza moduli liberi in mezzo. Ogni tratto è un conduttore in rame da 10 mm² lungo quanto il passo tra i dispositivi (17,5 mm per modulo). Selezionandolo puoi vedere la corrente nella barra, interromperlo come guasto o rimuoverlo.'),
     ],
   },
+  'load-campanello': {
+    title: 'Utilizzatore: suoneria a 12 V',
+    summary: 'Campanello in bassissima tensione, alimentato da un trasformatore e comandato da un pulsante.',
+    sections: [
+      S('Collegamento', 'Un morsetto del secondario del trasformatore va al pulsante, il pulsante alla suoneria, la suoneria torna all\'altro morsetto del secondario. Il circuito è separato dalla rete: il pulsante esterno si può toccare senza pericolo.'),
+      S('Nel simulatore', 'Impedenza costante ricavata da potenza e tensione di targa (12 V): suona solo con il pulsante premuto e con il primario del trasformatore alimentato. Apparecchio in classe III: il PE non si collega.'),
+    ],
+  },
+  'load-faretti-12v': {
+    title: 'Utilizzatore: faretti a 12 V',
+    summary: 'Illuminazione in bassissima tensione alternata, alimentata da un trasformatore di sicurezza.',
+    sections: [
+      S('Correnti elevate', 'A 12 V la corrente è P / 12: 40 W sono circa 3,3 A, contro 0,17 A a 230 V. Le perdite nei cavi crescono con il quadrato della corrente: servono sezioni generose e tratti corti, altrimenti la luce cala in fondo alla linea.'),
+      S('Trasformatore', 'La somma delle potenze dei faretti non deve superare la potenza nominale del trasformatore; un margine del 20–25% evita che lavori sempre al limite.'),
+      S('Nel simulatore', 'Resistenza R = 12² / P più la linea. La tensione ai faretti dipende dalla caduta interna del trasformatore (tensione di cortocircuito) e da quella sui cavi.'),
+    ],
+  },
   'load-luce': {
     title: 'Utilizzatore: illuminazione',
     summary: 'Circuito luci con apparecchi equivalenti a un carico resistivo.',
@@ -549,6 +566,20 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
     ],
   },
 };
+
+const TRANSFORMER_INFO: ComponentInfo = {
+  title: 'Trasformatore monofase',
+  summary: 'Riduce i 230 V della rete a una bassissima tensione alternata (12 o 24 V) con il secondario separato dalla rete.',
+  sections: [
+    S('Come funziona', 'Due avvolgimenti sullo stesso nucleo di ferro: la tensione alternata sul primario crea un flusso magnetico variabile che induce tensione nel secondario. Il rapporto tra le tensioni è circa il rapporto tra le spire; le correnti stanno nel rapporto inverso (12 V e 3 A al secondario sono circa 0,16 A al primario).'),
+    S('Separazione di sicurezza', 'Nei trasformatori di sicurezza primario e secondario sono separati da un isolamento doppio o rinforzato. Il circuito a valle è SELV: non è collegato alla terra né alla rete, e toccarne un conduttore non chiude un circuito verso terra.'),
+    S('Dati di targa', 'Potenza nominale in VA, tensioni primaria e secondaria, tensione di cortocircuito uk: è la percentuale della tensione nominale che fa circolare la corrente nominale con il secondario in corto. Un uk alto (trasformatori per campanello) limita la corrente di cortocircuito: il trasformatore resiste al corto ma la tensione cala di più sotto carico.'),
+    S('Nel simulatore', 'Trasformatore ideale con l\'impedenza di cortocircuito riportata al secondario (parte resistiva e reattiva da uk e ukr) e l\'assorbimento a vuoto sul primario. Il secondario è isolato da terra con una resistenza d\'isolamento di 10 MΩ per morsetto. Oltre la potenza nominale compare un avviso di sovraccarico; la protezione termica interna non è simulata.'),
+  ],
+};
+COMPONENT_INFO['transformer-bell'] = TRANSFORMER_INFO;
+COMPONENT_INFO['transformer-safety'] = TRANSFORMER_INFO;
+COMPONENT_INFO['transformer-safety-24'] = TRANSFORMER_INFO;
 
 export function componentInfo(catalogId: string): ComponentInfo | null {
   return COMPONENT_INFO[catalogId] ?? null;
