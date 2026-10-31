@@ -143,3 +143,134 @@ body {
   box-shadow: 0 0 0 3px rgba(226, 232, 240, 0.7);
   opacity: 1;
 }
+
+/* ---------------------------------------------------------- progettazione fotovoltaica */
+/* Curva di arrivo comune: decelerazione esponenziale, nessun rimbalzo. */
+.pv-scope {
+  --pv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pv-scope ::selection {
+  background: rgba(251, 191, 36, 0.35);
+  color: #fff;
+}
+.pv-scope :focus-visible {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.pv-scope input:focus-visible,
+.pv-scope select:focus-visible {
+  outline: none;
+}
+#pv-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+
+/* Cambio di passo: il contenuto arriva dal lato verso cui si va. */
+@keyframes pv-step-fwd {
+  from { opacity: 0.4; transform: translateX(22px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pv-step-back {
+  from { opacity: 0.4; transform: translateX(-22px); }
+  to { opacity: 1; transform: none; }
+}
+.pv-step-fwd { animation: pv-step-fwd 0.42s var(--pv-ease) both; }
+.pv-step-back { animation: pv-step-back 0.42s var(--pv-ease) both; }
+
+/* Avanzamento del percorso. */
+.pv-progress {
+  transform-origin: left;
+  transition: transform 0.7s var(--pv-ease);
+}
+
+/* Passo completato: la spunta compare con un piccolo scatto. */
+@keyframes pv-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.pv-pop { animation: pv-pop 0.38s var(--pv-ease) both; }
+.pv-pop-in { animation: pv-pop-in 0.18s var(--pv-ease) both; }
+@keyframes pv-pop-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Risultato aggiornato: la riga si illumina e si spegne. */
+@keyframes pv-flash {
+  0% { background: rgba(251, 191, 36, 0.22); }
+  100% { background: rgba(251, 191, 36, 0); }
+}
+.pv-flash { animation: pv-flash 1.1s ease-out both; }
+
+/* Opzioni avanzate: si aprono in altezza senza misurare il contenuto. */
+.pv-more {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0.4;
+  transition: grid-template-rows 0.34s var(--pv-ease), opacity 0.25s ease;
+}
+.pv-more[data-open='true'] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+/* Mappa: i moduli vengono posati sul tetto uno dopo l'altro, dalla gronda verso il colmo. */
+@keyframes pv-panel-in {
+  from { opacity: 0; transform: scale(0.35); }
+  to { opacity: 1; transform: none; }
+}
+.pv-panel-anim {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pv-panel-in 0.5s var(--pv-ease) both;
+}
+
+/* Benvenuto: il sole sale lungo l'arco e i moduli si accendono. */
+@keyframes pv-sun-rise {
+  from { offset-distance: 0%; }
+  to { offset-distance: 50%; }
+}
+.pv-sun {
+  offset-path: path('M 30 118 Q 140 -20 250 118');
+  offset-rotate: 0deg;
+  offset-distance: 50%;
+  animation: pv-sun-rise 2.2s var(--pv-ease) both;
+}
+@keyframes pv-cell-on {
+  from { fill: #1e293b; }
+  to { fill: #2563eb; }
+}
+.pv-cell { animation: pv-cell-on 0.5s ease-out both; }
+@keyframes pv-ray {
+  from { stroke-dashoffset: 40; opacity: 0; }
+  to { stroke-dashoffset: 0; opacity: 1; }
+}
+.pv-ray { stroke-dasharray: 40; animation: pv-ray 0.9s var(--pv-ease) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-step-fwd,
+  .pv-step-back { animation: pv-fade 0.2s ease-out both; }
+  .pv-pop,
+  .pv-panel-anim { animation: pv-fade 0.2s ease-out both; }
+  .pv-sun { animation: none; }
+  .pv-cell,
+  .pv-ray { animation-duration: 0.01s; animation-delay: 0s !important; }
+  .pv-progress,
+  .pv-more { transition-duration: 0.01s; }
+}
+@keyframes pv-fade {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+/* Prossima azione suggerita: un alone che si allarga due volte e si ferma. */
+@keyframes pv-attn {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.55); }
+  100% { box-shadow: 0 0 0 12px rgba(245, 158, 11, 0); }
+}
+.pv-attn { animation: pv-attn 1.4s ease-out 2; }
+@media (prefers-reduced-motion: reduce) {
+  .pv-attn { animation: none; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.6); }
+}

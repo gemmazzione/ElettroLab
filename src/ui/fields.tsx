@@ -53,6 +53,7 @@ export function NumberInput({
   max,
   step = 1,
   suffix,
+  id,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -60,21 +61,34 @@ export function NumberInput({
   max?: number;
   step?: number;
   suffix?: string;
+  id?: string;
 }) {
   const [text, setText] = useState(String(value));
+  // Valore rifiutato: bordo rosso e indicazione dell'intervallo ammesso per qualche istante.
+  const [rejected, setRejected] = useState(false);
   useEffect(() => setText(String(value)), [value]);
+  useEffect(() => {
+    if (!rejected) return;
+    const t = window.setTimeout(() => setRejected(false), 2200);
+    return () => window.clearTimeout(t);
+  }, [rejected]);
+  const range = min !== undefined && max !== undefined ? `Inserisci un valore tra ${min} e ${max}` : min !== undefined ? `Inserisci un valore da ${min} in su` : 'Inserisci un numero';
   const commit = () => {
     const v = Number(text.replace(',', '.'));
     if (!Number.isFinite(v) || (min !== undefined && v < min) || (max !== undefined && v > max)) {
       setText(String(value));
+      if (text.trim() !== String(value)) setRejected(true);
       return;
     }
     if (v !== value) onChange(v);
   };
   return (
+    <div className="relative">
     <div className="flex items-center gap-1.5">
       <input
-        className={inputCls}
+        id={id}
+        aria-invalid={rejected || undefined}
+        className={`${inputCls} ${rejected ? 'border-red-500 focus:border-red-500' : ''}`}
         value={text}
         inputMode="decimal"
         step={step}
@@ -83,6 +97,12 @@ export function NumberInput({
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
       {suffix && <span className="shrink-0 text-[11px] text-slate-500">{suffix}</span>}
+    </div>
+    {rejected && (
+      <span role="alert" className="absolute left-0 top-full z-10 mt-1 whitespace-nowrap rounded bg-red-950 px-1.5 py-0.5 text-[10.5px] text-red-200 shadow">
+        {range}
+      </span>
+    )}
     </div>
   );
 }

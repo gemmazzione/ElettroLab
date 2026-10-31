@@ -98,7 +98,7 @@ export const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const MONTH_REP_DAY = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344];
 
 /** Profilo dei consumi di casa nelle 24 ore: peso relativo di ogni ora (si normalizza). */
-export type LoadProfileId = 'sera' | 'uniforme' | 'giorno';
+export type LoadProfileId = 'sera' | 'uniforme' | 'giorno' | 'manuale';
 export const LOAD_PROFILES: Record<LoadProfileId, { label: string; weights: number[] }> = {
   sera: {
     label: 'Fuori casa di giorno (consumi la sera)',
@@ -106,6 +106,11 @@ export const LOAD_PROFILES: Record<LoadProfileId, { label: string; weights: numb
   },
   uniforme: {
     label: 'Presenza mista',
+    weights: [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.8, 1.2, 1.1, 1.0, 1.0, 1.1, 1.4, 1.3, 1.0, 0.9, 0.9, 1.1, 1.5, 1.9, 2.0, 1.7, 1.2, 0.7],
+  },
+  manuale: {
+    label: 'Manuale: disegna tu i consumi ora per ora',
+    // Valori usati solo se il profilo disegnato è vuoto (tutti zero).
     weights: [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.8, 1.2, 1.1, 1.0, 1.0, 1.1, 1.4, 1.3, 1.0, 0.9, 0.9, 1.1, 1.5, 1.9, 2.0, 1.7, 1.2, 0.7],
   },
   giorno: {
@@ -161,3 +166,9 @@ export const DEFAULT_PRICES: PriceItem[] = [
   { id: 'design', label: 'Progetto, pratiche di connessione e dichiarazioni', unit: '€', price: 500 },
   { id: 'misc', label: 'Varie e imprevisti', unit: '% sul totale', price: 5 },
 ];
+
+/** Pesi orari del profilo dei consumi del progetto (quello disegnato a mano o uno tipico). */
+export function profileWeights(c: { profile: LoadProfileId; customWeights: number[] }): number[] {
+  if (c.profile === 'manuale' && c.customWeights.length === 24 && c.customWeights.some((w) => w > 0)) return c.customWeights.map((w) => Math.max(0, w));
+  return LOAD_PROFILES[c.profile].weights;
+}

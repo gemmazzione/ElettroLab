@@ -35,6 +35,8 @@ export function RoofMap() {
   const [error, setError] = useState<string | null>(null);
   const d = usePvDesign((s) => s.design);
   const update = usePvDesign((s) => s.update);
+  /** Ultima disposizione dei moduli disegnata: i moduli si «posano» con un'animazione solo quando cambia. */
+  const laidOut = useRef('');
   const drawingRef = useRef(drawing);
   drawingRef.current = drawing;
 
@@ -96,9 +98,23 @@ export function RoofMap() {
     const at = (a: number, bh: number) => ll({ x: s.eave.x + s.along.x * a - s.down.x * bh, y: s.eave.y + s.along.y * a - s.down.y * bh });
     L.polygon([at(-half(s.bottom), 0), at(half(s.bottom), 0), at(half(s.top), slant * cosT), at(-half(s.top), slant * cosT)], { color: '#f59e0b', weight: 1, dashArray: '3 3', fill: false }).addTo(g);
     const used = moduleCount(d);
+    const key = [d.roof.footprint.flat().join(','), d.roof.type, d.roof.slope, d.roof.pitch, d.roof.setbackM, d.roof.orientation, d.module.id, d.site.tilt].join('|');
+    const animate = laidOut.current !== key;
+    laidOut.current = key;
+    // Ritardo complessivo limitato: con molti moduli la posa resta sotto il secondo e mezzo.
+    const gap = Math.min(45, 1400 / Math.max(1, r.layout.panels.length));
     r.layout.panels.forEach((p, i) => {
       const c = panelCorners(s, r.layout, p, 0, flat).map(ll);
-      L.polygon(c, i < used ? { color: '#1e3a8a', weight: 1, fillColor: '#1d4ed8', fillOpacity: 0.85 } : { color: '#93c5fd', weight: 1, dashArray: '2 2', fillOpacity: 0 }).addTo(g);
+      const poly = L.polygon(
+        c,
+        i < used
+          ? { color: '#1e3a8a', weight: 1, fillColor: '#1d4ed8', fillOpacity: 0.85, className: animate ? 'pv-panel-anim' : '' }
+          : { color: '#93c5fd', weight: 1, dashArray: '2 2', fillOpacity: 0, className: animate ? 'pv-panel-anim' : '' },
+      ).addTo(g);
+      if (animate) {
+        const el = poly.getElement() as SVGElement | undefined;
+        if (el) el.style.animationDelay = `${Math.round(i * gap)}ms`;
+      }
     });
   }, [d, drawing, draftN]);
 
@@ -176,7 +192,10 @@ export function RoofMap() {
       )}
       <div className="flex flex-wrap items-center gap-2">
         {!drawing ? (
-          <button onClick={startDrawing} className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-slate-950 hover:bg-amber-400">
+          <button
+            onClick={startDrawing}
+            className={`flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-slate-950 transition-colors hover:bg-amber-400 ${d.location.lat !== null && !d.roof.footprint.length ? 'pv-attn' : ''}`}
+          >
             <PenLine size={14} /> {d.roof.footprint.length ? 'Ridisegna la pianta' : 'Disegna la pianta del tetto'}
           </button>
         ) : (

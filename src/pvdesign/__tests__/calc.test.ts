@@ -74,3 +74,23 @@ describe('progettazione fotovoltaica', () => {
     expect(e.cashflow).toHaveLength(26);
   });
 });
+
+describe('profilo dei consumi disegnato a mano', () => {
+  it('sposta i consumi nelle ore di sole e aumenta l\'autoconsumo, a parità di energia', () => {
+    const d = defaultDesign();
+    const night = Array.from({ length: 24 }, (_, h) => (h >= 19 || h < 6 ? 1 : 0.05));
+    const day = Array.from({ length: 24 }, (_, h) => (h >= 9 && h < 17 ? 1 : 0.05));
+    const yn = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'manuale', customWeights: night } }).yield;
+    const yd = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'manuale', customWeights: day } }).yield;
+    expect(yd.consumptionKWh).toBeCloseTo(yn.consumptionKWh, 3);
+    expect(yd.consumptionKWh).toBeCloseTo(d.consumption.annualKWh, 0);
+    expect(yd.selfConsumptionPct).toBeGreaterThan(yn.selfConsumptionPct + 20);
+  });
+
+  it('profilo vuoto: si usa quello tipico', () => {
+    const d = defaultDesign();
+    const y0 = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'manuale', customWeights: Array(24).fill(0) } }).yield;
+    const yu = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'uniforme' } }).yield;
+    expect(y0.selfKWh).toBeCloseTo(yu.selfKWh, 3);
+  });
+});

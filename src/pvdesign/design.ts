@@ -1,6 +1,6 @@
 import type { InstallMethod } from '../rules/ampacity';
 import type { RoofSpec } from './roof';
-import { DEFAULT_PRICES, INVERTERS, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
+import { DEFAULT_PRICES, INVERTERS, LOAD_PROFILES, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
 
 /** Dati di un progetto di impianto fotovoltaico (sezione «Progetta FV»). */
 export interface PvDesign {
@@ -32,6 +32,8 @@ export interface PvDesign {
   consumption: {
     annualKWh: number;
     profile: LoadProfileId;
+    /** Profilo disegnato a mano: peso relativo di ciascuna delle 24 ore (si normalizza sul consumo annuo) */
+    customWeights: number[];
     contractKW: number;
   };
   module: ModuleSpec;
@@ -83,7 +85,7 @@ export function defaultDesign(): PvDesign {
     location: { lat: null, lon: null, address: '', zoom: 6 },
     roof: { footprint: [], type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale' },
     site: { presetId: s.id, latitude: s.latitude, hDay: [...s.hDay], tMean: [...s.tMean], tMin: s.tMin, tMax: s.tMax, tilt: 25, azimuth: 0, albedo: 0.2, shadingPct: 2, roofM2: 0, mounting: 'complanare' },
-    consumption: { annualKWh: 3500, profile: 'uniforme', contractKW: 3 },
+    consumption: { annualKWh: 3500, profile: 'uniforme', contractKW: 3, customWeights: [...LOAD_PROFILES.uniforme.weights] },
     module: copy(MODULES[1]!),
     modulesPerString: 8,
     strings: 1,

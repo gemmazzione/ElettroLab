@@ -54,7 +54,7 @@ function Btn({
       onClick={onClick}
       disabled={disabled}
       title={title ?? label}
-      className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${tones[tone]}`}
+      className={`flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${tones[tone]}`}
     >
       {icon}
       {label && <span className="hidden xl:inline">{label}</span>}
@@ -68,8 +68,8 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
   const s = useStore();
   const [exporting, setExporting] = useState(false);
   return (
-    <header className="flex h-12 shrink-0 items-center gap-1 border-b border-slate-800 bg-slate-900 px-3">
-      <div className="mr-3 flex items-center gap-2">
+    <header className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto overflow-y-hidden border-b border-slate-800 bg-slate-900 px-3 [scrollbar-width:none]">
+      <div className="mr-3 flex shrink-0 items-center gap-2">
         <div className="flex h-7 w-7 items-center justify-center rounded-md bg-amber-400 text-slate-950">
           <Zap size={16} strokeWidth={2.5} />
         </div>
@@ -78,7 +78,7 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
           <div className="text-[9.5px] text-slate-500">Laboratorio quadri elettrici civili</div>
         </div>
       </div>
-      <div className="mr-2 flex rounded-md bg-slate-950 p-0.5 text-[12px] font-semibold">
+      <div className="mr-2 flex shrink-0 rounded-md bg-slate-950 p-0.5 text-[12px] font-semibold">
         {(['lab', 'pv', 'academy'] as const).map((m) => (
           <button
             key={m}
@@ -90,6 +90,8 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
           </button>
         ))}
       </div>
+      {s.mode === 'lab' && (
+        <>
       <Btn
         icon={<FilePlus2 size={15} />}
         label="Nuovo"
@@ -204,8 +206,10 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
           }
         }}
       />
+        </>
+      )}
       <div className="flex-1" />
-      <Btn icon={<Info size={15} />} label="Modello fisico" onClick={onInfo} />
+      {s.mode === 'lab' && <Btn icon={<Info size={15} />} label="Modello fisico" onClick={onInfo} />}
       <AccountButton />
     </header>
   );

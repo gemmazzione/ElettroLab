@@ -2,7 +2,7 @@ import { stringChecks, type PvCheck } from '../engine/pv';
 import { RHO_CU_70 } from '../model/constants';
 import type { InverterParams, PvArrayParams, WireSection } from '../model/types';
 import { ampacity, tempFactor } from '../rules/ampacity';
-import { LOAD_PROFILES, MOUNTINGS, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
+import { MOUNTINGS, profileWeights, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
 import { isHybrid, type PvDesign } from './design';
 import { roofCapacity } from './roof';
 import { declination } from './sun';
@@ -337,7 +337,7 @@ export function computeYield(d: PvDesign): YieldResult {
   const ac = acCable(d);
   const inv = d.inverter;
   const eta = inv.euroEff / 100;
-  const prof = LOAD_PROFILES[d.consumption.profile].weights;
+  const prof = profileWeights(d.consumption);
   const profSum = prof.reduce((a, b) => a + b, 0);
   const mw = MONTH_LOAD_WEIGHTS.map((w, i) => w * MONTH_DAYS[i]!);
   const mwSum = mw.reduce((a, b) => a + b, 0);
