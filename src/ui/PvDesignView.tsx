@@ -1,7 +1,7 @@
 import { Check, ChevronLeft, ChevronRight, FileDown, Home, Map as MapIcon, PencilRuler, RotateCcw, Sun, Wallet, Wand2, Zap } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { computeDesign, f, moduleCount, peakW, proposeSizing, stringsPerMppt, type DesignResults, type MonthResult } from '../pvdesign/calc';
-import { INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
+import { DEFAULT_PRICES, ECONOMIC_SOURCES, INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
 import { isHybrid, type PvDesign } from '../pvdesign/design';
 import { compassName, roofLayout, ROOF_TYPES, type RoofType } from '../pvdesign/roof';
 import { usePvDesign } from '../pvdesign/store';
@@ -11,12 +11,13 @@ import { useStore } from '../store/projectStore';
 import { NumberInput, Select, TextInput } from './fields';
 import { Animated, CheckSummary, FieldLabel, FlashRow, Grid, Kpi, More, Notes, Num, Step, Term } from './pvdesign/kit';
 import { LoadProfileEditor } from './pvdesign/LoadProfileEditor';
+import { BatteryStep, Sources } from './pvdesign/BatteryStep';
 
 // Mappa e vista 3D caricate solo quando servono (Leaflet e three.js sono librerie pesanti).
 const RoofMap = lazy(() => import('./pvdesign/RoofMap').then((m) => ({ default: m.RoofMap })));
 const Roof3D = lazy(() => import('./pvdesign/Roof3D').then((m) => ({ default: m.Roof3D })));
 
-const STEPS = ['La casa', 'Il tetto', 'Clima e ombre', 'Consumi', 'Moduli e inverter', 'Cavi e protezioni', 'Vista 3D', 'Produzione', 'Costi', 'Riepilogo'] as const;
+const STEPS = ['La casa', 'Il tetto', 'Clima e ombre', 'Consumi', 'Moduli e inverter', 'Accumulo', 'Cavi e protezioni', 'Vista 3D', 'Produzione', 'Costi', 'Riepilogo'] as const;
 
 const eur = (v: number) => `${f(v)} €`;
 const payback = (y: number | null) => (y === null ? 'oltre la durata' : `${f(y, 1)} anni`);
@@ -33,7 +34,7 @@ export function PvDesignView() {
   const r = useMemo(() => computeDesign(d), [d]);
   const done = stepStatus(d, r);
   // Passi con un problema da correggere (pallino rosso nell'elenco).
-  const bad = STEPS.map((_, i) => (i === 4 && r.checks.some((c) => c.ok === false)) || (i === 5 && (!r.dc.ok || !r.ac.ok)));
+  const bad = STEPS.map((_, i) => (i === 4 && r.checks.some((c) => c.ok === false)) || (i === 6 && (!r.dc.ok || !r.ac.ok)));
   const go = (n: number) => {
     setStep(Math.max(0, Math.min(STEPS.length - 1, n)));
     document.getElementById('pv-scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -58,11 +59,12 @@ export function PvDesignView() {
             {step === 2 && <SiteStep n={n} />}
             {step === 3 && <ConsumptionStep n={n} />}
             {step === 4 && <GeneratorStep n={n} r={r} />}
-            {step === 5 && <CablesStep n={n} r={r} />}
-            {step === 6 && <View3DStep n={n} />}
-            {step === 7 && <YieldStep n={n} r={r} />}
-            {step === 8 && <CostStep n={n} r={r} />}
-            {step === 9 && <FinalStep n={n} r={r} go={go} />}
+            {step === 5 && <BatteryStep n={n} />}
+            {step === 6 && <CablesStep n={n} r={r} />}
+            {step === 7 && <View3DStep n={n} />}
+            {step === 8 && <YieldStep n={n} r={r} />}
+            {step === 9 && <CostStep n={n} r={r} />}
+            {step === 10 && <FinalStep n={n} r={r} go={go} />}
           </div>
           <div className="flex items-center justify-between gap-2">
             <button
@@ -98,6 +100,7 @@ function stepStatus(d: PvDesign, r: DesignResults): boolean[] {
     d.site.hDay.some((h) => h > 0),
     d.consumption.annualKWh > 0,
     !r.checks.some((c) => c.ok === false),
+    d.batteryKWh > 0 || d.consumption.annualKWh > 0,
     r.dc.ok && r.ac.ok,
     roof,
     r.yield.productionKWh > 0,
@@ -646,13 +649,9 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
             />
           </FieldLabel>
         </div>
-        {isHybrid(d) ? (
-          <Num label="Batteria" value={d.batteryKWh} onChange={(v) => up((x) => ({ ...x, batteryKWh: v }))} suffix="kWh" min={0} max={40} step={0.5} hint="0 = senza accumulo. Per una casa si va di solito da 5 a 10 kWh." />
-        ) : (
-          <div className="col-span-2 self-end text-[0.75rem] leading-snug text-slate-400">
-            Vuoi una batteria? Scegli un <Term k="ibrido">inverter ibrido</Term>.
-          </div>
-        )}
+        <div className="col-span-2 self-end text-[0.75rem] leading-snug text-slate-400">
+          {isHybrid(d) && d.batteryKWh > 0 ? `Con batteria da ${f(d.batteryKWh, 1)} kWh.` : 'Senza batteria.'} L'accumulo si sceglie nel prossimo passo.
+        </div>
       </Grid>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label={<Term k="kwp">Potenza di picco</Term>} value={<Animated value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />} sub={`${moduleCount(d)} moduli`} />
@@ -1005,6 +1004,23 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
         <Num label={<Term k="detrazione">Detrazione</Term>} value={e.deductionPct} onChange={(v) => set({ deductionPct: v })} suffix="%" min={0} max={110} hint="Dipende dalle regole fiscali dell'anno e dal tipo di immobile: verificale" />
         <Num label="IVA" value={e.vatPct} onChange={(v) => set({ vatPct: v })} suffix="%" min={0} max={30} hint="Aliquota agevolata comune per gli impianti sulle abitazioni: verifica il caso specifico" />
       </Grid>
+      <More label={`Da dove vengono questi valori (fonti aggiornate a ${PRICES_CHECKED})`}>
+        <div className="grid gap-3 xl:grid-cols-2">
+          {(
+            [
+              ['Prezzo dell\'energia', 'importPrice'],
+              ['Energia venduta', 'exportPrice'],
+              ['Detrazione', 'deduction'],
+              ['IVA', 'vat'],
+            ] as const
+          ).map(([title, key]) => (
+            <div key={key} className="rounded-lg bg-slate-950/60 px-3 py-2.5">
+              <div className="mb-1 text-[0.75rem] font-semibold text-slate-200">{title}</div>
+              <Sources {...ECONOMIC_SOURCES[key]} />
+            </div>
+          ))}
+        </div>
+      </More>
       <More label="Voci di spesa e listino prezzi">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[32.5rem] text-[0.75rem]">
@@ -1046,10 +1062,29 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
             </tbody>
           </table>
         </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-sky-500/[0.07] px-3 py-2 text-[0.75rem] text-sky-100">
+          <span>
+            Prezzi IVA esclusa, aggiornati a <b>{PRICES_CHECKED}</b>. Le voci senza fonte sono stime.
+          </span>
+          {e.prices.some((p) => p.price !== DEFAULT_PRICES.find((q) => q.id === p.id)?.price) && (
+            <button
+              onClick={() => set({ prices: DEFAULT_PRICES.map((q) => ({ ...q })) })}
+              className="rounded-md bg-sky-400/15 px-2.5 py-1 font-semibold text-sky-100 transition-colors hover:bg-sky-400/25"
+            >
+              Ripristina i prezzi di {PRICES_CHECKED}
+            </button>
+          )}
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {e.prices.map((p) => (
-            <Num key={p.id} label={p.label} value={p.price} suffix={p.unit} min={0} step={0.01} onChange={(v) => set({ prices: e.prices.map((q) => (q.id === p.id ? { ...q, price: v } : q)) })} />
-          ))}
+          {e.prices.map((p) => {
+            const src = PRICE_SOURCES[p.id];
+            return (
+              <div key={p.id} className="space-y-1.5">
+                <Num label={p.label} value={p.price} suffix={p.unit} min={0} step={0.01} onChange={(v) => set({ prices: e.prices.map((q) => (q.id === p.id ? { ...q, price: v } : q)) })} />
+                {src ? <Sources {...src} /> : <p className="text-[0.6875rem] text-slate-500">Stima, senza una fonte specifica.</p>}
+              </div>
+            );
+          })}
         </div>
       </More>
       <More label="Altre ipotesi: durata, manutenzione, rincari">
@@ -1135,8 +1170,8 @@ function FinalStep({ n, r, go }: { n: number; r: DesignResults; go: (n: number) 
   if (d.location.lat === null) todo.push(['Scegli la posizione della casa sulla mappa.', 0]);
   if (!lay) todo.push(['Disegna la pianta del tetto: da lì ricavo falde, orientamento e numero di moduli.', 0]);
   if (r.checks.some((c) => c.ok === false)) todo.push(['Ci sono verifiche di moduli e inverter non superate.', 4]);
-  if (!r.dc.ok || !r.ac.ok) todo.push(['Rivedi le sezioni dei cavi.', 5]);
-  if (!snapshot && lay) todo.push(['Facoltativo: salva una vista 3D da mettere nella relazione.', 6]);
+  if (!r.dc.ok || !r.ac.ok) todo.push(['Rivedi le sezioni dei cavi.', 6]);
+  if (!snapshot && lay) todo.push(['Facoltativo: salva una vista 3D da mettere nella relazione.', 7]);
   return (
     <Step n={n} title="Riepilogo" intro="Il tuo impianto in breve, cosa manca e i documenti da scaricare.">
       {todo.length > 0 ? (

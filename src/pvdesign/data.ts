@@ -130,6 +130,15 @@ export const SOLAR_CABLE_SECTIONS = [4, 6, 10, 16] as const;
 
 // ------------------------------------------------------------------ listino prezzi
 
+export interface PriceSource {
+  label: string;
+  url: string;
+  /** Periodo a cui si riferisce il dato della fonte */
+  date: string;
+  /** Il dato riportato dalla fonte, in breve */
+  note: string;
+}
+
 export interface PriceItem {
   id: PriceId;
   label: string;
@@ -151,21 +160,122 @@ export type PriceId =
   | 'design'
   | 'misc';
 
+/** Data dell'ultimo controllo dei prezzi e delle fonti. */
+export const PRICES_CHECKED = 'ottobre 2026';
+
 /** Listino indicativo (€, IVA esclusa). Il prezzo dell'inverter si applica per kW di potenza nominale. */
 export const DEFAULT_PRICES: PriceItem[] = [
   { id: 'module', label: 'Moduli fotovoltaici', unit: '€/Wp', price: 0.2 },
   { id: 'inverter', label: 'Inverter', unit: '€/kW', price: 220 },
-  { id: 'battery', label: 'Batteria di accumulo', unit: '€/kWh', price: 450 },
+  { id: 'battery', label: 'Batteria di accumulo', unit: '€/kWh', price: 750 },
   { id: 'mounting', label: 'Strutture di fissaggio', unit: '€/modulo', price: 45 },
   { id: 'dcCable', label: 'Cavo solare (per conduttore)', unit: '€/m', price: 1.6 },
   { id: 'acCable', label: 'Cavo lato alternata (per conduttore)', unit: '€/m', price: 1.2 },
   { id: 'dcBox', label: 'Quadro di campo DC (sezionatore e SPD)', unit: '€', price: 230 },
   { id: 'stringFuse', label: 'Portafusibili e fusibili di stringa', unit: '€/stringa', price: 35 },
   { id: 'acBox', label: 'Quadro lato alternata (magnetotermico differenziale, SPD)', unit: '€', price: 180 },
-  { id: 'labour', label: 'Manodopera e installazione', unit: '€/kWp', price: 450 },
+  { id: 'labour', label: 'Manodopera e installazione', unit: '€/kWp', price: 750 },
   { id: 'design', label: 'Progetto, pratiche di connessione e dichiarazioni', unit: '€', price: 500 },
   { id: 'misc', label: 'Varie e imprevisti', unit: '% sul totale', price: 5 },
 ];
+
+/**
+ * Da dove vengono i prezzi: fonti consultate a ottobre 2026. Le voci senza fonte sono stime.
+ * I prezzi del listino sono IVA esclusa e comprendono il margine di chi vende e installa: per questo sono
+ * più alti dei prezzi all'ingrosso riportati da alcune fonti.
+ */
+export const PRICE_SOURCES: Partial<Record<PriceId, { why: string; sources: PriceSource[] }>> = {
+  module: {
+    why: "Prezzo al cliente finale, sopra quello all'ingrosso.",
+    sources: [
+      {
+        label: 'Deentra – Prezzi pannelli solari',
+        url: 'https://www.deentra.io/blog-fotovoltaico/prezzi-pannelli-solarii',
+        date: '8 ottobre 2026',
+        note: "all'ingrosso 0,135–0,145 €/Wp (alta efficienza); al cliente finale 0,14–0,20 €/Wp",
+      },
+      { label: 'pvXchange – Indice dei prezzi dei moduli', url: 'https://www.pvxchange.com/Price-Index', date: 'ottobre 2026', note: "andamento dei prezzi all'ingrosso in Europa, per tipo di modulo" },
+    ],
+  },
+  inverter: {
+    why: "Listini online al netto di IVA, più il margine dell'installatore; gli ibridi costano un po' di più.",
+    sources: [
+      { label: 'Panpower – Huawei SUN2000-3KTL-L1 (3 kW)', url: 'https://panpower.eu/it/inverter/6981-huawei-sun2000-3ktl-l1-3-kw.html', date: 'ottobre 2026', note: '388 € IVA esclusa, circa 130 €/kW' },
+      { label: 'Panpower – Sofar HYD6000-EP ibrido (6 kW)', url: 'https://panpower.eu/it/inverter/4232-sofar-hyd6000-ep-6-kw.html', date: 'ottobre 2026', note: '1.127 € IVA esclusa, circa 190 €/kW' },
+    ],
+  },
+  battery: {
+    why: 'Prezzo installato riportato IVA esclusa (circa 825 €/kWh con IVA al 10%).',
+    sources: [
+      {
+        label: 'Enpal – Costo batteria di accumulo',
+        url: 'https://www.enpal.com/it/batterie/costo-batteria-accumulo-fotovoltaico',
+        date: 'febbraio 2026',
+        note: 'circa 10 kWh installati: 8.000–11.000 €, cioè 800–1.100 €/kWh',
+      },
+    ],
+  },
+  labour: {
+    why: 'Tarata perché il totale chiavi in mano cada nella fascia di mercato.',
+    sources: [
+      {
+        label: 'Selectra – Pannelli fotovoltaici: costi 2026',
+        url: 'https://climate.selectra.com/it/pannelli-fotovoltaici',
+        date: 'giugno–luglio 2026',
+        note: 'impianto chiavi in mano senza accumulo: 1.500–2.800 €/kWp',
+      },
+    ],
+  },
+};
+
+/** Fonti dei parametri economici (prezzo dell'energia, valore dell'energia venduta, IVA, detrazione). */
+export const ECONOMIC_SOURCES: Record<'importPrice' | 'exportPrice' | 'vat' | 'deduction', { why: string; sources: PriceSource[] }> = {
+  importPrice: {
+    why: "Il risparmio vale sulla parte variabile della bolletta, un po' più bassa del prezzo medio con quote fisse.",
+    sources: [
+      {
+        label: 'ARERA – Maggior tutela, IV trimestre 2026',
+        url: 'https://www.arera.it/comunicati-stampa/dettaglio/elettricita-maggior-tutela-373-nel-iv-trimestre-2026-per-i-clienti-vulnerabili',
+        date: 'dal 1° ottobre 2026',
+        note: '43,43 centesimi/kWh tasse incluse per il cliente tipo',
+      },
+    ],
+  },
+  exportPrice: {
+    why: 'Valore prudente: il ritiro dedicato paga il prezzo zonale orario, più basso nelle ore di sole, con un minimo garantito.',
+    sources: [
+      { label: 'Solare Industriale – Ritiro dedicato', url: 'https://www.solareindustriale.it/incentivi/ritiro-dedicato', date: '2026', note: 'prezzo minimo garantito 47,5 €/MWh (0,0475 €/kWh)' },
+      {
+        label: 'ComparaSemplice – PUN al 27/10/2026',
+        url: 'https://www.comparasemplice.it/informazioni/news/pun-aggiornamento-del-27-10-2026',
+        date: 'ottobre 2026',
+        note: 'media di ottobre fino al 27: 246,67 €/MWh (0,25 €/kWh)',
+      },
+    ],
+  },
+  vat: {
+    why: 'Aliquota ridotta per i beni destinati agli impianti fotovoltaici; verifica il tuo caso.',
+    sources: [
+      {
+        label: 'Euroconference News – IVA al 10% per i componenti degli impianti',
+        url: 'https://www.ecnews.it/fiscale/?p=56929',
+        date: 'maggio 2021',
+        note: 'DPR 633/72, tabella A, parte III, n. 127-quinquies e 127-sexies',
+      },
+    ],
+  },
+  deduction: {
+    why: "Valore per l'abitazione principale nel 2026; dal 2027 è previsto un calo.",
+    sources: [
+      {
+        label: 'Edilizia.com – Bonus fotovoltaico 2026',
+        url: 'https://www.edilizia.com/detrazioni-fiscali/bonus-fotovoltaico-2026-la-guida-alla-detrazione-50-e-requisiti-aggiornati/',
+        date: '2026',
+        note: '50% abitazione principale, 36% altri immobili, in 10 rate; accumuli compresi',
+      },
+    ],
+  },
+};
 
 /** Pesi orari del profilo dei consumi del progetto (quello disegnato a mano o uno tipico). */
 export function profileWeights(c: { profile: LoadProfileId; customWeights: number[] }): number[] {

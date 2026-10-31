@@ -1,8 +1,8 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
-import { f, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
-import { LOAD_PROFILES, MONTHS, MOUNTINGS, SITES } from './data';
+import { batteryAdvice, f, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
+import { DEFAULT_PRICES, ECONOMIC_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
 import { isHybrid, type PvDesign } from './design';
 import { roofLayout, ROOF_TYPES } from './roof';
 
@@ -220,6 +220,21 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     ],
     [5, 1.3, 2, 1.6],
   );
+  // ---------------------------------------------------------------- accumulo
+  const adv = batteryAdvice(d);
+  heading('Accumulo', `Accumulo consigliato: ${adv.recommended > 0 ? `${f(adv.recommended, 1)} kWh` : 'nessuna batteria'}. ${adv.reason}`);
+  table(
+    ['Batteria', 'Autosufficienza', 'Autoconsumo', 'Spesa in più', 'Rientro'],
+    adv.options.map((o) => [
+      `${o.kWh === 0 ? 'nessuna' : `${f(o.kWh, 1)} kWh`}${o.kWh === adv.recommended ? ' (consigliata)' : ''}${o.kWh === (isHybrid(d) ? d.batteryKWh : 0) ? ' - scelta' : ''}`,
+      `${f(o.selfSufficiencyPct)}%`,
+      `${f(o.selfConsumptionPct)}%`,
+      eur(o.extraCost),
+      o.paybackYears === null ? 'oltre la durata' : `${f(o.paybackYears, 1)} anni`,
+    ]),
+    [2.4, 1.6, 1.6, 1.6, 1.6],
+  );
+
   heading('6. Ritorno dell\'investimento');
   const e = d.economics;
   table(
@@ -243,6 +258,20 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     ec.cashflow.map((c) => [String(c.year), eur(c.flow), eur(c.cumulative)]),
     [1, 2, 2],
   );
+
+  // ---------------------------------------------------------------- fonti dei prezzi
+  heading(`Fonti dei prezzi (aggiornate a ${PRICES_CHECKED})`, 'Listino IVA esclusa, comprensivo del margine di chi vende e installa. Le voci senza fonte sono stime. Le fonti riportano dati di mercato indicativi: per un impianto reale valgono i preventivi.');
+  const srcRows: string[][] = [];
+  const addSrc = (what: string, list: PriceSource[] | undefined, fallback = 'stima, senza una fonte specifica') => {
+    if (!list?.length) srcRows.push([what, fallback, '']);
+    else for (const x of list) srcRows.push([what, `${x.label} (${x.date}): ${x.note}`, x.url]);
+  };
+  for (const item of DEFAULT_PRICES) addSrc(item.label, PRICE_SOURCES[item.id]?.sources);
+  addSrc('Prezzo dell\'energia prelevata', ECONOMIC_SOURCES.importPrice.sources);
+  addSrc('Valore dell\'energia immessa', ECONOMIC_SOURCES.exportPrice.sources);
+  addSrc('Detrazione fiscale', ECONOMIC_SOURCES.deduction.sources);
+  addSrc('IVA', ECONOMIC_SOURCES.vat.sources);
+  table(['Voce', 'Fonte e dato', 'Indirizzo'], srcRows, [2, 4, 3.6]);
 
   // ---------------------------------------------------------------- ipotesi
   doc.addPage();

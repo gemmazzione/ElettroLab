@@ -73,6 +73,8 @@ export interface PvDesign {
     inverterReplaceYear: number;
     years: number;
     discountPct: number;
+    /** Versione del listino con cui sono stati impostati i prezzi */
+    pricesVersion?: string;
   };
 }
 
@@ -98,23 +100,37 @@ export function defaultDesign(): PvDesign {
       vatPct: 10,
       deductionPct: 50,
       deductionYears: 10,
-      importPrice: 0.28,
+      importPrice: 0.4,
       exportPrice: 0.1,
       energyInflationPct: 2,
       omPerYear: 60,
       inverterReplaceYear: 12,
       years: 25,
       discountPct: 3,
+      pricesVersion: PRICES_VERSION,
     },
   };
 }
 
 /** Completa un progetto salvato con i campi mancanti (versioni precedenti, dati incompleti). */
+/** Versione del listino attuale (ottobre 2026). */
+export const PRICES_VERSION = '2026-10';
+/** Predefiniti del listino precedente che sono cambiati. */
+const OLD_DEFAULT_PRICES: Partial<Record<string, number>> = { battery: 450, labour: 450 };
+
 export function normalizeDesign(x: unknown): PvDesign {
   const d = defaultDesign();
   if (!x || typeof x !== 'object') return d;
   const o = x as Partial<PvDesign>;
-  const prices = DEFAULT_PRICES.map((p) => ({ ...p, price: o.economics?.prices?.find((q) => q.id === p.id)?.price ?? p.price }));
+  let prices = DEFAULT_PRICES.map((p) => ({ ...p, price: o.economics?.prices?.find((q) => q.id === p.id)?.price ?? p.price }));
+  let econ = { ...d.economics, ...o.economics };
+  // Progetti salvati con il listino precedente: si aggiornano solo i valori rimasti uguali ai vecchi predefiniti
+  // (quelli cambiati dall'utente restano com'erano).
+  if (o.economics?.pricesVersion !== PRICES_VERSION) {
+    prices = prices.map((p) => (OLD_DEFAULT_PRICES[p.id] === p.price ? { ...p, price: DEFAULT_PRICES.find((q) => q.id === p.id)!.price } : p));
+    if (econ.importPrice === 0.28) econ = { ...econ, importPrice: d.economics.importPrice };
+    econ = { ...econ, pricesVersion: PRICES_VERSION };
+  }
   return {
     ...d,
     ...o,
@@ -126,7 +142,7 @@ export function normalizeDesign(x: unknown): PvDesign {
     inverter: { ...d.inverter, ...o.inverter },
     losses: { ...d.losses, ...o.losses },
     cables: { ...d.cables, ...o.cables },
-    economics: { ...d.economics, ...o.economics, prices },
+    economics: { ...econ, prices },
   };
 }
 

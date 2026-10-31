@@ -2,7 +2,7 @@ import { stringChecks, type PvCheck } from '../engine/pv';
 import { RHO_CU_70 } from '../model/constants';
 import type { InverterParams, PvArrayParams, WireSection } from '../model/types';
 import { ampacity, tempFactor } from '../rules/ampacity';
-import { MOUNTINGS, profileWeights, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
+import { INVERTERS, MOUNTINGS, profileWeights, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
 import { isHybrid, type PvDesign } from './design';
 import { roofCapacity } from './roof';
 import { declination } from './sun';
@@ -619,6 +619,87 @@ export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
     npv,
     lcoe: pvEnergy > 0 ? pvCost / pvEnergy : 0,
   };
+}
+
+// ------------------------------------------------------------------ accumulo consigliato
+
+/** Capacità proposte per la batteria [kWh]. */
+export const BATTERY_OPTIONS = [0, 2.5, 5, 7.5, 10, 12.5, 15] as const;
+/**
+ * Soglia per il consiglio: un kWh di batteria in più deve accumulare e restituire almeno questa energia in un anno
+ * (circa 100 cicli completi). Sotto, la capacità aggiunta resterebbe quasi sempre inutilizzata.
+ */
+export const BATTERY_MIN_KWH_PER_KWH = 100;
+
+/** Inverter ibrido adatto: il più piccolo con potenza almeno pari a quella attuale (o il più grande disponibile). */
+export function hybridFor(d: PvDesign): PvDesign['inverter'] {
+  if (isHybrid(d)) return d.inverter;
+  const hy = INVERTERS.filter((i) => i.hybrid).sort((a, b) => a.pacW - b.pacW);
+  return { ...(hy.find((i) => i.pacW >= d.inverter.pacW) ?? hy[hy.length - 1]!) };
+}
+
+/** Progetto con la batteria indicata (passa all'inverter ibrido se serve). */
+export function withBattery(d: PvDesign, kWh: number): PvDesign {
+  return kWh > 0 ? { ...d, batteryKWh: kWh, inverter: hybridFor(d) } : { ...d, batteryKWh: 0 };
+}
+
+export interface BatteryOption {
+  kWh: number;
+  selfConsumptionPct: number;
+  selfSufficiencyPct: number;
+  /** Energia prodotta e usata in casa in un anno [kWh] */
+  selfKWh: number;
+  /** Spesa in più rispetto all'impianto senza batteria, IVA inclusa [€] */
+  extraCost: number;
+  paybackYears: number | null;
+  npv: number;
+  /** Energia usata in più per ogni kWh aggiunto rispetto alla capacità precedente [kWh/anno per kWh] */
+  marginal: number | null;
+}
+
+export interface BatteryAdvice {
+  options: BatteryOption[];
+  recommended: number;
+  reason: string;
+}
+
+/**
+ * Consiglio sull'accumulo: si simula l'anno con ogni capacità e si guarda quanta energia in più viene usata in casa
+ * per ogni kWh aggiunto. La capacità consigliata è la più grande per cui il kWh aggiunto supera la soglia.
+ * È un criterio tecnico (uso della batteria), non economico: il rientro è mostrato a parte per ogni capacità.
+ */
+export function batteryAdvice(d: PvDesign): BatteryAdvice {
+  const options: BatteryOption[] = [];
+  let base: { total: number } | null = null;
+  for (const kWh of BATTERY_OPTIONS) {
+    const dd = withBattery(d, kWh);
+    const y = computeYield(dd);
+    const e = computeEconomics(dd, y);
+    if (!base) base = { total: e.total };
+    const prev = options[options.length - 1];
+    options.push({
+      kWh,
+      selfConsumptionPct: y.selfConsumptionPct,
+      selfSufficiencyPct: y.selfSufficiencyPct,
+      selfKWh: y.selfKWh,
+      extraCost: e.total - base.total,
+      paybackYears: e.paybackYears,
+      npv: e.npv,
+      marginal: prev ? (y.selfKWh - prev.selfKWh) / (kWh - prev.kWh) : null,
+    });
+  }
+  let recommended = 0;
+  for (const o of options.slice(1)) {
+    if ((o.marginal ?? 0) >= BATTERY_MIN_KWH_PER_KWH) recommended = o.kWh;
+    else break;
+  }
+  const rec = options.find((o) => o.kWh === recommended)!;
+  const next = options.find((o) => o.kWh > recommended);
+  const reason =
+    recommended === 0
+      ? `Con questi consumi e questa produzione resta poca energia da conservare: già i primi ${f(BATTERY_OPTIONS[1], 1)} kWh di batteria accumulerebbero circa ${f(options[1]?.marginal ?? 0)} kWh all'anno per kWh, cioè pochi cicli. Meglio spostare i consumi nelle ore di sole o aumentare i moduli.`
+      : `Fino a ${f(recommended, 1)} kWh ogni kWh di batteria accumula almeno ${f(BATTERY_MIN_KWH_PER_KWH)} kWh all'anno e l'autosufficienza sale al ${f(rec.selfSufficiencyPct)}%.${next ? ` Oltre, ogni kWh in più ne accumulerebbe solo ${f(next.marginal ?? 0)} all'anno.` : ''}`;
+  return { options, recommended, reason };
 }
 
 /** Tutti i risultati del progetto. */

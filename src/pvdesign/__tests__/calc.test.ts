@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { computeDesign, extraterrestrialDaily, monthSun, proposeSizing } from '../calc';
+import { BATTERY_MIN_KWH_PER_KWH, batteryAdvice, computeDesign, extraterrestrialDaily, monthSun, proposeSizing, withBattery } from '../calc';
 import { INVERTERS, SITES } from '../data';
-import { defaultDesign } from '../design';
+import { defaultDesign, normalizeDesign } from '../design';
 
 describe('progettazione fotovoltaica', () => {
   it('irraggiamento extraterrestre: valore dei manuali', () => {
@@ -92,5 +92,49 @@ describe('profilo dei consumi disegnato a mano', () => {
     const y0 = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'manuale', customWeights: Array(24).fill(0) } }).yield;
     const yu = computeDesign({ ...d, consumption: { ...d.consumption, profile: 'uniforme' } }).yield;
     expect(y0.selfKWh).toBeCloseTo(yu.selfKWh, 3);
+  });
+});
+
+describe('accumulo consigliato', () => {
+  it('più batteria = più autosufficienza, con rendimenti decrescenti', () => {
+    const a = batteryAdvice(defaultDesign());
+    const ss = a.options.map((o) => o.selfSufficiencyPct);
+    for (let i = 1; i < ss.length; i++) expect(ss[i]!).toBeGreaterThanOrEqual(ss[i - 1]! - 0.01);
+    const m = a.options.slice(1).map((o) => o.marginal!);
+    expect(m[m.length - 1]!).toBeLessThan(m[0]!);
+    expect(a.options[0]!.extraCost).toBe(0);
+    expect(a.options[2]!.extraCost).toBeGreaterThan(a.options[1]!.extraCost);
+  });
+
+  it('consiglia la capacità più grande ancora ben sfruttata', () => {
+    const a = batteryAdvice(defaultDesign());
+    expect(a.recommended).toBeGreaterThan(0);
+    const rec = a.options.find((o) => o.kWh === a.recommended)!;
+    expect(rec.marginal!).toBeGreaterThanOrEqual(BATTERY_MIN_KWH_PER_KWH);
+    const next = a.options.find((o) => o.kWh > a.recommended);
+    if (next) expect(next.marginal!).toBeLessThan(BATTERY_MIN_KWH_PER_KWH);
+  });
+
+  it('con la batteria passa a un inverter ibrido di potenza adeguata', () => {
+    const d = defaultDesign();
+    const w = withBattery(d, 5);
+    expect(w.inverter.hybrid).toBe(true);
+    expect(w.inverter.pacW).toBeGreaterThanOrEqual(d.inverter.pacW);
+    expect(withBattery(w, 0).batteryKWh).toBe(0);
+  });
+});
+
+describe('listino dei progetti salvati', () => {
+  it('aggiorna i prezzi rimasti ai vecchi predefiniti e conserva quelli cambiati', () => {
+    const old = defaultDesign();
+    const saved = JSON.parse(JSON.stringify(old));
+    delete saved.economics.pricesVersion;
+    saved.economics.importPrice = 0.28;
+    saved.economics.prices = saved.economics.prices.map((p: { id: string; price: number }) => (p.id === 'battery' ? { ...p, price: 450 } : p.id === 'labour' ? { ...p, price: 600 } : p));
+    const n = normalizeDesign(saved);
+    expect(n.economics.prices.find((p) => p.id === 'battery')!.price).toBe(750);
+    expect(n.economics.prices.find((p) => p.id === 'labour')!.price).toBe(600);
+    expect(n.economics.importPrice).toBe(0.4);
+    expect(n.economics.pricesVersion).toBe('2026-10');
   });
 });
