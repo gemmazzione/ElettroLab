@@ -4,6 +4,7 @@ import { pdfSafe } from '../export/reportData';
 import { f, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
 import { LOAD_PROFILES, MONTHS, MOUNTINGS, SITES } from './data';
 import { isHybrid, type PvDesign } from './design';
+import { roofLayout, ROOF_TYPES } from './roof';
 
 const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
@@ -13,14 +14,14 @@ const T = (s: string) => pdfSafe(s);
 const eur = (v: number) => `${f(v)} EUR`;
 
 /** Scarica la relazione del progetto fotovoltaico. */
-export function exportPvDesignPdf(d: PvDesign, r: DesignResults): void {
-  buildPvDesignPdf(d, r).save(pdfFileName(d));
+export function exportPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null): void {
+  buildPvDesignPdf(d, r, view3d).save(pdfFileName(d));
 }
 
 export const pdfFileName = (d: PvDesign) => `${d.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'progetto'}_fotovoltaico.pdf`;
 
 /** Relazione del progetto fotovoltaico: dati, verifiche, cavi, produzione, costi, ipotesi di calcolo. */
-export function buildPvDesignPdf(d: PvDesign, r: DesignResults): jsPDF {
+export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const date = new Date().toLocaleDateString('it-IT');
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
@@ -103,8 +104,13 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults): jsPDF {
   table(
     [],
     [
-      ['Zona climatica', site?.label ?? 'Dati personalizzati'],
-      ['Latitudine', `${f(d.site.latitude, 1)}° N`],
+      ...(d.location.lat !== null
+        ? [
+            ['Posizione', `${f(d.location.lat, 5)}, ${f(d.location.lon ?? 0, 5)}${d.location.address ? ` - ${d.location.address}` : ''}`],
+          ]
+        : []),
+      ['Zona climatica', d.site.presetId === 'auto' ? 'Stimata dalla latitudine (interpolazione tra zone indicative)' : (site?.label ?? 'Dati personalizzati')],
+      ['Latitudine', `${f(d.site.latitude, 2)}° N`],
       ['Inclinazione / orientamento', `${f(d.site.tilt)}° / ${f(d.site.azimuth)}° (0 = sud, -90 = est, +90 = ovest)`],
       ['Albedo / ombreggiamento', `${f(d.site.albedo, 2)} / ${f(d.site.shadingPct, 1)}%`],
       ['Montaggio', MOUNTINGS[d.site.mounting].label],
@@ -115,6 +121,43 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults): jsPDF {
     undefined,
     true,
   );
+
+  // ---------------------------------------------------------------- tetto e vista 3D
+  const roof = roofLayout(d);
+  if (roof) {
+    heading('Tetto e posa dei moduli', 'Ricostruiti dalla pianta disegnata sulla foto satellitare: le falde sono approssimate con il rettangolo che contiene la pianta. Camini, lucernari e ostacoli vanno verificati sul posto.');
+    table(
+      [],
+      [
+        ['Tipo di tetto', ROOF_TYPES[d.roof.type]],
+        ['Pianta', `${f(roof.geo.footprintM2)} m² (${f(roof.geo.rect.length, 1)} x ${f(roof.geo.rect.width, 1)} m)`],
+        ['Falda scelta', `${roof.slope.label}: orientamento ${f(roof.slope.azimuth)}°, inclinazione ${f(roof.slope.tilt)}°, superficie ${f(roof.layout.slopeM2)} m²`],
+        ['Posa', `moduli in ${d.roof.orientation}, ${f(d.roof.setbackM, 1)} m dai bordi${d.roof.type === 'piano' ? `, file distanziate ${f(roof.layout.rowPitch, 2)} m` : ''}`],
+        ['Moduli', `${moduleCount(d)} nel progetto, ${roof.layout.panels.length} al massimo sulla falda`],
+      ],
+      undefined,
+      true,
+    );
+  }
+  if (view3d) {
+    const w = 182;
+    const h = w * 0.56;
+    if (y + h + 12 > 285) {
+      doc.addPage();
+      y = MARGIN;
+    }
+    y += 8;
+    doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...INK);
+    doc.text('Vista 3D (modello semplificato)', MARGIN, y);
+    try {
+      const props = doc.getImageProperties(view3d);
+      const hh = (w * props.height) / props.width;
+      doc.addImage(view3d, 'JPEG', MARGIN, y + 2, w, hh);
+      y += hh + 4;
+    } catch {
+      y += 2;
+    }
+  }
 
   // ---------------------------------------------------------------- 2. generatore
   heading('2. Moduli, stringhe e inverter');

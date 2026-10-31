@@ -1,46 +1,287 @@
-import { FileDown, RotateCcw, Sun, Wand2, Zap } from 'lucide-react';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Check, ChevronLeft, ChevronRight, FileDown, RotateCcw, Sun, Wand2, Zap } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { PvCheck } from '../engine/pv';
 import { INSTALL_METHODS, type InstallMethod } from '../rules/ampacity';
 import { computeDesign, f, moduleCount, peakW, proposeSizing, stringsPerMppt, type DesignResults, type MonthResult } from '../pvdesign/calc';
 import { INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
 import { isHybrid, type PvDesign } from '../pvdesign/design';
 import { usePvDesign } from '../pvdesign/store';
+import { compassName, roofLayout, ROOF_TYPES, type RoofType } from '../pvdesign/roof';
 import { designToProject } from '../pvdesign/toProject';
 import { useStore } from '../store/projectStore';
 import { Field, NumberInput, Select, TextInput } from './fields';
 
-/** Sezione «Progetta FV»: progettazione guidata di un impianto fotovoltaico domestico con calcoli e costi. */
+// Mappa e vista 3D caricate solo quando servono (Leaflet e three.js sono librerie pesanti).
+const RoofMap = lazy(() => import('./pvdesign/RoofMap').then((m) => ({ default: m.RoofMap })));
+const Roof3D = lazy(() => import('./pvdesign/Roof3D').then((m) => ({ default: m.Roof3D })));
+
+const STEPS = ['La casa', 'Il tetto', 'Clima e ombre', 'Consumi', 'Moduli e inverter', 'Cavi e protezioni', 'Vista 3D', 'Produzione', 'Costi', 'Riepilogo'] as const;
+
+/** Sezione «Progetta FV»: progettazione guidata, passo per passo, di un impianto fotovoltaico domestico con calcoli e costi. */
 export function PvDesignView() {
   const d = usePvDesign((s) => s.design);
   const reload = usePvDesign((s) => s.reload);
+  const step = usePvDesign((s) => s.step);
+  const setStep = usePvDesign((s) => s.setStep);
   useEffect(() => reload(), [reload]);
   const r = useMemo(() => computeDesign(d), [d]);
+  const done = stepStatus(d, r);
+  const go = (n: number) => {
+    setStep(Math.max(0, Math.min(STEPS.length - 1, n)));
+    document.getElementById('pv-scroll')?.scrollTo({ top: 0 });
+  };
+  const n = step + 1;
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto grid max-w-[1280px] gap-5 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div id="pv-scroll" className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto grid max-w-[1320px] gap-5 px-4 py-5 lg:grid-cols-[190px_minmax(0,1fr)_280px]">
+        <nav className="min-w-0 lg:sticky lg:top-5 lg:self-start" aria-label="Passi della progettazione">
+          <div className="mb-3 flex items-center gap-2 text-amber-400">
+            <Sun size={18} />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Progetta FV</span>
+          </div>
+          <ol className="flex gap-1 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
+            {STEPS.map((t, i) => (
+              <li key={t} className="shrink-0">
+                <button
+                  onClick={() => go(i)}
+                  aria-current={i === step ? 'step' : undefined}
+                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12px] ${i === step ? 'bg-slate-800 font-semibold text-white' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
+                >
+                  <span
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold ${done[i] ? 'bg-emerald-500/20 text-emerald-300' : i === step ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}
+                  >
+                    {done[i] ? <Check size={11} /> : i + 1}
+                  </span>
+                  {t}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </nav>
         <div className="min-w-0 space-y-4">
-          <header>
-            <div className="flex items-center gap-2 text-amber-400">
-              <Sun size={18} />
-              <span className="text-[11px] font-semibold uppercase tracking-wider">Progetta FV</span>
-            </div>
-            <h1 className="mt-1 text-[20px] font-semibold text-white">Progettazione di un impianto fotovoltaico</h1>
-            <p className="mt-1 max-w-[70ch] text-[12.5px] leading-relaxed text-slate-400">
-              Sei passi: sito, consumi, generatore e inverter, cavi e protezioni, produzione, costi. I risultati si aggiornano a ogni modifica. Dati climatici, prodotti e prezzi sono
-              indicativi e modificabili: il risultato è uno studio di fattibilità, non un progetto esecutivo né una verifica di conformità.
-            </p>
-          </header>
-          <SiteStep />
-          <ConsumptionStep />
-          <GeneratorStep r={r} />
-          <CablesStep r={r} />
-          <YieldStep r={r} />
-          <CostStep r={r} />
+          {step === 0 && <HouseStep n={n} />}
+          {step === 1 && <RoofStep n={n} />}
+          {step === 2 && <SiteStep n={n} />}
+          {step === 3 && <ConsumptionStep n={n} />}
+          {step === 4 && <GeneratorStep n={n} r={r} />}
+          {step === 5 && <CablesStep n={n} r={r} />}
+          {step === 6 && <View3DStep n={n} />}
+          {step === 7 && <YieldStep n={n} r={r} />}
+          {step === 8 && <CostStep n={n} r={r} />}
+          {step === 9 && <FinalStep n={n} r={r} />}
+          <div className="flex items-center justify-between gap-2">
+            <button onClick={() => go(step - 1)} disabled={step === 0} className="flex items-center gap-1 rounded-md px-3 py-2 text-[12.5px] text-slate-300 hover:bg-slate-800 disabled:invisible">
+              <ChevronLeft size={15} /> {STEPS[step - 1] ?? ''}
+            </button>
+            {step < STEPS.length - 1 && (
+              <button onClick={() => go(step + 1)} className="flex items-center gap-1 rounded-md bg-amber-500 px-4 py-2 text-[12.5px] font-semibold text-slate-950 hover:bg-amber-400">
+                Avanti: {STEPS[step + 1]} <ChevronRight size={15} />
+              </button>
+            )}
+          </div>
         </div>
         <Summary r={r} />
       </div>
     </div>
+  );
+}
+
+/** Passi completati (spunta verde nell'elenco). */
+function stepStatus(d: PvDesign, r: DesignResults): boolean[] {
+  const roof = d.roof.footprint.length >= 3;
+  return [
+    d.location.lat !== null,
+    roof,
+    d.site.hDay.some((h) => h > 0),
+    d.consumption.annualKWh > 0,
+    !r.checks.some((c) => c.ok === false),
+    r.dc.ok && r.ac.ok,
+    roof,
+    r.yield.productionKWh > 0,
+    r.economics.total > 0,
+    false,
+  ];
+}
+
+const Loading = () => <div className="flex h-[420px] items-center justify-center rounded-lg border border-slate-800 text-[12px] text-slate-400">Caricamento…</div>;
+
+// ------------------------------------------------------------------ 1. la casa
+
+function HouseStep({ n }: { n: number }) {
+  const name = usePvDesign((x) => x.design.name);
+  const loc = usePvDesign((x) => x.design.location);
+  const up = useUpdate();
+  return (
+    <Step
+      n={n}
+      title="La casa"
+      intro="Trova la casa sulla foto satellitare e disegna il contorno del tetto: da qui si ricavano latitudine, clima, superficie, falde e orientamento. Se preferisci, puoi saltare la mappa e inserire i dati a mano nei passi successivi."
+    >
+      <Grid>
+        <div className="col-span-2">
+          <Field label="Nome del progetto">
+            <TextInput value={name} onChange={(v) => up((d) => ({ ...d, name: v }))} />
+          </Field>
+        </div>
+        <div className="col-span-2 min-w-0 self-end text-[11.5px] leading-snug text-slate-400">
+          {loc.lat !== null ? (
+            <>
+              Posizione:{' '}
+              <span className="font-mono text-slate-200">
+                {f(loc.lat, 5)}, {f(loc.lon ?? 0, 5)}
+              </span>
+              {loc.address && (
+                <span className="block truncate text-slate-500" title={loc.address}>
+                  {loc.address}
+                </span>
+              )}
+            </>
+          ) : (
+            'Posizione non ancora scelta.'
+          )}
+        </div>
+      </Grid>
+      <Suspense fallback={<Loading />}>
+        <RoofMap />
+      </Suspense>
+    </Step>
+  );
+}
+
+// ------------------------------------------------------------------ 2. il tetto
+
+function RoofStep({ n }: { n: number }) {
+  const d = usePvDesign((x) => x.design);
+  const up = useUpdate();
+  const setRoof = (patch: Partial<PvDesign['roof']>) => up((x) => ({ ...x, roof: { ...x.roof, ...patch } }));
+  const r = roofLayout(d);
+  const flat = d.roof.type === 'piano';
+  return (
+    <Step n={n} title="Il tetto" intro="Tipo di copertura, pendenza e falda su cui posare i moduli. La forma del tetto è ricostruita dalla pianta disegnata: le falde sono approssimate con il rettangolo che la contiene.">
+      {!r && (
+        <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100">
+          Non hai ancora disegnato la pianta del tetto (passo 1). Puoi farlo ora oppure inserire inclinazione e orientamento a mano nel passo «Clima e ombre».
+        </p>
+      )}
+      <Grid>
+        <div className="col-span-2">
+          <Field label="Tipo di tetto">
+            <Select value={d.roof.type} options={Object.keys(ROOF_TYPES) as RoofType[]} format={(t) => ROOF_TYPES[t]} onChange={(t) => setRoof({ type: t, slope: -1 })} />
+          </Field>
+        </div>
+        {flat ? (
+          <Num
+            label="Inclinazione dei telai"
+            value={d.site.tilt}
+            onChange={(v) => up((x) => ({ ...x, site: { ...x.site, tilt: v } }))}
+            suffix="°"
+            min={0}
+            max={45}
+            hint="Sui tetti piani di solito 10–30°: più è alta, più distanti devono essere le file"
+          />
+        ) : (
+          <Num label="Pendenza delle falde" value={d.roof.pitch} onChange={(v) => setRoof({ pitch: v })} suffix="°" min={3} max={60} hint="Un tetto in coppi o tegole ha di solito 15–35° (circa 30–70%)" />
+        )}
+        <Num label="Altezza della gronda" value={d.roof.heightM} onChange={(v) => setRoof({ heightM: v })} suffix="m" min={2.5} max={40} step={0.5} />
+        <Num label="Distanza dai bordi" value={d.roof.setbackM} onChange={(v) => setRoof({ setbackM: v })} suffix="m" min={0} max={3} step={0.1} hint="Spazio libero lungo gronda, colmo e bordi laterali" />
+        <Field label="Posa dei moduli">
+          <Select
+            value={d.roof.orientation}
+            options={['verticale', 'orizzontale'] as const}
+            format={(o) => (o === 'verticale' ? 'In verticale' : 'In orizzontale')}
+            onChange={(o) => setRoof({ orientation: o })}
+          />
+        </Field>
+      </Grid>
+      {r && (
+        <>
+          <div>
+            <h3 className="mb-1.5 text-[12px] font-semibold text-slate-200">Falda per i moduli</h3>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {r.geo.slopes.map((s, i) => {
+                const sel = i === d.roof.slope;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => setRoof({ slope: i })}
+                    className={`rounded-md border px-3 py-2 text-left text-[11.5px] ${sel ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'}`}
+                  >
+                    <div className="font-semibold text-slate-100">{s.label}</div>
+                    <div className="text-slate-400">
+                      Orientamento {f(s.azimuth)}° ({compassName(s.azimuth)}), inclinazione {f(s.tilt)}°{sel && ` · ci stanno ${r.layout.panels.length} moduli`}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Kpi label="Pianta" value={`${f(r.geo.footprintM2, 0)} m²`} sub={`${f(r.geo.rect.length, 1)} × ${f(r.geo.rect.width, 1)} m`} />
+            <Kpi label={flat ? 'Superficie del tetto' : 'Superficie della falda'} value={`${f(r.layout.slopeM2, 0)} m²`} />
+            <Kpi label="Moduli che ci stanno" value={`${r.layout.panels.length}`} sub={`${f((r.layout.panels.length * d.module.moduleWp) / 1000, 2)} kWp al massimo`} />
+            <Kpi
+              label={flat ? 'Interasse tra le file' : 'Altezza del colmo'}
+              value={flat ? `${f(r.layout.rowPitch, 2)} m` : `${f(d.roof.heightM + r.geo.rise, 1)} m`}
+              sub={flat ? `sole a ${f(r.layout.winterSunDeg, 1)}° il 21/12` : 'da terra'}
+            />
+          </div>
+          <p className="text-[11px] leading-snug text-slate-500">
+            {flat
+              ? "Sul tetto piano i moduli sono rivolti verso il lato dell'edificio più vicino al sud; le file sono distanziate perché a mezzogiorno del 21 dicembre una fila non ombreggi la successiva."
+              : 'Disposizione a griglia con file parallele alla gronda. Camini, lucernari e antenne non sono considerati: verifica sul posto e, se serve, aumenta la distanza dai bordi.'}
+          </p>
+        </>
+      )}
+    </Step>
+  );
+}
+
+// ------------------------------------------------------------------ 7. vista 3D
+
+function View3DStep({ n }: { n: number }) {
+  return (
+    <Step n={n} title="Vista 3D" intro="La casa ricostruita dalla pianta, con i moduli del progetto e il sole del mese e dell'ora scelti. Il conteggio dei moduli in ombra considera tetto, pareti e moduli stessi.">
+      <Suspense fallback={<Loading />}>
+        <Roof3D />
+      </Suspense>
+    </Step>
+  );
+}
+
+// ------------------------------------------------------------------ 10. riepilogo
+
+function FinalStep({ n, r }: { n: number; r: DesignResults }) {
+  const d = usePvDesign((x) => x.design);
+  const snapshot = usePvDesign((x) => x.snapshot);
+  const lay = roofLayout(d);
+  const todo: string[] = [];
+  if (d.location.lat === null) todo.push('Scegli la posizione della casa sulla mappa (passo 1).');
+  if (!lay) todo.push('Disegna la pianta del tetto per ricavare falde, orientamento e numero di moduli (passo 1).');
+  if (r.checks.some((c) => c.ok === false)) todo.push('Ci sono verifiche di stringa o di posa non superate (passo 5).');
+  if (!r.dc.ok || !r.ac.ok) todo.push('Rivedi le sezioni dei cavi (passo 6).');
+  if (!snapshot && lay) todo.push('Facoltativo: salva una vista 3D da inserire nella relazione (passo 7).');
+  return (
+    <Step n={n} title="Riepilogo" intro="Il progetto in breve, cosa manca e i documenti da scaricare (pulsanti nel riquadro a destra).">
+      {todo.length > 0 ? (
+        <ul className="space-y-1.5">
+          {todo.map((t) => (
+            <li key={t} className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100">
+              {t}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-200">Il progetto è completo: puoi scaricare la relazione o aprirlo nel laboratorio.</p>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Kpi label="Potenza di picco" value={`${f(peakW(d) / 1000, 2)} kWp`} sub={`${moduleCount(d)} moduli`} />
+        <Kpi label="Produzione annua" value={`${f(r.yield.productionKWh)} kWh`} sub={`${f(r.yield.specificYield)} kWh/kWp`} />
+        <Kpi label="Costo totale" value={eur(r.economics.total)} sub={`${eur(r.economics.perKWp)} per kWp`} />
+        <Kpi label="Rientro semplice" value={r.economics.paybackYears === null ? 'oltre la durata' : `${f(r.economics.paybackYears, 1)} anni`} />
+      </div>
+      {snapshot && <img src={snapshot} alt="Vista 3D della casa con i moduli" className="w-full rounded-lg border border-slate-800" />}
+      <Checks checks={r.checks} />
+    </Step>
   );
 }
 
@@ -123,43 +364,57 @@ const eur = (v: number) => `${f(v)} €`;
 
 // ------------------------------------------------------------------ 1. sito
 
-function SiteStep() {
+function SiteStep({ n }: { n: number }) {
+  const hasRoof = usePvDesign((x) => x.design.roof.footprint.length >= 3);
+  const hasLoc = usePvDesign((x) => x.design.location.lat !== null);
   const s = usePvDesign((x) => x.design.site);
-  const name = usePvDesign((x) => x.design.name);
   const up = useUpdate();
   const set = (patch: Partial<PvDesign['site']>) => up((d) => ({ ...d, site: { ...d.site, ...patch } }));
   const [table, setTable] = useState(false);
   const yearH = s.hDay.reduce((a, h, i) => a + h * (MONTH_DAYS[i] ?? 30), 0);
   return (
-    <Step n={1} title="Sito e orientamento" intro="Dove si trova l'impianto e come sono rivolti i moduli. I dati climatici delle tre zone sono ordini di grandezza: per un progetto vero inserisci quelli del sito (UNI 10349, PVGIS).">
+    <Step
+      n={n}
+      title="Clima e ombre"
+      intro="Irraggiamento e temperature del sito, ombre e montaggio. Con la posizione scelta sulla mappa il clima è stimato dalla latitudine tra tre zone di riferimento: è un ordine di grandezza, per un progetto vero usa i dati del sito (UNI 10349, PVGIS)."
+    >
       <Grid>
-        <div className="col-span-2">
-          <Field label="Nome del progetto">
-            <TextInput value={name} onChange={(v) => up((d) => ({ ...d, name: v }))} />
-          </Field>
-        </div>
         <div className="col-span-2">
           <Field label="Zona climatica (dati indicativi)">
             <Select
               value={s.presetId}
-              options={[...SITES.map((x) => x.id), 'custom']}
-              format={(id) => SITES.find((x) => x.id === id)?.label ?? 'Dati personalizzati'}
+              options={[...(hasLoc ? ['auto'] : []), ...SITES.map((x) => x.id), 'custom']}
+              format={(id) => (id === 'auto' ? 'Stimato dalla latitudine della casa' : (SITES.find((x) => x.id === id)?.label ?? 'Dati personalizzati'))}
               onChange={(id) => {
                 const p = SITES.find((x) => x.id === id);
-                if (p) set({ presetId: id, latitude: p.latitude, hDay: [...p.hDay], tMean: [...p.tMean], tMin: p.tMin, tMax: p.tMax });
-                else set({ presetId: 'custom' });
+                if (p) set({ presetId: id, ...(hasLoc ? {} : { latitude: p.latitude }), hDay: [...p.hDay], tMean: [...p.tMean], tMin: p.tMin, tMax: p.tMax });
+                else set({ presetId: id });
               }}
             />
           </Field>
         </div>
-        <Num label="Latitudine" value={s.latitude} onChange={(v) => set({ latitude: v, presetId: 'custom' })} suffix="°N" min={30} max={60} step={0.1} />
-        <Num label="Inclinazione dei moduli" value={s.tilt} onChange={(v) => set({ tilt: v })} suffix="°" min={0} max={90} hint="0° = orizzontali, 90° = verticali" />
-        <Num label="Orientamento (azimut)" value={s.azimuth} onChange={(v) => set({ azimuth: v })} suffix="°" min={-180} max={180} hint="0° = sud, −90° = est, +90° = ovest, 180° = nord" />
+        {hasLoc ? (
+          <div className="self-end text-[11.5px] text-slate-400">
+            Latitudine <span className="font-mono text-slate-200">{f(s.latitude, 3)}° N</span> (dalla mappa)
+          </div>
+        ) : (
+          <Num label="Latitudine" value={s.latitude} onChange={(v) => set({ latitude: v, presetId: s.presetId === 'auto' ? 'custom' : s.presetId })} suffix="°N" min={30} max={60} step={0.1} />
+        )}
+        {hasRoof ? (
+          <div className="col-span-2 self-end text-[11.5px] text-slate-400">
+            Moduli inclinati di <span className="font-mono text-slate-200">{f(s.tilt)}°</span>, orientati a <span className="font-mono text-slate-200">{f(s.azimuth)}°</span> ({compassName(s.azimuth)}): dal tetto disegnato.
+          </div>
+        ) : (
+          <>
+            <Num label="Inclinazione dei moduli" value={s.tilt} onChange={(v) => set({ tilt: v })} suffix="°" min={0} max={90} hint="0° = orizzontali, 90° = verticali" />
+            <Num label="Orientamento (azimut)" value={s.azimuth} onChange={(v) => set({ azimuth: v })} suffix="°" min={-180} max={180} hint="0° = sud, −90° = est, +90° = ovest, 180° = nord" />
+          </>
+        )}
         <Num label="Ombreggiamento medio" value={s.shadingPct} onChange={(v) => set({ shadingPct: v })} suffix="%" min={0} max={60} step={0.5} />
         <Num label="Temperatura minima di progetto" value={s.tMin} onChange={(v) => set({ tMin: v, presetId: 'custom' })} suffix="°C" min={-40} max={20} />
         <Num label="Temperatura massima di progetto" value={s.tMax} onChange={(v) => set({ tMax: v, presetId: 'custom' })} suffix="°C" min={20} max={55} />
         <Num label="Albedo del suolo" value={s.albedo} onChange={(v) => set({ albedo: v })} min={0} max={0.9} step={0.05} hint="Erba 0,2; cemento 0,3; neve fresca 0,8" />
-        <Num label="Superficie disponibile" value={s.roofM2} onChange={(v) => set({ roofM2: v })} suffix="m²" min={0} hint="0 = non verificare" />
+        {!hasRoof && <Num label="Superficie disponibile" value={s.roofM2} onChange={(v) => set({ roofM2: v })} suffix="m²" min={0} hint="0 = non verificare" />}
         <div className="col-span-2">
           <Field label="Montaggio dei moduli">
             <Select value={s.mounting} options={Object.keys(MOUNTINGS) as MountingId[]} format={(m) => MOUNTINGS[m].label} onChange={(m) => set({ mounting: m })} />
@@ -216,12 +471,12 @@ function SiteStep() {
 
 // ------------------------------------------------------------------ 2. consumi
 
-function ConsumptionStep() {
+function ConsumptionStep({ n }: { n: number }) {
   const c = usePvDesign((x) => x.design.consumption);
   const up = useUpdate();
   const set = (patch: Partial<PvDesign['consumption']>) => up((d) => ({ ...d, consumption: { ...d.consumption, ...patch } }));
   return (
-    <Step n={2} title="Consumi della casa" intro="I consumi annui si leggono sulle bollette (somma di 12 mesi). Il profilo orario decide quanta energia si usa mentre i moduli producono.">
+    <Step n={n} title="Consumi della casa" intro="I consumi annui si leggono sulle bollette (somma di 12 mesi). Il profilo orario decide quanta energia si usa mentre i moduli producono.">
       <Grid>
         <Num label="Consumo annuo" value={c.annualKWh} onChange={(v) => set({ annualKWh: v })} suffix="kWh" min={100} max={50000} step={100} />
         <Num label="Potenza della fornitura" value={c.contractKW} onChange={(v) => set({ contractKW: v })} suffix="kW" min={1} max={30} step={0.5} />
@@ -237,7 +492,7 @@ function ConsumptionStep() {
 
 // ------------------------------------------------------------------ 3. generatore e inverter
 
-function GeneratorStep({ r }: { r: DesignResults }) {
+function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
   const d = usePvDesign((x) => x.design);
   const up = useUpdate();
   const [note, setNote] = useState<string | null>(null);
@@ -255,7 +510,7 @@ function GeneratorStep({ r }: { r: DesignResults }) {
     setNote(`${p.note} Proposta: ${p.strings} ${p.strings > 1 ? 'stringhe' : 'stringa'} da ${p.modulesPerString} moduli con l'inverter «${inv.label}».${p.modulesPerString * p.strings !== p.targetModules ? ` È la configurazione più vicina che supera le verifiche di stringa con un rapporto DC/AC tra 0,8 e 1,2.` : ''}`);
   };
   return (
-    <Step n={3} title="Moduli, stringhe e inverter" intro="I moduli in serie formano una stringa; le stringhe vanno sugli ingressi MPPT dell'inverter. Le verifiche usano i dati di targa e le temperature di progetto del sito.">
+    <Step n={n} title="Moduli, stringhe e inverter" intro="I moduli in serie formano una stringa; le stringhe vanno sugli ingressi MPPT dell'inverter. Le verifiche usano i dati di targa e le temperature di progetto del sito.">
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={propose} className="flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-slate-950 hover:bg-amber-400">
           <Wand2 size={14} /> Proponi il dimensionamento sui consumi
@@ -337,13 +592,13 @@ function GeneratorStep({ r }: { r: DesignResults }) {
 
 const SECTION_OPTS = ['auto', 2.5, 4, 6, 10, 16] as const;
 
-function CablesStep({ r }: { r: DesignResults }) {
+function CablesStep({ n, r }: { n: number; r: DesignResults }) {
   const c = usePvDesign((x) => x.design.cables);
   const up = useUpdate();
   const set = (patch: Partial<PvDesign['cables']>) => up((d) => ({ ...d, cables: { ...d.cables, ...patch } }));
   const sec = (v: number | null) => (v === null ? 'auto' : v);
   return (
-    <Step n={4} title="Cavi e protezioni" intro="Sezioni dei cavi dalla portata e dalla caduta di tensione (obiettivo ≤ 1% per lato, scelta di progetto comune), poi le protezioni lato DC e lato AC.">
+    <Step n={n} title="Cavi e protezioni" intro="Sezioni dei cavi dalla portata e dalla caduta di tensione (obiettivo ≤ 1% per lato, scelta di progetto comune), poi le protezioni lato DC e lato AC.">
       <Grid>
         <Num label="Cavi DC: lunghezza stringa → inverter" value={c.dcLengthM} onChange={(v) => set({ dcLengthM: v })} suffix="m" min={1} max={300} hint="Sola andata, per ogni stringa" />
         <Field label="Sezione cavo solare">
@@ -389,7 +644,7 @@ function CablesStep({ r }: { r: DesignResults }) {
 
 // ------------------------------------------------------------------ 5. produzione
 
-function YieldStep({ r }: { r: DesignResults }) {
+function YieldStep({ n, r }: { n: number; r: DesignResults }) {
   const y = r.yield;
   const d = usePvDesign((x) => x.design);
   const month = usePvDesign((x) => x.month);
@@ -397,7 +652,7 @@ function YieldStep({ r }: { r: DesignResults }) {
   const lossSum = y.losses.reduce((a, l) => a + l.kWh, 0);
   return (
     <Step
-      n={5}
+      n={n}
       title="Produzione, autoconsumo e perdite"
       intro="Calcolo a passi di 15 minuti sul giorno medio di ogni mese: irraggiamento sul piano dei moduli (modello isotropo), temperatura delle celle, perdite, limite dell'inverter, consumi e batteria."
     >
@@ -575,7 +830,7 @@ function DayChart({ m, battery }: { m: MonthResult; battery: boolean }) {
 
 // ------------------------------------------------------------------ 6. costi
 
-function CostStep({ r }: { r: DesignResults }) {
+function CostStep({ n, r }: { n: number; r: DesignResults }) {
   const e = usePvDesign((x) => x.design.economics);
   const deg = usePvDesign((x) => x.design.losses.degradationPct);
   const up = useUpdate();
@@ -584,7 +839,7 @@ function CostStep({ r }: { r: DesignResults }) {
   const [prices, setPrices] = useState(false);
   return (
     <Step
-      n={6}
+      n={n}
       title="Costi e ritorno dell'investimento"
       intro="Computo con un listino indicativo (IVA esclusa, modificabile), poi i flussi di cassa anno per anno: energia non acquistata, energia venduta, detrazione, manutenzione e sostituzione dell'inverter."
     >
@@ -739,7 +994,7 @@ function Summary({ r }: { r: DesignResults }) {
     setBusy(true);
     try {
       const { exportPvDesignPdf } = await import('../pvdesign/pdf');
-      exportPvDesignPdf(d, r);
+      exportPvDesignPdf(d, r, usePvDesign.getState().snapshot);
     } finally {
       setBusy(false);
     }

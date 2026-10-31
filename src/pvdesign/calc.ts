@@ -4,6 +4,10 @@ import type { InverterParams, PvArrayParams, WireSection } from '../model/types'
 import { ampacity, tempFactor } from '../rules/ampacity';
 import { LOAD_PROFILES, MOUNTINGS, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
 import { isHybrid, type PvDesign } from './design';
+import { roofCapacity } from './roof';
+import { declination } from './sun';
+
+export { declination };
 
 /*
  * Calcoli della progettazione fotovoltaica.
@@ -30,9 +34,6 @@ export const f = (v: number, d = 0) => v.toLocaleString('it-IT', { minimumFracti
 
 // ------------------------------------------------------------------ geometria solare
 
-export function declination(n: number): number {
-  return 23.45 * Math.sin(RAD * ((360 * (284 + n)) / 365));
-}
 
 /** Irraggiamento extraterrestre giornaliero sul piano orizzontale [kWh/m²]. */
 export function extraterrestrialDaily(latDeg: number, n: number): number {
@@ -180,6 +181,15 @@ export function generatorChecks(d: PvDesign): PvCheck[] {
       title: 'Superficie occupata dai moduli',
       ok: area <= d.site.roofM2 * 0.9 ? true : area <= d.site.roofM2 ? null : false,
       detail: `${moduleCount(d)} moduli × ${f(d.module.areaM2, 2)} m² = ${f(area, 1)} m² su ${f(d.site.roofM2)} m² disponibili. Servono anche gli spazi per il passaggio, i bordi e le distanze dai camini.`,
+    });
+  }
+  const cap = roofCapacity(d);
+  if (cap !== null) {
+    out.push({
+      id: 'roof-fit',
+      title: 'Moduli che stanno sulla falda',
+      ok: moduleCount(d) <= cap,
+      detail: `${moduleCount(d)} moduli previsti, sulla falda scelta ne stanno ${cap} con la distanza dai bordi indicata (disposizione a griglia, da verificare sul posto).`,
     });
   }
   if (d.batteryKWh > 0 && !isHybrid(d)) {
@@ -478,6 +488,7 @@ export function proposeSizing(d: PvDesign, inverters: PvDesign['inverter'][]): S
   if (yieldPerKWp <= 0) return null;
   const targetKWp = d.consumption.annualKWh / yieldPerKWp;
   const target = Math.max(1, Math.round((targetKWp * 1000) / d.module.moduleWp));
+  const cap = roofCapacity(d);
   const pool = inverters.filter((i) => i.hybrid === (d.batteryKWh > 0)).sort((a, b) => a.pacW - b.pacW);
   let best: { ns: number; np: number; inv: PvDesign['inverter']; score: number } | null = null;
   for (const inv of pool) {
@@ -485,6 +496,7 @@ export function proposeSizing(d: PvDesign, inverters: PvDesign['inverter'][]): S
       for (let ns = 2; ns <= 30; ns++) {
         const cand: PvDesign = { ...d, inverter: inv, modulesPerString: ns, strings: np };
         if (generatorChecks(cand).some((c) => c.ok === false)) continue;
+        if (cap !== null && ns * np > cap) continue;
         const ratio = peakW(cand) / inv.pacW;
         if (ratio > 1.2 || ratio < 0.8) continue;
         const score = Math.abs(ns * np - target) + (np - 1) * 0.3 + inv.pacW / 10000;

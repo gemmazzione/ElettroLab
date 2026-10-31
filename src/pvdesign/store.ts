@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { storageKey } from '../persistence/space';
 import { defaultDesign, normalizeDesign, type PvDesign } from './design';
+import { syncRoof } from './roof';
 
 const KEY = 'electrolab.pvdesign.v1';
 
@@ -25,6 +26,12 @@ interface PvDesignStore {
   design: PvDesign;
   /** Mese mostrato nel grafico del giorno medio (0 = gennaio) */
   month: number;
+  /** Passo del percorso guidato (0 = la casa) */
+  step: number;
+  setStep: (n: number) => void;
+  /** Ultima vista 3D scelta per la relazione (immagine JPEG, non salvata) */
+  snapshot: string | null;
+  setSnapshot: (s: string | null) => void;
   update: (fn: (d: PvDesign) => PvDesign) => void;
   setMonth: (m: number) => void;
   reset: () => void;
@@ -35,8 +42,12 @@ interface PvDesignStore {
 export const usePvDesign = create<PvDesignStore>((set, get) => ({
   design: load(),
   month: 6,
+  step: 0,
+  setStep: (step) => set({ step }),
+  snapshot: null,
+  setSnapshot: (snapshot) => set({ snapshot }),
   update: (fn) => {
-    const d = fn(get().design);
+    const d = syncRoof(fn(get().design));
     save(d);
     set({ design: d });
   },
