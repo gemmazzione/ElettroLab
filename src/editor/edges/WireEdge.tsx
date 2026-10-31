@@ -66,7 +66,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
         {(showLengths || (showLabels && flowingComb(running, current))) && !broken && (
           <EdgeLabelRenderer>
             <div
-              className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[0.53125rem] leading-[12px] ring-1 ring-amber-800/60 ${dim ? 'opacity-25' : ''}`}
+              className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[8.5px] leading-[12px] ring-1 ring-amber-800/60 ${dim ? 'opacity-25' : ''}`}
               style={{ transform: `translate(-50%, -100%) translate(${midX}px, ${yb - 2}px)` }}
             >
               {showLengths && <span className="text-orange-200">pettine {wire.conductor}</span>}
@@ -104,7 +104,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
       {broken && (
         <EdgeLabelRenderer>
           <div
-            className="pointer-events-none absolute rounded bg-red-600 px-1 text-[0.5625rem] font-bold leading-[13px] text-white"
+            className="pointer-events-none absolute rounded bg-red-600 px-1 text-[9px] font-bold leading-[13px] text-white"
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
           >
             ✕ interrotto
@@ -114,7 +114,7 @@ export const WireEdge = memo(function WireEdge(props: EdgeProps) {
       {!broken && ((showLabels && flowing) || showLengths) && (
         <EdgeLabelRenderer>
           <div
-            className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[0.5625rem] leading-[13px] ring-1 ${linked ? 'ring-amber-400/70' : 'ring-slate-700'} ${dim ? 'opacity-25' : ''}`}
+            className={`pointer-events-none absolute whitespace-nowrap rounded bg-slate-950/90 px-1 font-mono text-[9px] leading-[13px] ring-1 ${linked ? 'ring-amber-400/70' : 'ring-slate-700'} ${dim ? 'opacity-25' : ''}`}
             style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}
           >
             {showLengths && (

@@ -108,12 +108,12 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         </div>
       )}
       {tripped && (
-        <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-amber-500 px-1 text-[0.53125rem] font-bold uppercase leading-[13px] text-slate-950">
+        <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-amber-500 px-1 text-[8.5px] font-bold uppercase leading-[13px] text-slate-950">
           {TRIP_LABEL[tripped]}
         </div>
       )}
       {blown && (
-        <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-600 px-1 text-[0.53125rem] font-bold uppercase leading-[13px] text-white">
+        <div className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded bg-red-600 px-1 text-[8.5px] font-bold uppercase leading-[13px] text-white">
           {TRIP_LABEL.fusione}
         </div>
       )}
@@ -121,7 +121,7 @@ export const DinNode = memo(function DinNode({ data, selected }: NodeProps) {
         <TerminalHandle key={t.key} t={t} y={t.side === 'top' ? TERMINAL_Y_TOP : TERMINAL_Y_BOTTOM} ownerLabel={comp.label} />
       ))}
       {running && hasLever && current > 0.005 && (
-        <div className="pointer-events-none absolute left-1/2 top-[100px] -translate-x-1/2 whitespace-nowrap rounded bg-slate-950/85 px-1 font-mono text-[0.5625rem] leading-[14px] text-amber-300">
+        <div className="pointer-events-none absolute left-1/2 top-[100px] -translate-x-1/2 whitespace-nowrap rounded bg-slate-950/85 px-1 font-mono text-[9px] leading-[14px] text-amber-300">
           {fmtCurrent(current)}
         </div>
       )}
@@ -147,12 +147,12 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
       style={{ width: componentWidth(comp), height: h }}
     >
       <IssueDot level={issue} />
-      <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1.5 text-[0.6875rem] font-semibold text-slate-200">
+      <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200">
         <Zap size={13} className={running ? 'text-amber-400' : 'text-slate-500'} />
         {comp.label} · Contatore
         <span className={`ml-auto h-2 w-2 rounded-full ${running ? 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400' : 'bg-slate-600'}`} />
       </div>
-      <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[0.6875rem] leading-4 text-emerald-300">
+      <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[11px] leading-4 text-emerald-300">
         {running && res ? (
           res.phases.length === 3 ? (
             <>
@@ -182,7 +182,7 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
           </>
         )}
       </div>
-      <div className="absolute bottom-[18px] left-0 right-0 flex text-[0.5625rem] font-mono text-slate-400">
+      <div className="absolute bottom-[18px] left-0 right-0 flex text-[9px] font-mono text-slate-400">
         {terms.map((t) => (
           <span key={t.key} className="absolute -translate-x-1/2" style={{ left: t.x }}>
             {t.label}
@@ -214,15 +214,15 @@ export const EarthNode = memo(function EarthNode({ data, selected }: NodeProps) 
       {terms.map((t) => (
         <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
       ))}
-      <div className="pt-4 text-center font-mono text-[0.5625rem] text-green-400">PE</div>
+      <div className="pt-4 text-center font-mono text-[9px] text-green-400">PE</div>
       <svg width={w} height={44} viewBox={`0 0 ${w} 44`} className="block">
         <line x1={w / 2} y1={0} x2={w / 2} y2={16} stroke="#22c55e" strokeWidth={2} />
         <line x1={w / 2 - 22} y1={16} x2={w / 2 + 22} y2={16} stroke="#cbd5e1" strokeWidth={2} />
         <line x1={w / 2 - 14} y1={23} x2={w / 2 + 14} y2={23} stroke="#cbd5e1" strokeWidth={2} />
         <line x1={w / 2 - 6} y1={30} x2={w / 2 + 6} y2={30} stroke="#cbd5e1" strokeWidth={2} />
       </svg>
-      <div className="text-center text-[0.6875rem] font-semibold text-slate-200">{comp.label} · Dispersore</div>
-      <div className="text-center font-mono text-[0.625rem] text-slate-400">RA = {fmt(comp.params.p.ra, 0)} Ω</div>
+      <div className="text-center text-[11px] font-semibold text-slate-200">{comp.label} · Dispersore</div>
+      <div className="text-center font-mono text-[10px] text-slate-400">RA = {fmt(comp.params.p.ra, 0)} Ω</div>
     </div>
   );
 });
@@ -265,7 +265,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
     >
       <IssueDot level={issue} />
       {faultCount > 0 && (
-        <div className="absolute -left-2 -top-2 z-10 flex h-5 items-center gap-0.5 rounded-full bg-red-600 px-1.5 text-[0.5625rem] font-bold text-white ring-2 ring-slate-900" title="Guasti attivi su questa linea">
+        <div className="absolute -left-2 -top-2 z-10 flex h-5 items-center gap-0.5 rounded-full bg-red-600 px-1.5 text-[9px] font-bold text-white ring-2 ring-slate-900" title="Guasti attivi su questa linea">
           <Zap size={10} /> {faultCount}
         </div>
       )}
@@ -273,7 +273,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
       {terms.map((t) => (
         <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
       ))}
-      <div className="flex pt-3.5 font-mono text-[0.5625rem] text-slate-400">
+      <div className="flex pt-3.5 font-mono text-[9px] text-slate-400">
         {terms.map((t) => (
           <span key={t.key} className="absolute -translate-x-1/2" style={{ left: t.x }}>
             {t.label}
@@ -283,8 +283,8 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
       <div className="mt-4 flex items-center gap-2 px-2.5">
         <Icon size={20} className={working ? 'text-amber-300 drop-shadow-[0_0_6px_rgba(252,211,77,0.6)]' : 'text-slate-500'} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.6875rem] font-semibold text-slate-100">{p.name}</div>
-          <div className="font-mono text-[0.625rem] text-slate-400">
+          <div className="truncate text-[11px] font-semibold text-slate-100">{p.name}</div>
+          <div className="font-mono text-[10px] text-slate-400">
             {comp.label} · {p.phases === 3 ? '3F · ' : ''}
             {(p.cosPhi ?? 1) < 1 ? `cos φ ${fmt(p.cosPhi ?? 1, 2)} · ` : ''}
             {fmtPower(p.powerW)} · {p.cableSection} mm² · {p.cableLength} m
@@ -301,7 +301,7 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
           <Power size={13} />
         </button>
       </div>
-      <div className="mx-2.5 mt-2 rounded bg-slate-950/70 px-2 py-1 font-mono text-[0.625rem] leading-4">
+      <div className="mx-2.5 mt-2 rounded bg-slate-950/70 px-2 py-1 font-mono text-[10px] leading-4">
         {!running ? (
           <span className="text-slate-500">non alimentato</span>
         ) : res && res.energized && res.phaseV ? (
@@ -322,12 +322,12 @@ export const LoadNode = memo(function LoadNode({ data, selected }: NodeProps) {
         )}
       </div>
       {running && evReason && (
-        <div className="absolute left-0 right-0 top-full mt-1 truncate rounded bg-slate-900/90 px-2 py-0.5 text-center text-[0.59375rem] text-sky-200 ring-1 ring-slate-700" title={evReason}>
+        <div className="absolute left-0 right-0 top-full mt-1 truncate rounded bg-slate-900/90 px-2 py-0.5 text-center text-[9.5px] text-sky-200 ring-1 ring-slate-700" title={evReason}>
           ⚡ {evReason}
         </div>
       )}
       {running && touch !== null && touch > 50 && (
-        <div className="absolute left-0 right-0 top-full mt-1 rounded bg-red-600 px-2 py-0.5 text-center text-[0.625rem] font-bold text-white">
+        <div className="absolute left-0 right-0 top-full mt-1 rounded bg-red-600 px-2 py-0.5 text-center text-[10px] font-bold text-white">
           ⚠ Massa a {fmt(touch, 0)} V verso terra
         </div>
       )}
@@ -354,7 +354,7 @@ export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps
       {terms.map((t) => (
         <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
       ))}
-      <div className="flex pt-3.5 font-mono text-[0.5625rem] text-slate-400">
+      <div className="flex pt-3.5 font-mono text-[9px] text-slate-400">
         {terms.map((t) => (
           <span key={t.key} className="absolute -translate-x-1/2" style={{ left: t.x }}>
             {t.label}
@@ -363,7 +363,7 @@ export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps
       </div>
       <div className="mt-3 flex items-center gap-2 px-2.5">
         <button
-          className={`nodrag flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-[0.625rem] font-bold transition-transform active:scale-90 ${
+          className={`nodrag flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-transform active:scale-90 ${
             comp.closed ? 'border-amber-300 bg-amber-400 text-slate-900' : 'border-slate-400 bg-slate-200 text-slate-700 hover:bg-white'
           }`}
           title={running ? 'Premi il pulsante' : 'Avvia la simulazione per usare il pulsante'}
@@ -375,8 +375,8 @@ export const ButtonNode = memo(function ButtonNode({ data, selected }: NodeProps
           ●
         </button>
         <div className="min-w-0">
-          <div className="truncate text-[0.6875rem] font-semibold text-slate-100">{comp.params.p.name}</div>
-          <div className="font-mono text-[0.625rem] text-slate-400">
+          <div className="truncate text-[11px] font-semibold text-slate-100">{comp.params.p.name}</div>
+          <div className="font-mono text-[10px] text-slate-400">
             {comp.label} · {comp.closed ? 'premuto' : 'NA'}
           </div>
         </div>
@@ -408,12 +408,12 @@ export const PvArrayNode = memo(function PvArrayNode({ data, selected }: NodePro
       style={{ width: w, height: h }}
     >
       <IssueDot level={issue} />
-      <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1 text-[0.6875rem] font-semibold text-slate-200">
+      <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1 text-[11px] font-semibold text-slate-200">
         <Sun size={13} className={lit ? 'text-amber-300' : 'text-slate-500'} />
         <span className="truncate">
           {comp.label} · {p.name}
         </span>
-        <span className="ml-auto font-mono text-[0.59375rem] font-normal text-slate-400">{fmt(irr, 0)} W/m²</span>
+        <span className="ml-auto font-mono text-[9.5px] font-normal text-slate-400">{fmt(irr, 0)} W/m²</span>
       </div>
       <div className="mx-2.5 mt-1.5 grid gap-[2px]" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }} title={`${p.strings} × ${n} moduli da ${p.moduleWp} Wp`}>
         {Array.from({ length: Math.min(n * p.strings, 16) }, (_, k) => (
@@ -424,7 +424,7 @@ export const PvArrayNode = memo(function PvArrayNode({ data, selected }: NodePro
           />
         ))}
       </div>
-      <div className="mx-2.5 mt-1.5 rounded bg-slate-950/70 px-2 py-0.5 font-mono text-[0.625rem] leading-4 text-slate-300">
+      <div className="mx-2.5 mt-1.5 rounded bg-slate-950/70 px-2 py-0.5 font-mono text-[10px] leading-4 text-slate-300">
         {fmt((p.moduleWp * n * p.strings) / 1000, 2)} kWp · {p.strings}×{n}
         {running && res ? (
           <span className={res.pOut > 1 ? 'text-amber-200' : 'text-slate-400'}>
@@ -437,7 +437,7 @@ export const PvArrayNode = memo(function PvArrayNode({ data, selected }: NodePro
         <TerminalHandle key={t.key} t={t} y={h - 6} ownerLabel={comp.label} />
       ))}
       {terms.map((t) => (
-        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[0.5625rem] text-slate-400" style={{ left: t.x, top: h - 24 }}>
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: h - 24 }}>
           {t.label}
         </span>
       ))}
@@ -480,25 +480,25 @@ export const InverterNode = memo(function InverterNode({ data, selected }: NodeP
         <TerminalHandle key={t.key} t={t} y={t.side === 'top' ? 6 : h - 6} ownerLabel={comp.label} />
       ))}
       {terms.map((t) => (
-        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[0.5625rem] text-slate-400" style={{ left: t.x, top: t.side === 'top' ? 13 : h - 24 }}>
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: t.side === 'top' ? 13 : h - 24 }}>
           {t.label}
         </span>
       ))}
       <div className="mt-7 flex items-center gap-2 px-2.5">
-        <div className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded border font-mono text-[0.625rem] leading-3 ${producing ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>
+        <div className={`flex h-9 w-9 shrink-0 flex-col items-center justify-center rounded border font-mono text-[10px] leading-3 ${producing ? 'border-emerald-500/60 text-emerald-300' : 'border-slate-600 text-slate-400'}`}>
           <span>=</span>
           <span>~</span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.6875rem] font-semibold text-slate-100">
+          <div className="truncate text-[11px] font-semibold text-slate-100">
             {comp.label} · Inverter {fmtPower(p.pacW)}
           </div>
-          <div className="font-mono text-[0.59375rem] text-slate-400">
+          <div className="font-mono text-[9.5px] text-slate-400">
             MPPT {p.mpptMinV}–{p.mpptMaxV} V{p.batteryKWh > 0 ? ` · batteria ${fmt(p.batteryKWh, 1)} kWh` : ''}
           </div>
         </div>
       </div>
-      <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[0.625rem] leading-4">
+      <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[10px] leading-4">
         {!running || !res ? (
           <span className="text-slate-500">spento (simulazione ferma)</span>
         ) : (
@@ -544,7 +544,7 @@ export const WallSwitchNode = memo(function WallSwitchNode({ data, selected }: N
         <TerminalHandle key={t.key} t={t} y={6} ownerLabel={comp.label} />
       ))}
       {terms.map((t) => (
-        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[0.5625rem] text-slate-400" style={{ left: t.x, top: 13 }}>
+        <span key={`l-${t.key}`} className="absolute -translate-x-1/2 font-mono text-[9px] text-slate-400" style={{ left: t.x, top: 13 }}>
           {t.label}
         </span>
       ))}
@@ -561,11 +561,11 @@ export const WallSwitchNode = memo(function WallSwitchNode({ data, selected }: N
           <span className={`block h-5 w-6 rounded-sm transition-transform ${comp.closed ? 'translate-y-[5px] bg-slate-400' : '-translate-y-[5px] bg-slate-50'} border border-slate-400`} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.6875rem] font-semibold text-slate-100">{p.name}</div>
-          <div className="font-mono text-[0.59375rem] text-slate-400">
+          <div className="truncate text-[11px] font-semibold text-slate-100">{p.name}</div>
+          <div className="font-mono text-[9.5px] text-slate-400">
             {comp.label} · {p.type}
           </div>
-          <div className="font-mono text-[0.625rem] text-amber-200">{pos[comp.closed ? 1 : 0]}</div>
+          <div className="font-mono text-[10px] text-amber-200">{pos[comp.closed ? 1 : 0]}</div>
         </div>
       </div>
     </div>
