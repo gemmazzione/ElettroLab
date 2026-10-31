@@ -168,21 +168,21 @@ export function RoofMap() {
         }}
       >
         <input
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[12.5px] text-slate-100 outline-none focus:border-sky-500"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[0.78125rem] text-slate-100 outline-none focus:border-sky-500"
           placeholder="Indirizzo della casa (via, numero, comune)"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <button type="submit" disabled={searching} className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-sky-500 disabled:opacity-60">
+        <button type="submit" disabled={searching} className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-sky-500 disabled:opacity-60">
           <Search size={14} /> Cerca
         </button>
       </form>
-      {error && <p className="text-[11.5px] text-amber-300">{error}</p>}
+      {error && <p className="text-[0.71875rem] text-amber-300">{error}</p>}
       {results && results.length > 0 && (
         <ul className="divide-y divide-slate-800 rounded-md border border-slate-800 bg-slate-950">
           {results.map((r) => (
             <li key={`${r.lat},${r.lon}`}>
-              <button className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-[12px] text-slate-200 hover:bg-slate-800" onClick={() => choose(r)}>
+              <button className="flex w-full items-start gap-2 px-3 py-1.5 text-left text-[0.75rem] text-slate-200 hover:bg-slate-800" onClick={() => choose(r)}>
                 <MapPin size={13} className="mt-0.5 shrink-0 text-amber-400" />
                 {r.display_name}
               </button>
@@ -194,13 +194,13 @@ export function RoofMap() {
         {!drawing ? (
           <button
             onClick={startDrawing}
-            className={`flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[12px] font-semibold text-slate-950 transition-colors hover:bg-amber-400 ${d.location.lat !== null && !d.roof.footprint.length ? 'pv-attn' : ''}`}
+            className={`flex items-center gap-1.5 rounded-md bg-amber-500 px-3 py-1.5 text-[0.75rem] font-semibold text-slate-950 transition-colors hover:bg-amber-400 ${d.location.lat !== null && !d.roof.footprint.length ? 'pv-attn' : ''}`}
           >
             <PenLine size={14} /> {d.roof.footprint.length ? 'Ridisegna la pianta' : 'Disegna la pianta del tetto'}
           </button>
         ) : (
           <>
-            <button onClick={finish} disabled={draftN < 3} className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
+            <button onClick={finish} disabled={draftN < 3} className="flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">
               Chiudi la pianta ({draftN} punti)
             </button>
             <button
@@ -209,27 +209,27 @@ export function RoofMap() {
                 setDraftN(draft.current.length);
               }}
               disabled={draftN === 0}
-              className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-[12px] text-white hover:bg-slate-600 disabled:opacity-50"
+              className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-[0.75rem] text-white hover:bg-slate-600 disabled:opacity-50"
             >
               <Undo2 size={14} /> Togli l'ultimo punto
             </button>
-            <button onClick={() => setDrawing(false)} className="rounded-md px-3 py-1.5 text-[12px] text-slate-300 hover:bg-slate-800">
+            <button onClick={() => setDrawing(false)} className="rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800">
               Annulla
             </button>
           </>
         )}
         {!drawing && d.roof.footprint.length > 0 && (
-          <button onClick={() => update((x) => ({ ...x, roof: { ...x.roof, footprint: [] } }))} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] text-slate-300 hover:bg-slate-800">
+          <button onClick={() => update((x) => ({ ...x, roof: { ...x.roof, footprint: [] } }))} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800">
             <Eraser size={14} /> Cancella la pianta
           </button>
         )}
         {d.location.lat !== null && (
-          <button onClick={() => map.current?.setView([d.location.lat!, d.location.lon!], 20)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] text-slate-300 hover:bg-slate-800">
+          <button onClick={() => map.current?.setView([d.location.lat!, d.location.lon!], 20)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800">
             <Crosshair size={14} /> Centra sulla casa
           </button>
         )}
       </div>
-      <p className="text-[11.5px] leading-snug text-slate-400">
+      <p className="text-[0.71875rem] leading-snug text-slate-400">
         {drawing
           ? 'Clicca sugli angoli del tetto uno dopo l\'altro, seguendo il bordo della gronda; poi «Chiudi la pianta». Per i tetti a falde basta il contorno esterno.'
           : d.roof.footprint.length
@@ -237,7 +237,7 @@ export function RoofMap() {
             : 'Cerca l\'indirizzo o spostati sulla mappa, avvicinati alla casa e disegna la pianta del tetto. Un clic sulla mappa segna la posizione della casa.'}
       </p>
       {/* Leaflet aggiunge le sue classi al contenitore: lo stile che cambia sta sull'involucro esterno. */}
-      <div className={`isolate h-[440px] w-full overflow-hidden rounded-lg border ${drawing ? 'border-sky-500 [&_.leaflet-container]:cursor-crosshair' : 'border-slate-800'}`}>
+      <div className={`isolate h-[27.5rem] w-full overflow-hidden rounded-lg border ${drawing ? 'border-sky-500 [&_.leaflet-container]:cursor-crosshair' : 'border-slate-800'}`}>
         <div ref={host} className="h-full w-full" />
       </div>
     </div>

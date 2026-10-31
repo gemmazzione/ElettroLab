@@ -16,7 +16,7 @@ function Outcome({ v, children }: { v: Verdict; children: ReactNode }) {
   const Icon = v === 'ok' ? CheckCircle2 : v === 'ko' ? XCircle : CircleHelp;
   const color = v === 'ok' ? 'text-emerald-400' : v === 'ko' ? 'text-red-400' : 'text-amber-300';
   return (
-    <div className="flex gap-2 rounded-md bg-slate-950/60 p-2 text-[11.5px] leading-snug text-slate-300">
+    <div className="flex gap-2 rounded-md bg-slate-950/60 p-2 text-[0.71875rem] leading-snug text-slate-300">
       <Icon size={14} className={`mt-0.5 shrink-0 ${color}`} />
       <div>{children}</div>
     </div>
@@ -49,17 +49,17 @@ function FuseSection({ comp, ik }: { comp: ComponentInstance; ik: number | null 
   return (
     <Section title="Fusibili e cortocircuito">
       {blown.length > 0 ? (
-        <div className="space-y-1.5 rounded-md bg-red-500/15 px-2 py-1.5 text-[12px] text-red-200 ring-1 ring-red-500/40">
+        <div className="space-y-1.5 rounded-md bg-red-500/15 px-2 py-1.5 text-[0.75rem] text-red-200 ring-1 ring-red-500/40">
           <div className="font-semibold">
             Cartuccia fusa: {blown.map(poleName).join(', ')}. Il fusibile non si riarma: va sostituito.
           </div>
-          <div className="text-[11px] leading-snug text-red-200/80">
+          <div className="text-[0.6875rem] leading-snug text-red-200/80">
             {comp.closed ? 'Apri il portafusibili (sezionamento), elimina la causa, sostituisci la cartuccia e richiudi.' : 'Portafusibili aperto: puoi sostituire la cartuccia.'}
           </div>
           <button
             onClick={() => replace(comp.id)}
             disabled={comp.closed}
-            className="rounded bg-red-600 px-2 py-1 text-[11.5px] font-semibold text-white enabled:hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded bg-red-600 px-2 py-1 text-[0.71875rem] font-semibold text-white enabled:hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
             Sostituisci {blown.length === 1 ? 'la cartuccia' : 'le cartucce'} (gG {p.in} A)
           </button>
@@ -71,7 +71,7 @@ function FuseSection({ comp, ik }: { comp: ComponentInstance; ik: number | null 
       <Row k="Fusione convenzionale (If, entro 1 h)" v={`${fmt(conv.if, 2)}·In = ${fmt(conv.if * p.in, 1)} A`} />
       <Row k="Fusione a 5·In / 10·In (curva media)" v={`${fTime(fuseMeltTime(5, p.in))} / ${fTime(fuseMeltTime(10, p.in))}`} />
       {ik === null ? (
-        <p className="text-[11.5px] text-slate-500">Icc presunta non calcolabile: il portafusibili non è collegato alla fornitura.</p>
+        <p className="text-[0.71875rem] text-slate-500">Icc presunta non calcolabile: il portafusibili non è collegato alla fornitura.</p>
       ) : (
         <>
           <Row k="Icc presunta massima ai morsetti di valle" v={fkA(ik)} />
@@ -102,7 +102,7 @@ export function ProtectionSection({ comp }: { comp: ComponentInstance }) {
   return (
     <Section title="Protezione e cortocircuito">
       {st?.tripped && (
-        <div className="rounded-md bg-amber-500/15 px-2 py-1.5 text-[12px] font-semibold text-amber-300 ring-1 ring-amber-500/40">
+        <div className="rounded-md bg-amber-500/15 px-2 py-1.5 text-[0.75rem] font-semibold text-amber-300 ring-1 ring-amber-500/40">
           Dispositivo {TRIP_TEXT[st.tripped]}. Elimina la causa e richiudi la leva.
         </div>
       )}
@@ -116,7 +116,7 @@ export function ProtectionSection({ comp }: { comp: ComponentInstance }) {
         />
       )}
       {ik === null ? (
-        <p className="text-[11.5px] text-slate-500">
+        <p className="text-[0.71875rem] text-slate-500">
           Icc presunta non calcolabile: il dispositivo non è collegato alla fornitura.
         </p>
       ) : (
@@ -159,23 +159,23 @@ export function LoadFaultSection({ comp }: { comp: ComponentInstance }) {
           const info = FAULT_INFO[type];
           return (
             <div key={type} className={`rounded-md border p-2 ${f ? 'border-red-700 bg-red-950/40' : 'border-slate-800'}`}>
-              <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-200" title={info.description}>
+              <label className="flex cursor-pointer items-center gap-2 text-[0.75rem] text-slate-200" title={info.description}>
                 <input type="checkbox" checked={!!f} onChange={() => toggle(type, comp.id)} />
                 {f && <Zap size={12} className="text-red-400" />}
                 {info.label}
               </label>
               {f && (
                 <>
-                  <p className="mt-1 text-[11px] leading-snug text-slate-400">{info.description}</p>
+                  <p className="mt-1 text-[0.6875rem] leading-snug text-slate-400">{info.description}</p>
                   {info.power && (
                     <div className="mt-1.5">
-                      <span className="mb-1 block text-[11px] text-slate-400">Potenza aggiunta sulla linea</span>
+                      <span className="mb-1 block text-[0.6875rem] text-slate-400">Potenza aggiunta sulla linea</span>
                       <NumberInput value={f.powerW ?? 0} min={0} max={50000} step={100} suffix="W" onChange={(v) => setW(f.id, v)} />
                     </div>
                   )}
                   {info.resistive && (
                     <div className="mt-1.5">
-                      <span className="mb-1 block text-[11px] text-slate-400">Resistenza di guasto Rf</span>
+                      <span className="mb-1 block text-[0.6875rem] text-slate-400">Resistenza di guasto Rf</span>
                       <NumberInput value={f.resistance} min={0} max={1e6} step={1} suffix="Ω" onChange={(v) => setR(f.id, v)} />
                     </div>
                   )}
@@ -270,14 +270,14 @@ export function LoadFaultCurrents({ comp }: { comp: ComponentInstance }) {
   return (
     <Section title="Correnti di guasto presunte">
       {currents.ln === null ? (
-        <p className="text-[12px] text-slate-500">Linea non collegata alla fornitura: correnti di guasto non calcolabili.</p>
+        <p className="text-[0.75rem] text-slate-500">Linea non collegata alla fornitura: correnti di guasto non calcolabili.</p>
       ) : (
         <>
           <Row k="Icc L-N a fondo linea" v={fkA(currents.ln)} />
           <Row k="Guasto franco L-PE (TT)" v={currents.lpe === null ? '—' : fmtCurrent(currents.lpe)} />
           {shortVerdict}
           {earthVerdict}
-          <p className="text-[10.5px] leading-snug text-slate-500">
+          <p className="text-[0.65625rem] leading-snug text-slate-500">
             Calcolo con guasto franco, protezioni chiuse e utilizzatori spenti. Risultato di calcolo sul modello, non verifica di conformità.
           </p>
         </>
@@ -292,7 +292,7 @@ export function WireFaultToggle({ wire }: { wire: Wire }) {
   const toggle = useStore((s) => s.toggleFault);
   return (
     <Section title="Simulazione guasti">
-      <label className="flex cursor-pointer items-center gap-2 text-[12px] text-slate-200" title={FAULT_INFO['open-wire'].description}>
+      <label className="flex cursor-pointer items-center gap-2 text-[0.75rem] text-slate-200" title={FAULT_INFO['open-wire'].description}>
         <input type="checkbox" checked={broken} onChange={() => toggle('open-wire', wire.id)} />
         Conduttore interrotto (morsetto allentato / filo tranciato)
       </label>
@@ -310,7 +310,7 @@ export function ActiveFaults() {
   return (
     <Section title={`Guasti attivi (${faults.length})`}>
       {faults.length === 0 ? (
-        <p className="text-[11.5px] leading-snug text-slate-500">
+        <p className="text-[0.71875rem] leading-snug text-slate-500">
           Nessun guasto. Seleziona un utilizzatore per inserire cortocircuiti, guasti a massa, contatti fase-terra o interruzioni; seleziona un conduttore per interromperlo.
         </p>
       ) : (
@@ -319,7 +319,7 @@ export function ActiveFaults() {
             const c = project.components.find((x) => x.id === f.targetId);
             const target = c ? c.label : 'conduttore';
             return (
-              <div key={f.id} className="flex items-center gap-2 text-[12px]">
+              <div key={f.id} className="flex items-center gap-2 text-[0.75rem]">
                 <Zap size={12} className="shrink-0 text-red-400" />
                 <button
                   className="min-w-0 flex-1 truncate text-left text-slate-200 hover:underline"
@@ -335,7 +335,7 @@ export function ActiveFaults() {
               </div>
             );
           })}
-          <button onClick={clear} className="w-full rounded-md border border-slate-700 py-1 text-[12px] text-slate-300 hover:bg-slate-800">
+          <button onClick={clear} className="w-full rounded-md border border-slate-700 py-1 text-[0.75rem] text-slate-300 hover:bg-slate-800">
             Rimuovi tutti i guasti
           </button>
         </>

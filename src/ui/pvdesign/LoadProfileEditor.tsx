@@ -71,7 +71,7 @@ export function LoadProfileEditor({ weights, annualKWh, onChange }: { weights: n
   const share = (from: number, to: number) => (sum > 0 ? (w.slice(from, to).reduce((a, b) => a + b, 0) / sum) * 100 : 0);
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
+      <div className="flex flex-wrap items-center gap-1.5 text-[0.71875rem]">
         <span className="text-slate-400">Parti da:</span>
         {(['sera', 'uniforme', 'giorno'] as const).map((id) => (
           <button key={id} onClick={() => preset(id)} className="rounded border border-slate-700 px-2 py-0.5 text-slate-300 hover:border-slate-500 hover:text-white">
@@ -97,12 +97,12 @@ export function LoadProfileEditor({ weights, annualKWh, onChange }: { weights: n
         {ticks.map((k) => (
           <g key={k}>
             <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + PLOT_H * (1 - k)} y2={PAD.t + PLOT_H * (1 - k)} stroke="#1e293b" />
-            <text x={PAD.l - 5} y={PAD.t + PLOT_H * (1 - k) + 3} textAnchor="end" fontSize={10} fill="#94a3b8">
+            <text x={PAD.l - 5} y={PAD.t + PLOT_H * (1 - k) + 3} textAnchor="end" fontSize={12} fill="#94a3b8">
               {f(kwOf(scale * k), 2)}
             </text>
           </g>
         ))}
-        <text x={4} y={PAD.t + 3} fontSize={9.5} fill="#64748b">
+        <text x={4} y={PAD.t + 3} fontSize={11} fill="#64748b">
           kW
         </text>
         {/* Ore di sole indicative (giornata media): le barre in questa fascia sono quelle che il fotovoltaico può coprire. */}
@@ -117,12 +117,12 @@ export function LoadProfileEditor({ weights, annualKWh, onChange }: { weights: n
         })}
         <line x1={PAD.l} x2={W - PAD.r} y1={PAD.t + PLOT_H} y2={PAD.t + PLOT_H} stroke="#475569" />
         {[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => (
-          <text key={h} x={PAD.l + h * bw} y={H - 8} textAnchor="middle" fontSize={10} fill="#94a3b8">
+          <text key={h} x={PAD.l + h * bw} y={H - 8} textAnchor="middle" fontSize={12} fill="#94a3b8">
             {h}
           </text>
         ))}
       </svg>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11.5px] sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.71875rem] sm:grid-cols-4">
         <span className="text-slate-400">Giornata media</span>
         <span className="font-mono text-slate-100">{f(dayKWh, 1)} kWh</span>
         <span className="text-slate-400">Nelle ore 7–18</span>
@@ -132,7 +132,7 @@ export function LoadProfileEditor({ weights, annualKWh, onChange }: { weights: n
         <span className="text-slate-400">Notte (0–7)</span>
         <span className="font-mono text-slate-100">{f(share(0, 7))}%</span>
       </div>
-      <p className="text-[11px] leading-snug text-slate-500">
+      <p className="text-[0.6875rem] leading-snug text-slate-500">
         Trascina sul grafico per disegnare quanto consumi in ogni ora: conta la forma, perché il totale resta il consumo annuo indicato sopra. In giallo le ore in cui di solito c'è
         sole. La stessa forma vale per tutti i mesi; i mesi invernali pesano di più (gennaio circa {f(winter * 100 - 100)}% sopra la media), come nei profili tipici.
       </p>

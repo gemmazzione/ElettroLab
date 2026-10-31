@@ -27,18 +27,18 @@ function Outcome({ o }: { o: NormReport['outcomes'][number] }) {
       <button className="flex w-full items-start gap-2 p-2 text-left" onClick={() => setOpen(!open)}>
         <Icon size={14} className={`mt-0.5 shrink-0 ${st.color}`} />
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] text-slate-400">
+          <div className="text-[0.6875rem] text-slate-400">
             {o.rule.title} · <span className="text-slate-300">{o.subject}</span>
           </div>
-          <div className="text-[12px] leading-snug text-slate-100">{o.message}</div>
+          <div className="text-[0.75rem] leading-snug text-slate-100">{o.message}</div>
         </div>
         {open ? <ChevronDown size={13} className="mt-0.5 shrink-0 text-slate-500" /> : <ChevronRight size={13} className="mt-0.5 shrink-0 text-slate-500" />}
       </button>
       {open && (
-        <div className="space-y-2 border-t border-slate-800 px-3 py-2 text-[11.5px] leading-snug">
+        <div className="space-y-2 border-t border-slate-800 px-3 py-2 text-[0.71875rem] leading-snug">
           <div className={`font-semibold ${st.color}`}>{STATUS_LABEL[o.status]}</div>
           {o.details && (
-            <ul className="list-disc space-y-0.5 pl-4 font-mono text-[10.5px] text-slate-300">
+            <ul className="list-disc space-y-0.5 pl-4 font-mono text-[0.65625rem] text-slate-300">
               {o.details.map((d) => (
                 <li key={d}>{d}</li>
               ))}
@@ -50,7 +50,7 @@ function Outcome({ o }: { o: NormReport['outcomes'][number] }) {
           <p className="text-slate-400">{o.rule.explanation}</p>
           <div className="space-y-0.5">
             {o.rule.refs.map((r) => (
-              <div key={`${r.edition}-${r.article}`} className="flex gap-1.5 text-[10.5px]">
+              <div key={`${r.edition}-${r.article}`} className="flex gap-1.5 text-[0.65625rem]">
                 <span className={r.verified ? 'text-emerald-400' : 'text-amber-300'}>{r.verified ? '✓' : '?'}</span>
                 <span className="text-slate-300">
                   {r.edition}, art. {r.article}
@@ -59,12 +59,12 @@ function Outcome({ o }: { o: NormReport['outcomes'][number] }) {
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-slate-500">
+          <div className="text-[0.625rem] text-slate-500">
             Regola {o.rule.id} v{o.rule.version} · Campo di applicazione: {o.rule.scope}
           </div>
           {o.componentIds[0] && (
             <button
-              className="text-[11px] text-sky-300 hover:underline"
+              className="text-[0.6875rem] text-sky-300 hover:underline"
               onClick={() => {
                 select({ type: 'component', id: o.componentIds[0]! });
                 setTab('props');
@@ -95,14 +95,14 @@ function SimultaneitySection() {
     });
   return (
     <Section title="Caduta di tensione: contemporaneità">
-      <p className="text-[11px] leading-snug text-slate-400">
+      <p className="text-[0.6875rem] leading-snug text-slate-400">
         Ogni utilizzatore è verificato alla sua potenza nominale; gli altri selezionati qui sotto sono considerati accesi insieme, alla potenza nominale moltiplicata per il fattore di contemporaneità.
       </p>
       <label className="block" title="1 = tutti alla potenza piena (caso più gravoso). Valore di progetto, da scegliere in base all'uso reale dell'impianto.">
-        <span className="mb-1 block text-[11px] text-slate-400">Fattore di contemporaneità degli altri utilizzatori</span>
+        <span className="mb-1 block text-[0.6875rem] text-slate-400">Fattore di contemporaneità degli altri utilizzatori</span>
         <NumberInput value={Math.round(k * 100)} min={10} max={100} step={5} suffix="%" onChange={(v) => setNorm({ simultaneity: Math.min(1, Math.max(0.1, v / 100)) })} />
       </label>
-      <div className="flex items-center justify-between text-[11px] text-slate-400">
+      <div className="flex items-center justify-between text-[0.6875rem] text-slate-400">
         <span>Utilizzatori accesi insieme ({included.length}/{loads.length})</span>
         <span className="flex gap-2">
           <button className="text-sky-300 hover:underline" onClick={() => setAll(true)}>tutti</button>
@@ -112,7 +112,7 @@ function SimultaneitySection() {
       <div className="space-y-0.5">
         {loads.map((c) =>
           c.params.kind === 'load' ? (
-            <label key={c.id} className="flex items-center gap-2 text-[12px] text-slate-300">
+            <label key={c.id} className="flex items-center gap-2 text-[0.75rem] text-slate-300">
               <input
                 type="checkbox"
                 checked={c.params.p.designOn !== false}
@@ -121,15 +121,15 @@ function SimultaneitySection() {
               <span className="min-w-0 flex-1 truncate">
                 {c.label} · {c.params.p.name}
               </span>
-              <span className="font-mono text-[10.5px] text-slate-500">{c.params.p.powerW} W</span>
+              <span className="font-mono text-[0.65625rem] text-slate-500">{c.params.p.powerW} W</span>
             </label>
           ) : null,
         )}
       </div>
-      <p className="font-mono text-[10.5px] text-slate-400">
+      <p className="font-mono text-[0.65625rem] text-slate-400">
         Potenza contemporanea degli altri ≈ {Math.round(totalW * k).toLocaleString('it-IT')} W (somma {totalW.toLocaleString('it-IT')} W × {Math.round(k * 100)}%)
       </p>
-      <p className="text-[10.5px] leading-snug text-slate-500">
+      <p className="text-[0.65625rem] leading-snug text-slate-500">
         Fattore e scelta degli utilizzatori sono ipotesi di progetto: indicale nella relazione. Con tutti accesi e fattore 100% il risultato è il caso più gravoso.
       </p>
     </Section>
@@ -146,13 +146,13 @@ export function NormPanel() {
   return (
     <>
       <Section title="Verifica normativa">
-        <div className="rounded-md border border-amber-700/60 bg-amber-950/30 p-2.5 text-[11.5px] leading-snug text-amber-100">
+        <div className="rounded-md border border-amber-700/60 bg-amber-950/30 p-2.5 text-[0.71875rem] leading-snug text-amber-100">
           <div className="mb-1 flex items-center gap-1.5 font-semibold">
             <ShieldAlert size={14} /> {report.ruleset.title} · set v{report.ruleset.version}
           </div>
           {report.ruleset.note}
         </div>
-        <p className={`text-[12px] font-semibold ${report.counts.errore ? 'text-red-300' : 'text-slate-200'}`}>{report.summary}</p>
+        <p className={`text-[0.75rem] font-semibold ${report.counts.errore ? 'text-red-300' : 'text-slate-200'}`}>{report.summary}</p>
         <div className="grid grid-cols-5 gap-1">
           {ORDER.map((s) => {
             const st = STATUS_STYLE[s];
@@ -165,12 +165,12 @@ export function NormPanel() {
                 className={`flex flex-col items-center rounded-md py-1.5 ${filter === s ? 'ring-1 ring-sky-400' : ''} ${st.bg}`}
               >
                 <Icon size={13} className={st.color} />
-                <span className={`font-mono text-[14px] ${st.color}`}>{report.counts[s]}</span>
+                <span className={`font-mono text-[0.875rem] ${st.color}`}>{report.counts[s]}</span>
               </button>
             );
           })}
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+        <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.625rem] text-slate-500">
           {ORDER.map((s) => (
             <span key={s} className={STATUS_STYLE[s].color}>
               ● {STATUS_LABEL[s]}
@@ -180,21 +180,21 @@ export function NormPanel() {
       </Section>
 
       <Section title="Contesto dell'impianto">
-        <label className="flex items-center gap-2 text-[12px] text-slate-300">
+        <label className="flex items-center gap-2 text-[0.75rem] text-slate-300">
           <input type="checkbox" checked={settings.residential} onChange={(e) => setNorm({ residential: e.target.checked })} />
           Locali ad uso abitativo
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block" title="50 V in c.a. in condizioni ordinarie; valori inferiori per luoghi speciali (Parte 7)">
-            <span className="mb-1 block text-[11px] text-slate-400">Tensione limite UL</span>
+            <span className="mb-1 block text-[0.6875rem] text-slate-400">Tensione limite UL</span>
             <NumberInput value={settings.ul} min={6} max={50} suffix="V" onChange={(v) => setNorm({ ul: v })} />
           </label>
           <label className="block" title="Valore comunicato dal distributore al punto di consegna (opzionale)">
-            <span className="mb-1 block text-[11px] text-slate-400">Icc dichiarata</span>
+            <span className="mb-1 block text-[0.6875rem] text-slate-400">Icc dichiarata</span>
             <NumberInput value={settings.declaredIccKA ?? 0} min={0} max={50} step={0.5} suffix="kA" onChange={(v) => setNorm({ declaredIccKA: v > 0 ? v : null })} />
           </label>
         </div>
-        <p className="text-[10.5px] text-slate-500">I dati di posa delle condutture si inseriscono selezionando ciascun utilizzatore; RA misurata nel dispersore.</p>
+        <p className="text-[0.65625rem] text-slate-500">I dati di posa delle condutture si inseriscono selezionando ciascun utilizzatore; RA misurata nel dispersore.</p>
       </Section>
 
       <SimultaneitySection />
@@ -205,7 +205,7 @@ export function NormPanel() {
           if (!items.length) return null;
           return (
             <div key={area}>
-              <h4 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              <h4 className="mb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400">
                 {i + 1}. {area}
               </h4>
               <div className="space-y-1.5">

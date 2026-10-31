@@ -13,7 +13,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-6" onMouseDown={onClose}>
       <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl" onMouseDown={(e) => e.stopPropagation()}>
         <div className="flex items-center border-b border-slate-800 px-5 py-3">
-          <h2 className="text-[14px] font-semibold text-slate-100">{title}</h2>
+          <h2 className="text-[0.875rem] font-semibold text-slate-100">{title}</h2>
           <button className="ml-auto rounded p-1 text-slate-400 hover:bg-slate-800" onClick={onClose}>
             <X size={16} />
           </button>
@@ -27,7 +27,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
 type SortKey = 'recenti' | 'nome';
 
 function Chip({ children }: { children: ReactNode }) {
-  return <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[10.5px] text-slate-300">{children}</span>;
+  return <span className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-[0.65625rem] text-slate-300">{children}</span>;
 }
 
 function SummaryChips({ s }: { s: ProjectSummary }) {
@@ -69,14 +69,14 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <label className="flex flex-1 items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 focus-within:border-sky-500">
           <Search size={13} className="text-slate-500" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca nei progetti salvati…" className="w-full bg-transparent text-[12px] text-slate-200 outline-none placeholder:text-slate-600" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Cerca nei progetti salvati…" className="w-full bg-transparent text-[0.75rem] text-slate-200 outline-none placeholder:text-slate-600" />
         </label>
-        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[12px] text-slate-200">
+        <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-[0.75rem] text-slate-200">
           <option value="recenti">Più recenti</option>
           <option value="nome">Nome</option>
         </select>
         <button
-          className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[12px] font-semibold text-white hover:bg-sky-500"
+          className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-sky-500"
           onClick={() => {
             const c = copyProject(project);
             if (saveProject(c)) {
@@ -90,10 +90,10 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
         </button>
       </div>
 
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">I miei progetti ({entries.length})</h3>
+      <h3 className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400">I miei progetti ({entries.length})</h3>
       <div className="mb-5 space-y-1.5">
         {shown.length === 0 && (
-          <p className="text-[12px] text-slate-500">{entries.length ? 'Nessun progetto corrisponde alla ricerca.' : 'Nessun progetto salvato. Usa «Salva» nella barra superiore.'}</p>
+          <p className="text-[0.75rem] text-slate-500">{entries.length ? 'Nessun progetto corrisponde alla ricerca.' : 'Nessun progetto salvato. Usa «Salva» nella barra superiore.'}</p>
         )}
         {shown.map(({ project: p, summary }) => (
           <div key={p.id} className="rounded-lg border border-slate-800 px-3 py-2 hover:border-slate-600">
@@ -109,8 +109,8 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
                       refresh();
                     }}
                   >
-                    <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} className="flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-0.5 text-[13px] text-slate-100" />
-                    <button className="rounded bg-slate-700 px-2 text-[12px] text-slate-100">OK</button>
+                    <input autoFocus value={newName} onChange={(e) => setNewName(e.target.value)} className="flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-0.5 text-[0.8125rem] text-slate-100" />
+                    <button className="rounded bg-slate-700 px-2 text-[0.75rem] text-slate-100">OK</button>
                   </form>
                 ) : (
                   <button
@@ -120,8 +120,8 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
                       onClose();
                     }}
                   >
-                    <div className="truncate text-[13px] font-semibold text-slate-100">{p.name}</div>
-                    <div className="text-[11px] text-slate-500">Modificato il {new Date(p.updatedAt).toLocaleString('it-IT')}</div>
+                    <div className="truncate text-[0.8125rem] font-semibold text-slate-100">{p.name}</div>
+                    <div className="text-[0.6875rem] text-slate-500">Modificato il {new Date(p.updatedAt).toLocaleString('it-IT')}</div>
                   </button>
                 )}
                 <SummaryChips s={summary} />
@@ -157,7 +157,7 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
         ))}
       </div>
 
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400">
         <FlaskConical size={13} /> Progetti predefiniti
       </h3>
       <div className="mb-5 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -172,26 +172,26 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
               }}
               className="rounded-lg border border-slate-700 bg-slate-950/50 p-3 text-left hover:border-sky-500"
             >
-              <div className="text-[13px] font-semibold text-slate-100">{d.name}</div>
-              <div className="text-[11.5px] leading-snug text-slate-400">{d.summary}</div>
+              <div className="text-[0.8125rem] font-semibold text-slate-100">{d.name}</div>
+              <div className="text-[0.71875rem] leading-snug text-slate-400">{d.summary}</div>
               <SummaryChips s={summarizeProject(p)} />
             </button>
           );
         })}
       </div>
 
-      <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+      <h3 className="mb-2 flex items-center gap-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400">
         <FileJson size={13} /> File
       </h3>
       <div className="flex flex-wrap gap-2">
-        <button className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[12px] text-slate-200 hover:bg-slate-800" onClick={() => fileRef.current?.click()}>
+        <button className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[0.75rem] text-slate-200 hover:bg-slate-800" onClick={() => fileRef.current?.click()}>
           <Upload size={13} /> Importa progetto o libreria (.json)
         </button>
-        <button className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[12px] text-slate-200 hover:bg-slate-800" onClick={() => exportProjectFile(project)}>
+        <button className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[0.75rem] text-slate-200 hover:bg-slate-800" onClick={() => exportProjectFile(project)}>
           <Download size={13} /> Esporta il progetto aperto
         </button>
         <button
-          className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[12px] text-slate-200 hover:bg-slate-800 disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-md border border-slate-700 px-3 py-1.5 text-[0.75rem] text-slate-200 hover:bg-slate-800 disabled:opacity-40"
           disabled={!entries.length}
           onClick={() => {
             const n = exportLibraryFile();
@@ -223,7 +223,7 @@ export function OpenDialog({ onClose }: { onClose: () => void }) {
           }}
         />
       </div>
-      <p className="mt-3 text-[11px] leading-snug text-slate-500">
+      <p className="mt-3 text-[0.6875rem] leading-snug text-slate-500">
         I progetti sono salvati nella memoria locale di questo browser: esporta la libreria per conservarli o trasferirli su un altro computer.
       </p>
     </Modal>
@@ -244,11 +244,11 @@ export function InfoDialog({ onClose }: { onClose: () => void }) {
       <div className="space-y-3">
         {[...MODEL_ASSUMPTIONS, ...PROTECTION_ASSUMPTIONS].map((a) => (
           <div key={a.title}>
-            <div className="text-[12.5px] font-semibold text-slate-200">{a.title}</div>
-            <div className="text-[12px] leading-relaxed text-slate-400">{a.text}</div>
+            <div className="text-[0.78125rem] font-semibold text-slate-200">{a.title}</div>
+            <div className="text-[0.75rem] leading-relaxed text-slate-400">{a.text}</div>
           </div>
         ))}
-        <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-[12px] leading-relaxed text-amber-200">
+        <div className="rounded-lg border border-amber-700/50 bg-amber-950/30 p-3 text-[0.75rem] leading-relaxed text-amber-200">
           ElectroLab è uno strumento didattico e di pre-verifica. Non sostituisce la progettazione, l'installazione e le verifiche eseguite da professionisti abilitati e non attesta la conformità di alcun impianto.
         </div>
       </div>
@@ -265,7 +265,7 @@ export function Toasts() {
         <button
           key={t.id}
           onClick={() => dismiss(t.id)}
-          className={`pointer-events-auto max-w-lg rounded-lg border px-4 py-2 text-[12.5px] shadow-xl ${t.level === 'errore' ? 'border-red-800 bg-red-950 text-red-200' : 'border-slate-700 bg-slate-800 text-slate-100'}`}
+          className={`pointer-events-auto max-w-lg rounded-lg border px-4 py-2 text-[0.78125rem] shadow-xl ${t.level === 'errore' ? 'border-red-800 bg-red-950 text-red-200' : 'border-slate-700 bg-slate-800 text-slate-100'}`}
         >
           {t.text}
         </button>

@@ -414,15 +414,15 @@ export function Roof3D() {
   const mm = Math.round((hour - hh) * 60);
   return (
     <div className="space-y-3">
-      <div className="relative isolate h-[420px] w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-950" ref={host}>
-        {!r && <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-[12.5px] text-slate-300">Disegna prima la pianta del tetto sulla mappa (passo 2).</div>}
+      <div className="relative isolate h-[26.25rem] w-full overflow-hidden rounded-lg border border-slate-800 bg-slate-950" ref={host}>
+        {!r && <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-[0.78125rem] text-slate-300">Disegna prima la pianta del tetto sulla mappa (passo 2).</div>}
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block text-[11.5px] text-slate-400">
+        <label className="block text-[0.71875rem] text-slate-400">
           Mese: <span className="font-semibold text-slate-100">{MONTHS[month]}</span>
           <input type="range" min={0} max={11} value={month} onChange={(e) => setMonth(Number(e.target.value))} className="mt-1 w-full accent-amber-500" />
         </label>
-        <label className="block text-[11.5px] text-slate-400">
+        <label className="block text-[0.71875rem] text-slate-400">
           Ora solare:{' '}
           <span className="font-semibold text-slate-100">
             {hh}:{String(mm).padStart(2, '0')}
@@ -430,7 +430,7 @@ export function Roof3D() {
           <input type="range" min={5} max={20} step={0.25} value={hour} onChange={(e) => setHour(Number(e.target.value))} className="mt-1 w-full accent-amber-500" />
         </label>
       </div>
-      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+      <div className="flex flex-wrap items-center gap-2 text-[0.75rem]">
         <button onClick={() => setPlaying((p) => !p)} className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 font-semibold text-white hover:bg-slate-600">
           {playing ? <Pause size={14} /> : <Play size={14} />} {playing ? 'Ferma' : 'Fai scorrere la giornata'}
         </button>
@@ -448,7 +448,7 @@ export function Roof3D() {
         </button>
         {snapshot && <span className="text-emerald-300">Vista salvata per la relazione PDF.</span>}
       </div>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11.5px] sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[0.71875rem] sm:grid-cols-4">
         <span className="text-slate-400">Altezza del sole</span>
         <span className="font-mono text-slate-100">{sun.elevation > 0 ? `${f(sun.elevation, 1)}°` : 'sotto l\'orizzonte'}</span>
         <span className="text-slate-400">Azimut del sole</span>
@@ -456,7 +456,7 @@ export function Roof3D() {
         <span className="text-slate-400">Moduli in ombra</span>
         <span className="font-mono text-slate-100">{shaded ? `${shaded.n} su ${shaded.total}` : '—'}</span>
       </div>
-      <p className="text-[11px] leading-snug text-slate-500">
+      <p className="text-[0.6875rem] leading-snug text-slate-500">
         Trascina per ruotare, rotella per lo zoom, tasto destro per spostare. Modello semplificato ricostruito dalla pianta: non contiene camini, abbaini, alberi ed edifici vicini, che
         vanno considerati a parte nella perdita per ombreggiamento. Ora solare: a mezzogiorno il sole è a sud (in Italia con l'ora legale circa le 13).
       </p>

@@ -7,21 +7,21 @@ import { useStore } from '../store/projectStore';
 export function ComponentInfoView({ catalogId }: { catalogId: string }) {
   const info = componentInfo(catalogId);
   const item = catalogItem(catalogId);
-  if (!info) return <p className="p-4 text-[12px] text-slate-500">Scheda non disponibile.</p>;
+  if (!info) return <p className="p-4 text-[0.75rem] text-slate-500">Scheda non disponibile.</p>;
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-[14px] font-semibold text-slate-100">{info.title}</div>
-        <div className="mt-0.5 text-[12px] text-slate-400">
+        <div className="text-[0.875rem] font-semibold text-slate-100">{info.title}</div>
+        <div className="mt-0.5 text-[0.75rem] text-slate-400">
           {item.category}
           {item.mount === 'din' && item.defaults ? ` · ${item.modules} ${item.modules === 1 ? 'modulo' : 'moduli'} DIN` : ''}
         </div>
       </div>
-      <p className="rounded-md border-l-2 border-amber-400 bg-amber-400/5 px-3 py-2 text-[12.5px] leading-relaxed text-slate-200">{info.summary}</p>
+      <p className="rounded-md border-l-2 border-amber-400 bg-amber-400/5 px-3 py-2 text-[0.78125rem] leading-relaxed text-slate-200">{info.summary}</p>
       {info.sections.map((s) => (
         <section key={s.title}>
-          <h4 className="mb-0.5 text-[11px] font-semibold uppercase tracking-wider text-sky-300">{s.title}</h4>
-          <p className="text-[12px] leading-relaxed text-slate-300">{s.text}</p>
+          <h4 className="mb-0.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-sky-300">{s.title}</h4>
+          <p className="text-[0.75rem] leading-relaxed text-slate-300">{s.text}</p>
         </section>
       ))}
     </div>
@@ -35,7 +35,7 @@ export function InfoTab() {
   const comp = selection?.type === 'component' ? project.components.find((c) => c.id === selection.id) : undefined;
   if (!comp) {
     return (
-      <div className="flex flex-col items-center gap-2 p-6 text-center text-[12px] text-slate-500">
+      <div className="flex flex-col items-center gap-2 p-6 text-center text-[0.75rem] text-slate-500">
         <BookOpen size={22} />
         Seleziona un componente nel quadro per leggerne il funzionamento, oppure usa il pulsante «i» accanto a ogni articolo del catalogo.
       </div>

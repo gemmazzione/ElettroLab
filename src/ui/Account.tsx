@@ -5,12 +5,12 @@ import { useAccount } from '../cloud/account';
 import { Modal } from './Dialogs';
 
 const inputCls =
-  'w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[13px] text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500';
+  'w-full rounded-md border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-[0.8125rem] text-slate-100 outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500';
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[11.5px] text-slate-400">{label}</span>
+      <span className="mb-1 block text-[0.71875rem] text-slate-400">{label}</span>
       {children}
     </label>
   );
@@ -19,13 +19,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function ErrorText({ text }: { text: string | null }) {
   if (!text) return null;
   return (
-    <p role="alert" className="rounded-md bg-red-500/10 px-2.5 py-1.5 text-[12.5px] text-red-300 ring-1 ring-red-500/30">
+    <p role="alert" className="rounded-md bg-red-500/10 px-2.5 py-1.5 text-[0.78125rem] text-red-300 ring-1 ring-red-500/30">
       {text}
     </p>
   );
 }
 
-const btn = 'flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[12.5px] font-semibold disabled:cursor-not-allowed disabled:opacity-50';
+const btn = 'flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[0.78125rem] font-semibold disabled:cursor-not-allowed disabled:opacity-50';
 
 /** Pulsante dell'account nella barra superiore. */
 export function AccountButton() {
@@ -48,10 +48,10 @@ export function AccountButton() {
       <button
         onClick={() => setOpen(true)}
         title={title}
-        className="relative flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium text-slate-300 hover:bg-slate-800"
+        className="relative flex h-8 items-center gap-1.5 rounded-md px-2.5 text-[0.75rem] font-medium text-slate-300 hover:bg-slate-800"
       >
         {phase === 'unavailable' ? <CloudOff size={15} className="text-slate-500" /> : <User size={15} />}
-        <span className="hidden max-w-[110px] truncate xl:inline">{phase === 'signed-in' ? user?.username : phase === 'setup' ? 'Configura account' : 'Accedi'}</span>
+        <span className="hidden max-w-[6.875rem] truncate xl:inline">{phase === 'signed-in' ? user?.username : phase === 'setup' ? 'Configura account' : 'Accedi'}</span>
         {dot && <span className={`absolute right-1 top-1 h-2 w-2 rounded-full ${dot}`} />}
       </button>
       {open && <AccountDialog onClose={() => setOpen(false)} />}
@@ -76,7 +76,7 @@ function Unavailable() {
   const reason = useAccount((s) => s.unavailableReason);
   const init = useAccount((s) => s.init);
   return (
-    <div className="space-y-3 text-[13px] text-slate-300">
+    <div className="space-y-3 text-[0.8125rem] text-slate-300">
       <p>Gli account non sono disponibili: {reason}</p>
       <p className="text-slate-400">L'app funziona comunque: i progetti restano salvati in questo browser.</p>
       <button className={`${btn} bg-slate-800 text-slate-100 hover:bg-slate-700`} onClick={() => void init()}>
@@ -105,7 +105,7 @@ function LoginForm() {
   };
   return (
     <form onSubmit={submit} className="mx-auto max-w-sm space-y-3">
-      <p className="text-[13px] text-slate-400">Accedi per salvare progetti e progressi sul tuo account e ritrovarli da qualsiasi computer. Gli account li crea l'amministratore.</p>
+      <p className="text-[0.8125rem] text-slate-400">Accedi per salvare progetti e progressi sul tuo account e ritrovarli da qualsiasi computer. Gli account li crea l'amministratore.</p>
       <Field label="Nome utente">
         <input className={inputCls} autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required autoFocus />
       </Field>
@@ -131,7 +131,7 @@ function SetupForm() {
   const [error, setError] = useState<string | null>(null);
   if (!available) {
     return (
-      <p className="text-[13px] text-slate-300">
+      <p className="text-[0.8125rem] text-slate-300">
         Il database è collegato ma non c'è ancora un amministratore. Per crearlo imposta il secret <code className="text-amber-200">SETUP_TOKEN</code> su GitHub e ripubblica il sito.
       </p>
     );
@@ -150,7 +150,7 @@ function SetupForm() {
   };
   return (
     <form onSubmit={submit} className="mx-auto max-w-sm space-y-3">
-      <p className="text-[13px] text-slate-300">
+      <p className="text-[0.8125rem] text-slate-300">
         <ShieldCheck size={14} className="mr-1 inline text-amber-300" />
         Configurazione iniziale: crea l'account amministratore. Serve il codice impostato nel secret <code className="text-amber-200">SETUP_TOKEN</code>; dopo questo passaggio il codice non serve più.
       </p>
@@ -185,9 +185,9 @@ function SignedIn({ onClose }: { onClose: () => void }) {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3">
         <User size={18} className="text-sky-300" />
-        <div className="min-w-0 flex-1 text-[13px]">
+        <div className="min-w-0 flex-1 text-[0.8125rem]">
           <div className="font-semibold text-slate-100">
-            {user.username} {user.role === 'admin' && <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10.5px] text-amber-300">amministratore</span>}
+            {user.username} {user.role === 'admin' && <span className="ml-1 rounded bg-amber-500/15 px-1.5 py-0.5 text-[0.65625rem] text-amber-300">amministratore</span>}
           </div>
           <div className={sync === 'error' ? 'text-red-300' : 'text-slate-400'}>
             {sync === 'error'
@@ -232,7 +232,7 @@ function ChangePassword() {
   };
   return (
     <form onSubmit={submit} className="space-y-2">
-      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-200">
+      <h3 className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-slate-200">
         <KeyRound size={14} /> Cambia password
       </h3>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
@@ -246,7 +246,7 @@ function ChangePassword() {
           Cambia
         </button>
       </div>
-      {msg && <p className={`text-[12.5px] ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}
+      {msg && <p className={`text-[0.78125rem] ${msg.ok ? 'text-emerald-300' : 'text-red-300'}`}>{msg.text}</p>}
     </form>
   );
 }
@@ -289,7 +289,7 @@ function AdminUsers() {
   const fmtDate = (d: string | null) => (d ? new Date(`${d.replace(' ', 'T')}Z`).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' }) : 'mai');
   return (
     <section className="space-y-3 border-t border-slate-800 pt-4">
-      <h3 className="flex items-center gap-1.5 text-[13px] font-semibold text-slate-200">
+      <h3 className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-slate-200">
         <Users size={14} /> Gestione utenti
       </h3>
       <form onSubmit={create} className="grid grid-cols-1 gap-2 rounded-lg border border-slate-800 p-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
@@ -311,11 +311,11 @@ function AdminUsers() {
       </form>
       <ErrorText text={error} />
       {users === null ? (
-        <p className="text-[12.5px] text-slate-500">Caricamento…</p>
+        <p className="text-[0.78125rem] text-slate-500">Caricamento…</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-[12.5px]">
-            <thead className="text-[11px] uppercase tracking-wider text-slate-500">
+          <table className="w-full text-left text-[0.78125rem]">
+            <thead className="text-[0.6875rem] uppercase tracking-wider text-slate-500">
               <tr>
                 <th className="py-1.5 pr-3">Utente</th>
                 <th className="py-1.5 pr-3">Ruolo</th>
@@ -334,7 +334,7 @@ function AdminUsers() {
                   <td className="py-1.5 text-right">
                     <div className="flex justify-end gap-1">
                       <button
-                        className="rounded px-2 py-1 text-[11.5px] text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800"
+                        className="rounded px-2 py-1 text-[0.71875rem] text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800"
                         onClick={() => {
                           const p = window.prompt(`Nuova password per ${u.username} (almeno 8 caratteri):`);
                           if (p) void act(() => api.setUserPassword(u.id, p));
@@ -344,7 +344,7 @@ function AdminUsers() {
                       </button>
                       {u.id !== me.id && (
                         <>
-                          <button className="rounded px-2 py-1 text-[11.5px] text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800" onClick={() => void act(() => api.setUserDisabled(u.id, !u.disabled))}>
+                          <button className="rounded px-2 py-1 text-[0.71875rem] text-slate-300 ring-1 ring-slate-700 hover:bg-slate-800" onClick={() => void act(() => api.setUserDisabled(u.id, !u.disabled))}>
                             {u.disabled ? 'Riattiva' : 'Disattiva'}
                           </button>
                           <button

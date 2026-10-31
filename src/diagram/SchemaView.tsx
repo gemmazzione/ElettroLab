@@ -17,7 +17,7 @@ export function SchemaView() {
 
   if (!sl) {
     return (
-      <div className="flex h-full items-center justify-center bg-[#0b1120] p-8 text-center text-[13px] text-slate-400">
+      <div className="flex h-full items-center justify-center bg-[#0b1120] p-8 text-center text-[0.8125rem] text-slate-400">
         Lo schema unifilare si genera a partire dal punto di fornitura: aggiungi una fornitura al progetto.
       </div>
     );
@@ -35,8 +35,8 @@ export function SchemaView() {
         <button className="rounded border border-slate-700 bg-slate-900 p-1.5 text-slate-300 hover:bg-slate-800" title="100%" onClick={() => setZoom(1)}>
           <Maximize2 size={14} />
         </button>
-        <span className="ml-1 font-mono text-[11px] text-slate-500">{Math.round(zoom * 100)}%</span>
-        <span className="ml-3 text-[11px] text-slate-500">
+        <span className="ml-1 font-mono text-[0.6875rem] text-slate-500">{Math.round(zoom * 100)}%</span>
+        <span className="ml-3 text-[0.6875rem] text-slate-500">
           Clic su un simbolo per selezionare il componente. {running ? 'Correnti in tempo reale.' : 'Avvia la simulazione per vedere le correnti.'}
         </span>
       </div>

@@ -35,7 +35,7 @@ export function TransformerEditor({ comp }: { comp: ComponentInstance }) {
       <Row k="Corrente nominale primaria" v={`${fmt(p.sn / p.u1, 3)} A`} />
       <Row k="Tensione a vuoto" v={`${fmt(m.u20, 1)} V`} />
       <Row k="Corrente di cortocircuito al secondario" v={`circa ${fmt((i2n * 100) / p.ukPct, 1)} A`} />
-      <p className="text-[10.5px] leading-snug text-slate-500">
+      <p className="text-[0.65625rem] leading-snug text-slate-500">
         La tensione di targa è quella a pieno carico: a vuoto il secondario dà qualche volt in più. Con un uk alto il trasformatore sopporta il cortocircuito del secondario,
         ma la tensione cala di più quando il carico aumenta.
       </p>
@@ -50,7 +50,7 @@ export function TransformerLive({ comp }: { comp: ComponentInstance }) {
   return (
     <Section title="Funzionamento">
       {!t || t.v1 < 1 ? (
-        <p className="text-[11.5px] text-slate-400">Primario non alimentato: il secondario è senza tensione.</p>
+        <p className="text-[0.71875rem] text-slate-400">Primario non alimentato: il secondario è senza tensione.</p>
       ) : (
         <>
           <Row k="Tensione primaria" v={`${fmt(t.v1, 1)} V`} />

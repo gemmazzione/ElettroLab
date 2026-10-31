@@ -73,7 +73,7 @@ export default function App() {
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[12px] font-semibold ${view === v ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
+                className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[0.75rem] font-semibold ${view === v ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
               >
                 {v === 'quadro' ? <LayoutGrid size={13} /> : <Network size={13} />}
                 {v === 'quadro' ? 'Quadro' : 'Schema unifilare'}

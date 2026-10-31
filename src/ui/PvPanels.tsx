@@ -28,7 +28,7 @@ export function PvEnvironmentSection() {
   return (
     <Section title="Sole e temperatura">
       <label className="block">
-        <span className="mb-1 flex justify-between text-[11px] text-slate-400">
+        <span className="mb-1 flex justify-between text-[0.6875rem] text-slate-400">
           <span>Irraggiamento sui moduli</span>
           <span className="font-mono text-amber-300">{fmt(env.irradiance, 0)} W/m²</span>
         </span>
@@ -48,7 +48,7 @@ export function PvEnvironmentSection() {
           <button
             key={p.label}
             onClick={() => set({ irradiance: p.g })}
-            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[11px] ring-1 ${env.irradiance === p.g ? 'bg-amber-400/15 text-amber-200 ring-amber-400/50' : 'text-slate-300 ring-slate-700 hover:bg-slate-800'}`}
+            className={`flex items-center gap-1 rounded px-2 py-0.5 text-[0.6875rem] ring-1 ${env.irradiance === p.g ? 'bg-amber-400/15 text-amber-200 ring-amber-400/50' : 'text-slate-300 ring-slate-700 hover:bg-slate-800'}`}
           >
             <p.icon size={11} /> {p.label}
           </button>
@@ -65,7 +65,7 @@ export function PvEnvironmentSection() {
           <NumberInput value={env.maxAmbientC} min={20} max={55} suffix="°C" onChange={(v) => set({ maxAmbientC: v })} />
         </Field>
       </div>
-      <p className="text-[10.5px] leading-snug text-slate-500">Valori validi per tutto il progetto. Cambiando l'irraggiamento durante la simulazione l'inverter adegua subito la potenza immessa.</p>
+      <p className="text-[0.65625rem] leading-snug text-slate-500">Valori validi per tutto il progetto. Cambiando l'irraggiamento durante la simulazione l'inverter adegua subito la potenza immessa.</p>
     </Section>
   );
 }
@@ -92,7 +92,7 @@ export function PvArrayEditor({ comp }: { comp: ComponentInstance }) {
         </Field>
       </div>
       <Row k="Potenza di picco" v={`${fmt((p.moduleWp * n * p.strings) / 1000, 2)} kWp (${n * p.strings} moduli)`} />
-      <div className="text-[11px] font-semibold text-slate-400">Dati di targa del modulo (STC)</div>
+      <div className="text-[0.6875rem] font-semibold text-slate-400">Dati di targa del modulo (STC)</div>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Pmax">
           <NumberInput value={p.moduleWp} min={50} max={800} step={5} suffix="Wp" onChange={(v) => set({ moduleWp: v })} />
@@ -122,7 +122,7 @@ export function PvArrayEditor({ comp }: { comp: ComponentInstance }) {
           <NumberInput value={p.tcIsc} min={0} max={0.2} step={0.01} suffix="%/°C" onChange={(v) => set({ tcIsc: v })} />
         </Field>
       </div>
-      <p className="text-[10.5px] leading-snug text-slate-500">Valori tipici di un modulo da 400 Wp: usa quelli della scheda tecnica del modulo reale.</p>
+      <p className="text-[0.65625rem] leading-snug text-slate-500">Valori tipici di un modulo da 400 Wp: usa quelli della scheda tecnica del modulo reale.</p>
     </>
   );
 }
@@ -142,7 +142,7 @@ export function PvArrayLive({ comp }: { comp: ComponentInstance }) {
       <Row k="Potenza prelevata dall'inverter" v={res.pOut > 1 ? fmtPower(res.pOut) : '—'} />
       <Row k="Tensione a vuoto massima (freddo)" v={`${fmt(maxStringVoc(comp.params.p, env.minAmbientC), 0)} V a ${fmt(env.minAmbientC, 0)} °C`} />
       <Row k="Inverter collegato" v={inv ? inv.label : 'nessuno'} />
-      <p className="text-[10.5px] leading-snug text-slate-500">
+      <p className="text-[0.65625rem] leading-snug text-slate-500">
         Con la luce i moduli sono sempre in tensione, anche con l'inverter spento o il sezionatore aperto: il lato DC si tratta come parte attiva.
       </p>
     </Section>
@@ -184,7 +184,7 @@ export function InverterEditor({ comp }: { comp: ComponentInstance }) {
           <NumberInput value={p.batteryW} min={0} max={10000} step={100} suffix="W" onChange={(v) => set({ batteryW: v })} />
         </Field>
       </div>
-      <p className="text-[10.5px] leading-snug text-slate-500">
+      <p className="text-[0.65625rem] leading-snug text-slate-500">
         L'inverter si spegne se manca la rete o se la tensione di rete è fuori dalle soglie usate dal modello (0,85–1,1 volte la nominale). Le soglie reali della protezione di interfaccia sono quelle prescritte dal distributore.
       </p>
     </>
@@ -201,10 +201,10 @@ export function InverterLive({ comp }: { comp: ComponentInstance }) {
   return (
     <Section title="Funzionamento">
       {!running || !res ? (
-        <p className="text-[12px] text-slate-500">Avvia la simulazione per vedere la produzione.</p>
+        <p className="text-[0.75rem] text-slate-500">Avvia la simulazione per vedere la produzione.</p>
       ) : (
         <>
-          <p className={`text-[12.5px] font-semibold ${res.state === 'produzione' ? 'text-emerald-300' : res.state === 'polarità invertita' || res.state === 'tensione dc eccessiva' ? 'text-red-300' : 'text-amber-300'}`}>
+          <p className={`text-[0.78125rem] font-semibold ${res.state === 'produzione' ? 'text-emerald-300' : res.state === 'polarità invertita' || res.state === 'tensione dc eccessiva' ? 'text-red-300' : 'text-amber-300'}`}>
             {INVERTER_STATE_TEXT[res.state]}
           </p>
           <Row k="Potenza immessa (AC)" v={fmtPower(res.pac)} />
@@ -212,7 +212,7 @@ export function InverterLive({ comp }: { comp: ComponentInstance }) {
           <Row k="Potenza DC (dopo i cavi)" v={fmtPower(res.pdc)} />
           <Row k="Tensione e corrente DC" v={`${fmt(res.vdc, 0)} V · ${fmtCurrent(res.idc)}`} />
           <Row k="Perdite nei cavi DC" v={fmtPower(res.dcLossW)} />
-          {res.clipped && <p className="text-[11.5px] text-amber-200">Potenza limitata alla taglia dell'inverter (clipping).</p>}
+          {res.clipped && <p className="text-[0.71875rem] text-amber-200">Potenza limitata alla taglia dell'inverter (clipping).</p>}
         </>
       )}
     </Section>
@@ -229,14 +229,14 @@ export function StringChecksSection({ comp }: { comp: ComponentInstance }) {
   return (
     <Section title="Dimensionamento stringa-inverter">
       {!arrays.length ? (
-        <p className="text-[12px] text-slate-500">Collega un generatore fotovoltaico agli ingressi DC per le verifiche.</p>
+        <p className="text-[0.75rem] text-slate-500">Collega un generatore fotovoltaico agli ingressi DC per le verifiche.</p>
       ) : (
         arrays.map((a) =>
           a.params.kind === 'pv-array' ? (
             <div key={a.id} className="space-y-1.5">
-              {arrays.length > 1 && <div className="text-[11.5px] font-semibold text-slate-300">{a.label}</div>}
+              {arrays.length > 1 && <div className="text-[0.71875rem] font-semibold text-slate-300">{a.label}</div>}
               {stringChecks(a.params.p, inv, env).map((c) => (
-                <div key={c.id} className="flex gap-2 rounded-md bg-slate-950/60 p-2 text-[11.5px] leading-snug text-slate-300">
+                <div key={c.id} className="flex gap-2 rounded-md bg-slate-950/60 p-2 text-[0.71875rem] leading-snug text-slate-300">
                   <Verdict ok={c.ok} />
                   <div>
                     <div className="font-semibold text-slate-200">{c.title}</div>
@@ -248,7 +248,7 @@ export function StringChecksSection({ comp }: { comp: ComponentInstance }) {
           ) : null,
         )
       )}
-      <p className="text-[10.5px] leading-snug text-slate-500">Verifiche sui dati di targa di moduli e inverter (modello semplificato): i valori ammessi sono quelli dei costruttori.</p>
+      <p className="text-[0.65625rem] leading-snug text-slate-500">Verifiche sui dati di targa di moduli e inverter (modello semplificato): i valori ammessi sono quelli dei costruttori.</p>
     </Section>
   );
 }
@@ -273,18 +273,18 @@ export function DayProfileSection({ comp }: { comp: ComponentInstance }) {
             role="radio"
             aria-checked={season === k}
             onClick={() => setSeason(k)}
-            className={`rounded px-2 py-0.5 text-[11px] ring-1 ${season === k ? 'bg-sky-500/15 text-sky-200 ring-sky-500/50' : 'text-slate-300 ring-slate-700 hover:bg-slate-800'}`}
+            className={`rounded px-2 py-0.5 text-[0.6875rem] ring-1 ${season === k ? 'bg-sky-500/15 text-sky-200 ring-sky-500/50' : 'text-slate-300 ring-slate-700 hover:bg-slate-800'}`}
           >
             {SEASONS[k].label}
           </button>
         ))}
       </div>
       {!day ? (
-        <p className="text-[12px] text-slate-500">Collega un generatore fotovoltaico per calcolare la giornata tipo.</p>
+        <p className="text-[0.75rem] text-slate-500">Collega un generatore fotovoltaico per calcolare la giornata tipo.</p>
       ) : (
         <>
           <DayChart day={day} battery={comp.params.p.batteryKWh > 0} />
-          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11.5px]">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[0.71875rem]">
             <Row k="Prodotta" v={`${fmt(day.producedKWh, 1)} kWh`} />
             <Row k="Consumata" v={`${fmt(day.consumedKWh, 1)} kWh`} />
             <Row k="Autoconsumata" v={`${fmt(day.selfConsumedKWh, 1)} kWh`} />
@@ -293,7 +293,7 @@ export function DayProfileSection({ comp }: { comp: ComponentInstance }) {
             <Row k="Autoconsumo" v={`${fmt(day.selfConsumptionPct, 0)} %`} />
           </div>
           <Row k="Autosufficienza (consumi coperti)" v={`${fmt(day.selfSufficiencyPct, 0)} %`} />
-          <p className="text-[10.5px] leading-snug text-slate-500">
+          <p className="text-[0.65625rem] leading-snug text-slate-500">
             Giornata serena idealizzata ({SEASONS[season].label.toLowerCase()}: picco {SEASONS[season].peak} W/m²), consumo costante pari agli utilizzatori accesi ora ({fmtPower(loadW)}). Serve a ragionare su autoconsumo e accumulo, non a stimare la produzione reale (orientamento, ombre, meteo).
           </p>
         </>
@@ -337,7 +337,7 @@ function DayChart({ day, battery }: { day: DaySummary; battery: boolean }) {
           </text>
         ))}
       </svg>
-      <figcaption className="mt-1 flex flex-wrap gap-x-3 text-[10.5px] text-slate-300">
+      <figcaption className="mt-1 flex flex-wrap gap-x-3 text-[0.65625rem] text-slate-300">
         <span className="flex items-center gap-1">
           <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400/60" /> Produzione
         </span>
@@ -374,14 +374,14 @@ export function MeterSection({ comp }: { comp: ComponentInstance }) {
           <Row k="Potenza ora" v={`${fmtPower(Math.abs(p))} ${p < -0.5 ? '(uscita → ingresso)' : p > 0.5 ? '(ingresso → uscita)' : ''}`} />
           <Row k="Energia ingresso → uscita" v={`${fmt((e?.fwd ?? 0) / 1000, 3)} kWh`} />
           <Row k="Energia uscita → ingresso" v={`${fmt((e?.rev ?? 0) / 1000, 3)} kWh`} />
-          <button onClick={reset} className="flex items-center gap-1 text-[11.5px] text-slate-400 hover:text-slate-100">
+          <button onClick={reset} className="flex items-center gap-1 text-[0.71875rem] text-slate-400 hover:text-slate-100">
             <RotateCcw size={12} /> Azzera i contatori
           </button>
         </>
       ) : (
-        <p className="text-[12px] text-slate-500">Avvia la simulazione: l'energia si accumula nel tempo simulato (usa la velocità 60× per vederla crescere).</p>
+        <p className="text-[0.75rem] text-slate-500">Avvia la simulazione: l'energia si accumula nel tempo simulato (usa la velocità 60× per vederla crescere).</p>
       )}
-      <p className="text-[10.5px] leading-snug text-slate-500">
+      <p className="text-[0.65625rem] leading-snug text-slate-500">
         Collegato tra la protezione e l'inverter conta l'energia prodotta (verso uscita → ingresso se l'alimentazione entra dall'alto). Il contatore di scambio con la rete è quello del distributore, rappresentato dal punto di fornitura.
       </p>
     </>

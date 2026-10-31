@@ -24,10 +24,10 @@ function Lcd({ value, unit, note, beep }: { value: string; unit: string; note?: 
     <div className="rounded-md border-4 border-slate-800 bg-[#b9c7a5] px-3 py-2 shadow-inner">
       <div className="flex items-baseline justify-end gap-1.5 font-mono text-[#1d2618]">
         {beep && <Volume2 size={14} className="mr-auto self-center" />}
-        <span className="text-[28px] font-bold leading-8 tracking-wider">{value}</span>
-        <span className="text-[13px] font-semibold">{unit}</span>
+        <span className="text-[1.75rem] font-bold leading-8 tracking-wider">{value}</span>
+        <span className="text-[0.8125rem] font-semibold">{unit}</span>
       </div>
-      {note && <div className="mt-0.5 text-right text-[9.5px] leading-tight text-[#3b4a32]">{note}</div>}
+      {note && <div className="mt-0.5 text-right text-[0.59375rem] leading-tight text-[#3b4a32]">{note}</div>}
     </div>
   );
 }
@@ -100,8 +100,8 @@ function Multimeter() {
   ];
 
   return (
-    <div className="w-[270px] rounded-xl border-2 border-amber-500/80 bg-[#2b2f36] p-3 shadow-2xl">
-      <div className="mb-2 flex items-center text-[11px] font-bold uppercase tracking-wider text-amber-300">
+    <div className="w-[16.875rem] rounded-xl border-2 border-amber-500/80 bg-[#2b2f36] p-3 shadow-2xl">
+      <div className="mb-2 flex items-center text-[0.6875rem] font-bold uppercase tracking-wider text-amber-300">
         Multimetro digitale
         <button className="ml-auto text-slate-400 hover:text-white" title="Togli i puntali" onClick={clear}>
           <X size={14} />
@@ -114,13 +114,13 @@ function Multimeter() {
             key={x.m}
             title={x.title}
             onClick={() => setMode(x.m)}
-            className={`rounded py-1 font-mono text-[12px] font-bold ${mode === x.m ? 'bg-amber-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+            className={`rounded py-1 font-mono text-[0.75rem] font-bold ${mode === x.m ? 'bg-amber-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
           >
             {x.label}
           </button>
         ))}
       </div>
-      <div className="mt-2 space-y-1 text-[11px]">
+      <div className="mt-2 space-y-1 text-[0.6875rem]">
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
           <span className="text-slate-300">{terminalName(project, probes.red)}</span>
@@ -160,11 +160,11 @@ function Clamp() {
       );
   }
   return (
-    <div className="w-[270px] rounded-xl border-2 border-yellow-400/80 bg-[#2b2f36] p-3 shadow-2xl">
-      <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-yellow-300">Pinza amperometrica</div>
+    <div className="w-[16.875rem] rounded-xl border-2 border-yellow-400/80 bg-[#2b2f36] p-3 shadow-2xl">
+      <div className="mb-2 text-[0.6875rem] font-bold uppercase tracking-wider text-yellow-300">Pinza amperometrica</div>
       {display}
-      <div className="mt-2 text-[11px] leading-snug text-slate-300">{label}</div>
-      <div className="mt-1 text-[10px] leading-snug text-slate-500">
+      <div className="mt-2 text-[0.6875rem] leading-snug text-slate-300">{label}</div>
+      <div className="mt-1 text-[0.625rem] leading-snug text-slate-500">
         Su un solo conduttore la pinza legge la corrente di esercizio; su fase e neutro insieme le correnti si compensano e resta solo la dispersione verso terra.
       </div>
     </div>
@@ -218,11 +218,11 @@ function Tester() {
     { m: 'rcd', label: 'RCD', title: 'Prova del differenziale' },
   ];
   return (
-    <div className="w-[300px] rounded-xl border-2 border-sky-500/70 bg-[#2b2f36] p-3 shadow-2xl">
-      <div className="mb-2 flex items-center text-[11px] font-bold uppercase tracking-wider text-sky-300">
+    <div className="w-[18.75rem] rounded-xl border-2 border-sky-500/70 bg-[#2b2f36] p-3 shadow-2xl">
+      <div className="mb-2 flex items-center text-[0.6875rem] font-bold uppercase tracking-wider text-sky-300">
         Verificatore multifunzione
       </div>
-      {load && <div className="mb-1 truncate text-[11px] text-slate-300">Linea di {load.label}{load.params.kind === 'load' ? ` · ${load.params.p.name}` : ''}</div>}
+      {load && <div className="mb-1 truncate text-[0.6875rem] text-slate-300">Linea di {load.label}{load.params.kind === 'load' ? ` · ${load.params.p.name}` : ''}</div>}
       {display}
       <div className="mt-2 grid grid-cols-3 gap-1">
         {modes.map((x) => (
@@ -230,21 +230,21 @@ function Tester() {
             key={x.m}
             title={x.title}
             onClick={() => setMode(x.m)}
-            className={`rounded py-1 font-mono text-[12px] font-bold ${mode === x.m ? 'bg-sky-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+            className={`rounded py-1 font-mono text-[0.75rem] font-bold ${mode === x.m ? 'bg-sky-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
           >
             {x.label}
           </button>
         ))}
       </div>
       {mode === 'loop' && loop && (
-        <div className="mt-2 space-y-0.5 font-mono text-[10.5px] text-slate-300">
+        <div className="mt-2 space-y-0.5 font-mono text-[0.65625rem] text-slate-300">
           <div>Anello L-N: {loop.zLn ? `${fmt(loop.zLn, 3)} Ω · Icc min ≈ ${loop.ikLn! >= 1000 ? `${fmt(loop.ikLn! / 1000, 2)} kA` : `${fmt(loop.ikLn!, 0)} A`}` : '—'}</div>
           <div className="text-slate-400">Nel sistema TT l'anello L-PE comprende le resistenze di terra (RA e RB): la corrente di guasto è di pochi ampere, per questo serve il differenziale.</div>
         </div>
       )}
       {mode === 'rcd' && rcd?.rcd && (
         <div className="mt-2 space-y-1">
-          <table className="w-full font-mono text-[10.5px] text-slate-300">
+          <table className="w-full font-mono text-[0.65625rem] text-slate-300">
             <tbody>
               {rcd.rows.map((r) => (
                 <tr key={r.mult}>
@@ -256,7 +256,7 @@ function Tester() {
                   </td>
                   <td>
                     <button
-                      className="rounded bg-slate-700 px-1.5 text-[10px] text-slate-100 hover:bg-slate-600 disabled:opacity-40"
+                      className="rounded bg-slate-700 px-1.5 text-[0.625rem] text-slate-100 hover:bg-slate-600 disabled:opacity-40"
                       disabled={!running}
                       title={running ? 'Esegue la prova sull\'impianto simulato' : 'Avvia la simulazione per eseguire la prova'}
                       onClick={() => runTest(load!.id, r.mult)}
@@ -268,7 +268,7 @@ function Tester() {
               ))}
             </tbody>
           </table>
-          <p className="text-[10px] leading-snug text-slate-400">Tempi: massimi della norma di prodotto usati dal modello. La prova verifica l'intervento; l'efficacia della protezione richiede anche la misura del dispersore.</p>
+          <p className="text-[0.625rem] leading-snug text-slate-400">Tempi: massimi della norma di prodotto usati dal modello. La prova verifica l'intervento; l'efficacia della protezione richiede anche la misura del dispersore.</p>
         </div>
       )}
     </div>

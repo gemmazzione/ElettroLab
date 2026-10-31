@@ -49,7 +49,7 @@ export function PvDesignView() {
   const progress = done.filter(Boolean).length / STEPS.length;
   return (
     <div id="pv-scroll" className="pv-scope min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto grid max-w-[1360px] gap-5 px-4 pb-24 pt-5 lg:grid-cols-[minmax(0,1fr)_288px] lg:pb-8 xl:grid-cols-[200px_minmax(0,1fr)_288px]">
+      <div className="mx-auto grid max-w-[85rem] gap-5 px-4 pb-24 pt-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:pb-8 xl:grid-cols-[12.5rem_minmax(0,1fr)_18rem]">
         <StepNav step={step} done={done} bad={bad} progress={progress} go={go} />
         <div className="min-w-0 space-y-4">
           <div key={step} className={direction > 0 ? 'pv-step-fwd' : 'pv-step-back'}>
@@ -68,14 +68,14 @@ export function PvDesignView() {
             <button
               onClick={() => go(step - 1)}
               disabled={step === 0}
-              className="flex min-w-0 items-center gap-1 rounded-md px-3 py-2 text-[12.5px] text-slate-300 transition-colors hover:bg-slate-800 disabled:invisible"
+              className="flex min-w-0 items-center gap-1 rounded-md px-3 py-2 text-[0.78125rem] text-slate-300 transition-colors hover:bg-slate-800 disabled:invisible"
             >
               <ChevronLeft size={15} className="shrink-0" /> <span className="truncate">{STEPS[step - 1] ?? ''}</span>
             </button>
             {step < STEPS.length - 1 && (
               <button
                 onClick={() => go(step + 1)}
-                className="group flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2.5 text-[13px] font-semibold text-slate-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.6)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
+                className="group flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2.5 text-[0.8125rem] font-semibold text-slate-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.6)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
               >
                 Avanti: {STEPS[step + 1]} <ChevronRight size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />
               </button>
@@ -122,9 +122,9 @@ function StepNav({ step, done, bad, progress, go }: { step: number; done: boolea
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-amber-400">
           <Sun size={18} />
-          <span className="text-[13px] font-semibold text-amber-300">Progetta FV</span>
+          <span className="text-[0.8125rem] font-semibold text-amber-300">Progetta FV</span>
         </div>
-        <span className="text-[11.5px] tabular-nums text-slate-400">
+        <span className="text-[0.71875rem] tabular-nums text-slate-400">
           Passo {step + 1} di {STEPS.length}
         </span>
       </div>
@@ -137,11 +137,11 @@ function StepNav({ step, done, bad, progress, go }: { step: number; done: boolea
             <button
               onClick={() => go(i)}
               aria-current={i === step ? 'step' : undefined}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors ${i === step ? 'bg-slate-800 font-semibold text-white' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.78125rem] transition-colors ${i === step ? 'bg-slate-800 font-semibold text-white' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}
             >
               <span
                 key={bad[i] ? 'bad' : done[i] ? 'ok' : 'n'}
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold tabular-nums ${bad[i] ? 'pv-pop bg-red-500/25 text-red-200' : done[i] ? 'pv-pop bg-emerald-500/20 text-emerald-300' : i === step ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[0.65625rem] font-bold tabular-nums ${bad[i] ? 'pv-pop bg-red-500/25 text-red-200' : done[i] ? 'pv-pop bg-emerald-500/20 text-emerald-300' : i === step ? 'bg-amber-400/20 text-amber-300' : 'bg-slate-800 text-slate-400'}`}
                 aria-label={bad[i] ? 'da correggere' : done[i] ? 'completato' : undefined}
               >
                 {bad[i] ? '!' : done[i] ? <Check size={11} strokeWidth={3} /> : i + 1}
@@ -151,7 +151,7 @@ function StepNav({ step, done, bad, progress, go }: { step: number; done: boolea
           </li>
         ))}
       </ol>
-      <label className="mt-3 hidden cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[12px] text-slate-400 hover:text-slate-200 xl:flex">
+      <label className="mt-3 hidden cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[0.75rem] text-slate-400 hover:text-slate-200 xl:flex">
         <input type="checkbox" checked={expert} onChange={(e) => setExpert(e.target.checked)} className="accent-amber-500" />
         Mostra tutte le opzioni
       </label>
@@ -159,7 +159,7 @@ function StepNav({ step, done, bad, progress, go }: { step: number; done: boolea
   );
 }
 
-const Loading = () => <div className="flex h-[420px] items-center justify-center rounded-lg border border-slate-800 text-[12px] text-slate-400">Caricamento…</div>;
+const Loading = () => <div className="flex h-[26.25rem] items-center justify-center rounded-lg border border-slate-800 text-[0.75rem] text-slate-400">Caricamento…</div>;
 
 // ------------------------------------------------------------------ benvenuto
 
@@ -178,11 +178,11 @@ function Welcome() {
     [<Wallet key="w" size={16} />, 'Vedi produzione, costi e rientro', 'Mese per mese, con la vista 3D della casa e una relazione in PDF.'],
   ];
   return (
-    <div className="mx-auto flex min-h-full max-w-[880px] flex-col justify-center px-5 py-10">
-      <div className="grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_280px]">
+    <div className="mx-auto flex min-h-full max-w-[55rem] flex-col justify-center px-5 py-10">
+      <div className="grid items-center gap-8 md:grid-cols-[minmax(0,1fr)_17.5rem]">
         <div className="pv-step-fwd">
-          <h1 className="text-balance text-[28px] font-semibold leading-tight tracking-tight text-white">Progettiamo insieme il tuo impianto fotovoltaico</h1>
-          <p className="mt-3 max-w-[56ch] text-[14px] leading-relaxed text-slate-300">
+          <h1 className="text-balance text-[1.75rem] font-semibold leading-tight tracking-tight text-white">Progettiamo insieme il tuo impianto fotovoltaico</h1>
+          <p className="mt-3 max-w-[56ch] text-[0.875rem] leading-relaxed text-slate-300">
             Ti guido passo per passo, anche se è la prima volta. Ogni valore ha già un punto di partenza ragionevole: puoi cambiarlo quando vuoi, e i risultati si aggiornano subito.
           </p>
           <ol className="mt-6 space-y-4">
@@ -190,8 +190,8 @@ function Welcome() {
               <li key={title} className="pv-step-fwd flex gap-3" style={{ animationDelay: `${120 + i * 90}ms` }}>
                 <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-amber-300">{icon}</span>
                 <span>
-                  <span className="block text-[14px] font-semibold text-slate-100">{title}</span>
-                  <span className="block text-[13px] leading-snug text-slate-400">{text}</span>
+                  <span className="block text-[0.875rem] font-semibold text-slate-100">{title}</span>
+                  <span className="block text-[0.8125rem] leading-snug text-slate-400">{text}</span>
                 </span>
               </li>
             ))}
@@ -199,15 +199,15 @@ function Welcome() {
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <button
               onClick={() => start(0)}
-              className="group flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-3 text-[14px] font-semibold text-slate-950 shadow-[0_8px_24px_-8px_rgba(245,158,11,0.7)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
+              className="group flex items-center gap-2 rounded-lg bg-amber-500 px-5 py-3 text-[0.875rem] font-semibold text-slate-950 shadow-[0_8px_24px_-8px_rgba(245,158,11,0.7)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
             >
               <Home size={17} /> Inizia dalla mia casa <ChevronRight size={17} className="transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
-            <button onClick={() => start(2)} className="rounded-lg px-4 py-3 text-[13px] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">
+            <button onClick={() => start(2)} className="rounded-lg px-4 py-3 text-[0.8125rem] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">
               Salto la mappa, inserisco i dati a mano
             </button>
           </div>
-          <p className="mt-4 text-[12px] text-slate-500">
+          <p className="mt-4 text-[0.75rem] text-slate-500">
             Ci vogliono circa 10 minuti.{' '}
             <button onClick={() => start(0, true)} className="text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-200">
               Ho esperienza: mostrami subito tutte le opzioni
@@ -224,7 +224,7 @@ function Welcome() {
 function WelcomeArt() {
   const cells = Array.from({ length: 8 }, (_, i) => i);
   return (
-    <svg viewBox="0 0 280 200" className="mx-auto w-full max-w-[280px]" role="img" aria-label="Una casa con i moduli fotovoltaici sul tetto illuminati dal sole">
+    <svg viewBox="0 0 280 200" className="mx-auto w-full max-w-[17.5rem]" role="img" aria-label="Una casa con i moduli fotovoltaici sul tetto illuminati dal sole">
       <path d="M 30 118 Q 140 -20 250 118" fill="none" stroke="#334155" strokeDasharray="3 5" />
       <g className="pv-sun">
         <circle r="13" fill="#fbbf24" />
@@ -285,7 +285,7 @@ function HouseStep({ n }: { n: number }) {
             <TextInput value={name} onChange={(v) => up((d) => ({ ...d, name: v }))} />
           </FieldLabel>
         </div>
-        <div className="col-span-2 min-w-0 self-end text-[12px] leading-snug text-slate-400">
+        <div className="col-span-2 min-w-0 self-end text-[0.75rem] leading-snug text-slate-400">
           {loc.lat !== null ? (
             <>
               Posizione:{' '}
@@ -330,7 +330,7 @@ function RoofStep({ n }: { n: number }) {
       help="Guarda la foto: se il tetto ha un colmo al centro è «a due falde»; se scende da tutti e quattro i lati è «a padiglione». Poi scegli la falda più soleggiata: ti propongo già quella più rivolta a sud."
     >
       {!r && (
-        <p className="rounded-lg bg-amber-500/[0.09] px-3 py-2.5 text-[12.5px] text-amber-100">
+        <p className="rounded-lg bg-amber-500/[0.09] px-3 py-2.5 text-[0.78125rem] text-amber-100">
           Non hai ancora disegnato la pianta del tetto (passo 1). Puoi farlo ora oppure inserire inclinazione e orientamento a mano nel passo «Clima e ombre».
         </p>
       )}
@@ -371,7 +371,7 @@ function RoofStep({ n }: { n: number }) {
       {r && (
         <>
           <div>
-            <h3 className="mb-2 text-[13px] font-semibold text-slate-200">Su quale falda metto i moduli?</h3>
+            <h3 className="mb-2 text-[0.8125rem] font-semibold text-slate-200">Su quale falda metto i moduli?</h3>
             <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Falda per i moduli">
               {r.geo.slopes.map((s, i) => {
                 const sel = i === d.roof.slope;
@@ -382,7 +382,7 @@ function RoofStep({ n }: { n: number }) {
                     role="radio"
                     aria-checked={sel}
                     onClick={() => setRoof({ slope: i })}
-                    className={`rounded-lg border px-3 py-2.5 text-left text-[12px] transition-[border-color,background-color] duration-200 ${sel ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'}`}
+                    className={`rounded-lg border px-3 py-2.5 text-left text-[0.75rem] transition-[border-color,background-color] duration-200 ${sel ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'}`}
                   >
                     <div className="flex items-center justify-between gap-2 font-semibold text-slate-100">
                       {s.label}
@@ -410,7 +410,7 @@ function RoofStep({ n }: { n: number }) {
               sub={flat ? `sole a ${f(r.layout.winterSunDeg, 1)}° il 21/12` : 'da terra'}
             />
           </div>
-          <p className="text-[11.5px] leading-snug text-slate-500">
+          <p className="text-[0.71875rem] leading-snug text-slate-500">
             {flat
               ? "Sul tetto piano i moduli guardano verso il lato dell'edificio più vicino al sud; le file sono distanziate perché a mezzogiorno del 21 dicembre una fila non faccia ombra alla successiva."
               : 'Disposizione a griglia con file parallele alla gronda. Camini, lucernari e antenne non sono considerati: controlla sul posto e, se serve, aumenta la distanza dai bordi.'}
@@ -462,14 +462,14 @@ function SiteStep({ n }: { n: number }) {
         </div>
         <Num label={<Term k="ombre">Ombreggiamento</Term>} value={s.shadingPct} onChange={(v) => set({ shadingPct: v })} suffix="%" min={0} max={60} step={0.5} />
         {hasLoc ? (
-          <div className="self-end text-[12px] text-slate-400">
+          <div className="self-end text-[0.75rem] text-slate-400">
             Latitudine <span className="font-mono tabular-nums text-slate-200">{f(s.latitude, 3)}° N</span>
           </div>
         ) : (
           <Num label="Latitudine" value={s.latitude} onChange={(v) => set({ latitude: v, presetId: s.presetId === 'auto' ? 'custom' : s.presetId })} suffix="°N" min={30} max={60} step={0.1} hint="Milano 45,5; Roma 41,9; Palermo 38,1" />
         )}
         {hasRoof ? (
-          <div className="col-span-2 self-end text-[12px] text-slate-400">
+          <div className="col-span-2 self-end text-[0.75rem] text-slate-400">
             Moduli inclinati di <span className="font-mono text-slate-200">{f(s.tilt)}°</span>, rivolti a {compassName(s.azimuth)} (<Term k="azimut">azimut</Term>{' '}
             <span className="font-mono text-slate-200">{f(s.azimuth)}°</span>): dal tetto disegnato.
           </div>
@@ -493,7 +493,7 @@ function SiteStep({ n }: { n: number }) {
           </div>
         </Grid>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-[11px]">
+          <table className="w-full min-w-[40rem] text-[0.6875rem]">
             <thead>
               <tr className="text-slate-500">
                 <th className="py-1 text-left font-medium">Mese</th>
@@ -566,7 +566,7 @@ function ConsumptionStep({ n }: { n: number }) {
           <LoadProfileEditor weights={c.customWeights} annualKWh={c.annualKWh} onChange={(w) => set({ customWeights: w })} />
         </div>
       ) : (
-        <p className="text-[12px] text-slate-400">
+        <p className="text-[0.75rem] text-slate-400">
           Vuoi indicare tu le ore?{' '}
           <button onClick={() => set({ profile: 'manuale', customWeights: [...LOAD_PROFILES[c.profile].weights] })} className="font-medium text-sky-300 underline decoration-sky-700 underline-offset-2 hover:text-sky-200">
             Disegna i consumi ora per ora
@@ -612,14 +612,14 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={propose}
-          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-[13px] font-semibold text-slate-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.6)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
+          className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2.5 text-[0.8125rem] font-semibold text-slate-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.6)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
         >
           <Wand2 size={15} /> Proponi il dimensionamento
         </button>
-        <span className="text-[12px] text-slate-400">Cerca la configurazione che produce in un anno circa quanto consumi.</span>
+        <span className="text-[0.75rem] text-slate-400">Cerca la configurazione che produce in un anno circa quanto consumi.</span>
       </div>
       {note && (
-        <p key={note} className="pv-pop-in rounded-lg bg-amber-500/[0.09] px-3 py-2.5 text-[12.5px] leading-relaxed text-amber-100">
+        <p key={note} className="pv-pop-in rounded-lg bg-amber-500/[0.09] px-3 py-2.5 text-[0.78125rem] leading-relaxed text-amber-100">
           {note}
         </p>
       )}
@@ -649,7 +649,7 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
         {isHybrid(d) ? (
           <Num label="Batteria" value={d.batteryKWh} onChange={(v) => up((x) => ({ ...x, batteryKWh: v }))} suffix="kWh" min={0} max={40} step={0.5} hint="0 = senza accumulo. Per una casa si va di solito da 5 a 10 kWh." />
         ) : (
-          <div className="col-span-2 self-end text-[12px] leading-snug text-slate-400">
+          <div className="col-span-2 self-end text-[0.75rem] leading-snug text-slate-400">
             Vuoi una batteria? Scegli un <Term k="ibrido">inverter ibrido</Term>.
           </div>
         )}
@@ -722,7 +722,7 @@ function CablesStep({ n, r }: { n: number; r: DesignResults }) {
         {results.map(([ok, title, sub]) => (
           <li key={title} className="flex items-start gap-2.5 rounded-lg bg-slate-950/60 px-3 py-2.5">
             <span className={`mt-[5px] h-2 w-2 shrink-0 rounded-full ${ok === false ? 'bg-red-400' : ok ? 'bg-emerald-400' : 'bg-sky-400'}`} />
-            <span className="text-[12.5px] leading-snug">
+            <span className="text-[0.78125rem] leading-snug">
               <span className="font-medium text-slate-100">{title}</span>
               <span className="block text-slate-400">{sub}</span>
             </span>
@@ -812,8 +812,8 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
       <div className="grid gap-4 xl:grid-cols-2">
         <div>
           <div className="mb-1 flex items-center justify-between">
-            <h3 className="text-[13px] font-semibold text-slate-200">Una giornata di {MONTHS[month]?.toLowerCase()}</h3>
-            <select className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[12px]" value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Mese">
+            <h3 className="text-[0.8125rem] font-semibold text-slate-200">Una giornata di {MONTHS[month]?.toLowerCase()}</h3>
+            <select className="rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-[0.75rem]" value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Mese">
               {MONTHS.map((m, i) => (
                 <option key={m} value={i}>
                   {m}
@@ -823,7 +823,7 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
           </div>
           <DayChart m={y.months[month] ?? y.months[0]!} battery={isHybrid(d) && d.batteryKWh > 0} />
         </div>
-        <div className="grid content-start grid-cols-2 gap-x-4 gap-y-1.5 self-start rounded-lg bg-slate-950/60 px-3 py-3 text-[12.5px]">
+        <div className="grid content-start grid-cols-2 gap-x-4 gap-y-1.5 self-start rounded-lg bg-slate-950/60 px-3 py-3 text-[0.78125rem]">
           <span className="text-slate-400">Energia usata subito</span>
           <span className="text-right font-mono tabular-nums">{f(y.selfKWh)} kWh</span>
           <span className="text-slate-400">Energia mandata in rete</span>
@@ -835,7 +835,7 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
         </div>
       </div>
       <More label="Dove si perde energia (e come cambiare le perdite)">
-        <table className="w-full text-[12px]">
+        <table className="w-full text-[0.75rem]">
           <tbody>
             <tr className="border-b border-slate-800">
               <td className="py-1 text-slate-300">Energia ideale (kWp × sole sui moduli)</td>
@@ -861,7 +861,7 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
           <Num label="Disaccoppiamento" value={d.losses.mismatchPct} onChange={(v) => setLoss('mismatchPct', v)} suffix="%" min={0} max={10} step={0.5} hint="Moduli in serie mai perfettamente uguali" />
           <Num label="Fermi" value={d.losses.availabilityPct} onChange={(v) => setLoss('availabilityPct', v)} suffix="%" min={0} max={10} step={0.5} hint="Guasti, manutenzione, rete assente" />
         </div>
-        <p className="text-[11.5px] leading-snug text-slate-500">
+        <p className="text-[0.71875rem] leading-snug text-slate-500">
           Calcolo a passi di 15 minuti sul giorno medio di ogni mese (modello isotropo per il piano dei moduli). Il giorno medio non contiene l'alternanza di giornate serene e nuvolose:
           la produzione è un ordine di grandezza, autoconsumo e contributo della batteria risultano un po' ottimistici.
         </p>
@@ -889,12 +889,12 @@ function MonthChart({ months, selected, onSelect }: { months: MonthResult[]; sel
         {[0.25, 0.5, 0.75, 1].map((k) => (
           <g key={k}>
             <line x1={pad.l} x2={W - pad.r} y1={y(nice * k)} y2={y(nice * k)} stroke="#1e293b" />
-            <text x={pad.l - 5} y={y(nice * k) + 3} textAnchor="end" fontSize={10} fill="#94a3b8">
+            <text x={pad.l - 5} y={y(nice * k) + 3} textAnchor="end" fontSize={12} fill="#94a3b8">
               {f(nice * k)}
             </text>
           </g>
         ))}
-        <text x={4} y={pad.t + 2} fontSize={9.5} fill="#64748b">
+        <text x={4} y={pad.t + 2} fontSize={11} fill="#64748b">
           kWh
         </text>
         {months.map((m, i) => {
@@ -906,7 +906,7 @@ function MonthChart({ months, selected, onSelect }: { months: MonthResult[]; sel
               <rect x={x0 + bw * 0.12} y={y(m.productionKWh)} width={w} height={y(0) - y(m.productionKWh)} fill="#fbbf24" fillOpacity={0.35} style={bar} />
               <rect x={x0 + bw * 0.12} y={y(m.selfKWh)} width={w} height={y(0) - y(m.selfKWh)} fill="#fbbf24" style={bar} />
               <rect x={x0 + bw * 0.52} y={y(m.consumptionKWh)} width={w} height={y(0) - y(m.consumptionKWh)} fill="#38bdf8" fillOpacity={0.8} style={bar} />
-              <text x={x0 + bw / 2} y={H - 8} textAnchor="middle" fontSize={10} fill={i === selected ? '#f8fafc' : '#94a3b8'}>
+              <text x={x0 + bw / 2} y={H - 8} textAnchor="middle" fontSize={12} fill={i === selected ? '#f8fafc' : '#94a3b8'}>
                 {MONTHS[i]}
               </text>
               <title>{`${MONTHS[i]}: prodotti ${f(m.productionKWh)} kWh (usati subito ${f(m.selfKWh)}), consumati ${f(m.consumptionKWh)} kWh`}</title>
@@ -915,7 +915,7 @@ function MonthChart({ months, selected, onSelect }: { months: MonthResult[]; sel
         })}
         <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="#475569" />
       </svg>
-      <figcaption className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-slate-300">
+      <figcaption className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[0.71875rem] text-slate-300">
         <Legend cls="bg-amber-400" label="Prodotta e usata subito" />
         <Legend cls="bg-amber-400/35" label="Prodotta e mandata in rete" />
         <Legend cls="bg-sky-400/80" label="Consumi" />
@@ -949,7 +949,7 @@ function DayChart({ m, battery }: { m: MonthResult; battery: boolean }) {
         {[0.5, 1].map((k) => (
           <g key={k}>
             <line x1={pad.l} x2={W - pad.r} y1={y(max * k)} y2={y(max * k)} stroke="#1e293b" />
-            <text x={pad.l - 4} y={y(max * k) + 3} textAnchor="end" fontSize={8.5} fill="#94a3b8">
+            <text x={pad.l - 4} y={y(max * k) + 3} textAnchor="end" fontSize={10.5} fill="#94a3b8">
               {kw(max * k)}
             </text>
           </g>
@@ -959,12 +959,12 @@ function DayChart({ m, battery }: { m: MonthResult; battery: boolean }) {
         {battery && <path d={soc} fill="none" stroke="#34d399" strokeWidth={1.2} strokeDasharray="3 2" />}
         <line x1={pad.l} x2={W - pad.r} y1={y(0)} y2={y(0)} stroke="#475569" />
         {[0, 6, 12, 18, 24].map((t) => (
-          <text key={t} x={x(t)} y={H - 6} textAnchor="middle" fontSize={8.5} fill="#94a3b8">
+          <text key={t} x={x(t)} y={H - 6} textAnchor="middle" fontSize={10.5} fill="#94a3b8">
             {t}:00
           </text>
         ))}
       </svg>
-      <figcaption className="mt-1 flex flex-wrap gap-x-3 text-[11px] text-slate-300">
+      <figcaption className="mt-1 flex flex-wrap gap-x-3 text-[0.6875rem] text-slate-300">
         <Legend cls="bg-amber-400/60" label="Produzione" />
         <Legend cls="bg-sky-400" label="Consumi" />
         {battery && <Legend cls="bg-emerald-400" label="Carica della batteria (0–100%)" />}
@@ -1007,7 +1007,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
       </Grid>
       <More label="Voci di spesa e listino prezzi">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[520px] text-[12px]">
+          <table className="w-full min-w-[32.5rem] text-[0.75rem]">
             <thead>
               <tr className="border-b border-slate-700 text-left text-slate-500">
                 <th className="py-1 font-medium">Voce</th>
@@ -1068,7 +1068,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
           <Kpi label="Detrazione totale" value={eur(ec.deductionTotal)} />
         </div>
       </More>
-      <p className="text-[11.5px] leading-snug text-slate-500">
+      <p className="text-[0.71875rem] leading-snug text-slate-500">
         Prezzi, aliquote, detrazioni e valore dell'energia cambiano nel tempo e da caso a caso: sostituiscili con preventivi e condizioni reali. Non sono considerati quote fisse della bolletta,
         finanziamenti, costi di connessione del distributore e variazioni di tariffa.
       </p>
@@ -1092,7 +1092,7 @@ function CashChart({ cash }: { cash: { year: number; cumulative: number }[] }) {
         {[lo, 0, hi].map((v, i) => (
           <g key={i}>
             <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke={v === 0 ? '#64748b' : '#1e293b'} />
-            <text x={pad.l - 5} y={y(v) + 3} textAnchor="end" fontSize={10} fill="#94a3b8">
+            <text x={pad.l - 5} y={y(v) + 3} textAnchor="end" fontSize={12} fill="#94a3b8">
               {eur(v)}
             </text>
           </g>
@@ -1115,12 +1115,12 @@ function CashChart({ cash }: { cash: { year: number; cumulative: number }[] }) {
         {cash
           .filter((c) => c.year % 5 === 0)
           .map((c) => (
-            <text key={c.year} x={x(c.year)} y={H - 6} textAnchor="middle" fontSize={10} fill="#94a3b8">
+            <text key={c.year} x={x(c.year)} y={H - 6} textAnchor="middle" fontSize={12} fill="#94a3b8">
               {c.year === 0 ? 'oggi' : `anno ${c.year}`}
             </text>
           ))}
       </svg>
-      <figcaption className="mt-1 text-[11.5px] text-slate-400">Soldi spesi (in rosso) e recuperati anno per anno: quando le barre diventano verdi l'impianto si è ripagato.</figcaption>
+      <figcaption className="mt-1 text-[0.71875rem] text-slate-400">Soldi spesi (in rosso) e recuperati anno per anno: quando le barre diventano verdi l'impianto si è ripagato.</figcaption>
     </figure>
   );
 }
@@ -1142,16 +1142,16 @@ function FinalStep({ n, r, go }: { n: number; r: DesignResults; go: (n: number) 
       {todo.length > 0 ? (
         <ul className="space-y-1.5">
           {todo.map(([t, s]) => (
-            <li key={t} className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/[0.09] px-3 py-2 text-[12.5px] text-amber-100">
+            <li key={t} className="flex items-center justify-between gap-3 rounded-lg bg-amber-500/[0.09] px-3 py-2 text-[0.78125rem] text-amber-100">
               {t}
-              <button onClick={() => go(s)} className="shrink-0 rounded-md bg-amber-400/15 px-2.5 py-1 text-[12px] font-semibold text-amber-200 transition-colors hover:bg-amber-400/25">
+              <button onClick={() => go(s)} className="shrink-0 rounded-md bg-amber-400/15 px-2.5 py-1 text-[0.75rem] font-semibold text-amber-200 transition-colors hover:bg-amber-400/25">
                 Vai al passo {s + 1}
               </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="rounded-lg bg-emerald-500/[0.09] px-3 py-2.5 text-[12.5px] text-emerald-100">Il progetto è completo: puoi scaricare la relazione o aprirlo nel laboratorio.</p>
+        <p className="rounded-lg bg-emerald-500/[0.09] px-3 py-2.5 text-[0.78125rem] text-emerald-100">Il progetto è completo: puoi scaricare la relazione o aprirlo nel laboratorio.</p>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label={<Term k="kwp">Potenza</Term>} value={`${f(peakW(d) / 1000, 2)} kWp`} sub={`${moduleCount(d)} moduli`} />
@@ -1187,7 +1187,7 @@ function SummaryActions({ r }: { r: DesignResults }) {
       <button
         onClick={pdf}
         disabled={busy}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2.5 text-[12.5px] font-semibold text-slate-950 transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98] disabled:opacity-60"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2.5 text-[0.78125rem] font-semibold text-slate-950 transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98] disabled:opacity-60"
       >
         <FileDown size={15} /> {busy ? 'Preparo la relazione…' : 'Scarica la relazione PDF'}
       </button>
@@ -1197,14 +1197,14 @@ function SummaryActions({ r }: { r: DesignResults }) {
           openProject(designToProject(d));
           setMode('lab');
         }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-slate-600"
+        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2.5 text-[0.78125rem] font-semibold text-white transition-colors hover:bg-slate-600"
         title="Crea nel laboratorio lo schema con generatore, inverter, cavi e protezioni di questo progetto"
       >
         <Zap size={15} /> Apri lo schema nel laboratorio
       </button>
       <button
         onClick={() => window.confirm('Ricominciare da capo? Tutti i dati del progetto fotovoltaico torneranno ai valori iniziali.') && reset()}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[12px] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+        className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
       >
         <RotateCcw size={13} /> Ricomincia da capo
       </button>
@@ -1220,12 +1220,12 @@ function Summary({ r }: { r: DesignResults }) {
     <aside className="hidden lg:sticky lg:top-5 lg:block lg:max-h-[calc(100vh-7rem)] lg:self-start lg:overflow-y-auto lg:[scrollbar-width:thin]">
       <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
         <div>
-          <div className="text-[11.5px] text-slate-400">Il tuo impianto</div>
-          <h2 className="truncate text-[14px] font-semibold text-white" title={d.name}>
+          <div className="text-[0.71875rem] text-slate-400">Il tuo impianto</div>
+          <h2 className="truncate text-[0.875rem] font-semibold text-white" title={d.name}>
             {d.name}
           </h2>
         </div>
-        <dl className="text-[12.5px]">
+        <dl className="text-[0.78125rem]">
           <FlashRow label={<Term k="kwp">Potenza</Term>} value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />
           <FlashRow label="Moduli" text={`${moduleCount(d)} da ${d.module.moduleWp} Wp`} />
           <FlashRow label={<Term k="inverter">Inverter</Term>} text={`${f(d.inverter.pacW / 1000, 1)} kW${isHybrid(d) && d.batteryKWh > 0 ? ` + ${f(d.batteryKWh, 1)} kWh` : ''}`} />
@@ -1240,12 +1240,12 @@ function Summary({ r }: { r: DesignResults }) {
         </dl>
         <div
           key={errors ? 'e' : warnings ? 'w' : 'ok'}
-          className={`pv-pop-in rounded-lg px-3 py-2 text-[12px] leading-snug ${errors ? 'bg-red-500/10 text-red-200' : warnings ? 'bg-amber-500/10 text-amber-100' : 'bg-emerald-500/10 text-emerald-200'}`}
+          className={`pv-pop-in rounded-lg px-3 py-2 text-[0.75rem] leading-snug ${errors ? 'bg-red-500/10 text-red-200' : warnings ? 'bg-amber-500/10 text-amber-100' : 'bg-emerald-500/10 text-emerald-200'}`}
         >
           {errors ? `${errors === 1 ? 'Una verifica non superata' : `${errors} verifiche non superate`}: guarda i passi con il pallino rosso.` : warnings ? `Funziona; ${warnings === 1 ? 'un aspetto' : `${warnings} aspetti`} da valutare.` : 'Tutte le verifiche di calcolo sono superate.'}
         </div>
         <SummaryActions r={r} />
-        <p className="text-[11px] leading-snug text-slate-500">
+        <p className="text-[0.6875rem] leading-snug text-slate-500">
           Studio di fattibilità con modelli semplificati e dati indicativi: non sostituisce il progetto di un tecnico abilitato né la verifica delle norme CEI applicabili.
         </p>
       </div>
@@ -1260,27 +1260,27 @@ function MobileSummary({ r }: { r: DesignResults }) {
   const setStep = usePvDesign((x) => x.setStep);
   return (
     <div className="sticky bottom-0 z-20 border-t border-slate-800 bg-slate-950/95 px-4 py-2.5 backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-[720px] items-center justify-between gap-3 text-[12px]">
+      <div className="mx-auto flex max-w-[45rem] items-center justify-between gap-3 text-[0.75rem]">
         <div className="flex min-w-0 gap-4 tabular-nums">
           <span>
-            <span className="block text-[10.5px] text-slate-500">Potenza</span>
+            <span className="block text-[0.65625rem] text-slate-500">Potenza</span>
             <span className="font-mono text-slate-100">
               <Animated value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />
             </span>
           </span>
           <span>
-            <span className="block text-[10.5px] text-slate-500">Produzione</span>
+            <span className="block text-[0.65625rem] text-slate-500">Produzione</span>
             <span className="font-mono text-slate-100">
               <Animated value={r.yield.productionKWh} format={(v) => `${f(v)} kWh`} />
             </span>
           </span>
           <span className="hidden min-[400px]:block">
-            <span className="block text-[10.5px] text-slate-500">Si ripaga in</span>
+            <span className="block text-[0.65625rem] text-slate-500">Si ripaga in</span>
             <span className="font-mono text-slate-100">{payback(r.economics.paybackYears)}</span>
           </span>
         </div>
         {step !== STEPS.length - 1 && (
-          <button onClick={() => setStep(STEPS.length - 1)} className="shrink-0 rounded-md bg-slate-800 px-2.5 py-1.5 text-[11.5px] font-semibold text-slate-200 hover:bg-slate-700">
+          <button onClick={() => setStep(STEPS.length - 1)} className="shrink-0 rounded-md bg-slate-800 px-2.5 py-1.5 text-[0.71875rem] font-semibold text-slate-200 hover:bg-slate-700">
             Riepilogo
           </button>
         )}

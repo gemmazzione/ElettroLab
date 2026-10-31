@@ -81,7 +81,7 @@ function Popover({ trigger, title, text, align = 'left' }: { trigger: ReactNode;
         <span
           id={id}
           role="tooltip"
-          className={`pv-pop-in absolute top-full z-30 mt-1.5 w-[min(260px,70vw)] rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-left text-[11.5px] font-normal normal-case leading-snug tracking-normal text-slate-300 shadow-[0_8px_24px_rgba(2,6,23,0.6)] ${side === 'right' ? 'right-0' : 'left-0'}`}
+          className={`pv-pop-in absolute top-full z-30 mt-1.5 w-[min(260px,70vw)] rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-left text-[0.71875rem] font-normal normal-case leading-snug tracking-normal text-slate-300 shadow-[0_8px_24px_rgba(2,6,23,0.6)] ${side === 'right' ? 'right-0' : 'left-0'}`}
         >
           {title && <span className="mb-0.5 block font-semibold text-slate-100">{title}</span>}
           {text}
@@ -133,7 +133,7 @@ export function Num({
   const id = useId();
   return (
     <div>
-      <span className="mb-1 flex items-center gap-1 text-[11px] text-slate-400">
+      <span className="mb-1 flex items-center gap-1 text-[0.6875rem] text-slate-400">
         <label htmlFor={id}>{label}</label>
         {hint && <Tip text={hint} />}
       </span>
@@ -145,7 +145,7 @@ export function Num({
 export function FieldLabel({ label, hint, children }: { label: ReactNode; hint?: string; children: ReactNode }) {
   return (
     <div>
-      <span className="mb-1 flex items-center gap-1 text-[11px] text-slate-400">
+      <span className="mb-1 flex items-center gap-1 text-[0.6875rem] text-slate-400">
         {label}
         {hint && <Tip text={hint} />}
       </span>
@@ -163,15 +163,15 @@ export function Step({ n, title, intro, help, children }: { n: number; title: st
   return (
     <section className="rounded-xl border border-slate-800 bg-slate-900/50 shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]">
       <header className="flex items-start gap-3 border-b border-slate-800 px-4 py-3.5">
-        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[12.5px] font-bold tabular-nums text-amber-300">{n}</span>
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400/15 text-[0.78125rem] font-bold tabular-nums text-amber-300">{n}</span>
         <div className="min-w-0">
-          <h2 className="text-[16px] font-semibold leading-tight text-white">{title}</h2>
-          {intro && <p className="mt-1 max-w-[72ch] text-[12.5px] leading-relaxed text-slate-400">{intro}</p>}
+          <h2 className="text-[1rem] font-semibold leading-tight text-white">{title}</h2>
+          {intro && <p className="mt-1 max-w-[72ch] text-[0.78125rem] leading-relaxed text-slate-400">{intro}</p>}
         </div>
       </header>
       <div className="space-y-4 px-4 py-4">
         {help && !expert && (
-          <p className="flex gap-2.5 rounded-lg bg-sky-500/[0.07] px-3 py-2.5 text-[12.5px] leading-relaxed text-sky-100">
+          <p className="flex gap-2.5 rounded-lg bg-sky-500/[0.07] px-3 py-2.5 text-[0.78125rem] leading-relaxed text-sky-100">
             <Lightbulb size={16} className="mt-0.5 shrink-0 text-sky-300" />
             <span>{help}</span>
           </p>
@@ -200,7 +200,7 @@ export function More({ label, children, defaultOpen }: { label: ReactNode; child
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[12px] font-medium text-slate-300 transition-colors hover:bg-slate-800/50 hover:text-white"
+        className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left text-[0.75rem] font-medium text-slate-300 transition-colors hover:bg-slate-800/50 hover:text-white"
       >
         {label}
         <ChevronDown size={15} className={`shrink-0 text-slate-500 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${open ? 'rotate-180' : ''}`} />
@@ -270,9 +270,9 @@ export function FlashRow({ label, value, format, text }: { label: ReactNode; val
 export function Kpi({ label, value, sub }: { label: ReactNode; value: ReactNode; sub?: ReactNode }) {
   return (
     <div className="rounded-lg bg-slate-950/60 px-3 py-2.5">
-      <div className="text-[11px] text-slate-400">{label}</div>
-      <div className="mt-0.5 font-mono text-[17px] font-semibold tabular-nums text-white">{value}</div>
-      {sub && <div className="text-[11px] text-slate-500">{sub}</div>}
+      <div className="text-[0.6875rem] text-slate-400">{label}</div>
+      <div className="mt-0.5 font-mono text-[1.0625rem] font-semibold tabular-nums text-white">{value}</div>
+      {sub && <div className="text-[0.6875rem] text-slate-500">{sub}</div>}
     </div>
   );
 }
@@ -300,7 +300,7 @@ export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () 
   const box = { ok: 'bg-emerald-500/[0.08] text-emerald-100', warn: 'bg-amber-500/[0.08] text-amber-100', bad: 'bg-red-500/[0.09] text-red-100' }[tone];
   return (
     <div className="space-y-2">
-      <div className={`rounded-lg px-3 py-2.5 text-[12.5px] leading-relaxed ${box}`}>
+      <div className={`rounded-lg px-3 py-2.5 text-[0.78125rem] leading-relaxed ${box}`}>
         <div className="font-semibold">
           {tone === 'ok' ? 'Tutto compatibile: moduli, stringhe e inverter lavorano bene insieme.' : tone === 'warn' ? 'Funziona, con qualche aspetto da valutare.' : bad.length === 1 ? 'C\'è un problema da correggere.' : `Ci sono ${bad.length} problemi da correggere.`}
         </div>
@@ -313,7 +313,7 @@ export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () 
           </div>
         ))}
         {bad.length > 0 && onFix && (
-          <button onClick={onFix} className="mt-2 flex items-center gap-1.5 rounded-md bg-red-500/20 px-2.5 py-1 text-[12px] font-semibold text-red-50 hover:bg-red-500/30">
+          <button onClick={onFix} className="mt-2 flex items-center gap-1.5 rounded-md bg-red-500/20 px-2.5 py-1 text-[0.75rem] font-semibold text-red-50 hover:bg-red-500/30">
             <Wand2 size={13} /> Prova a correggere in automatico
           </button>
         )}
@@ -324,8 +324,8 @@ export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () 
             <li key={c.id} className="flex gap-2 rounded-md bg-slate-950/60 px-3 py-2">
               <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${c.ok === true ? 'bg-emerald-400' : c.ok === false ? 'bg-red-400' : 'bg-amber-300'}`} aria-label={c.ok === true ? 'superata' : c.ok === false ? 'non superata' : 'da valutare'} />
               <div>
-                <div className="text-[12px] font-medium text-slate-100">{c.title}</div>
-                <div className="text-[11.5px] leading-snug text-slate-400">{c.detail}</div>
+                <div className="text-[0.75rem] font-medium text-slate-100">{c.title}</div>
+                <div className="text-[0.71875rem] leading-snug text-slate-400">{c.detail}</div>
               </div>
             </li>
           ))}
@@ -338,11 +338,11 @@ export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () 
 export function Notes({ title, notes, ok }: { title: string; notes: string[]; ok?: boolean }) {
   return (
     <div className="rounded-md bg-slate-950/60 px-3 py-2">
-      <div className="mb-1 flex items-center gap-2 text-[12px] font-semibold text-slate-100">
+      <div className="mb-1 flex items-center gap-2 text-[0.75rem] font-semibold text-slate-100">
         {ok !== undefined && <span className={`h-2 w-2 shrink-0 rounded-full ${ok ? 'bg-emerald-400' : 'bg-red-400'}`} />}
         {title}
       </div>
-      <ul className="list-disc space-y-1 pl-4 text-[11.5px] leading-snug text-slate-400">
+      <ul className="list-disc space-y-1 pl-4 text-[0.71875rem] leading-snug text-slate-400">
         {notes.map((n) => (
           <li key={n}>{n}</li>
         ))}

@@ -27,7 +27,7 @@ export function PhasorDiagram({ result, project }: { result: Extract<SimResult, 
 
   return (
     <div className="flex h-full flex-col">
-      <svg viewBox={`0 0 ${size} ${size}`} className="h-full max-h-[170px] w-full">
+      <svg viewBox={`0 0 ${size} ${size}`} className="h-full max-h-[10.625rem] w-full">
         <circle cx={c} cy={c} r={230 * scale} fill="none" stroke="#1e293b" strokeDasharray="3 4" />
         <polygon points={tips.map((t) => `${t.x},${t.y}`).join(' ')} fill="none" stroke="#334155" />
         {tips.map((t, k) => (
@@ -57,7 +57,7 @@ export function PhasorDiagram({ result, project }: { result: Extract<SimResult, 
             );
           })}
       </svg>
-      <div className="text-center text-[10.5px] text-slate-400">
+      <div className="text-center text-[0.65625rem] text-slate-400">
         {maxShift > 2 ? (
           <span className="text-red-300">Spostamento del centro stella: {fmt(maxShift, 0)} V</span>
         ) : (

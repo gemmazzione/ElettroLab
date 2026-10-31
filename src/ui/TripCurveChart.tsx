@@ -197,7 +197,7 @@ export function OvercurrentChart({
           Corrente in multipli di In (In = {inA} A)
         </text>
       </svg>
-      <div className="mt-1 min-h-[16px] font-mono text-[10.5px] text-slate-200">
+      <div className="mt-1 min-h-[16px] font-mono text-[0.65625rem] text-slate-200">
         {hover !== null ? (
           <>
             {fmt(hover, 2)}·In = {fmt(hover * inA, 1)} A → {hover >= hi ? `magnetico, ${fmtTime(MAGNETIC_TRIP_S)}` : hover >= lo ? `termico ${fmtTime(tHover ?? Infinity)} (magnetico incerto)` : fmtTime(tHover ?? Infinity)}
@@ -210,7 +210,7 @@ export function OvercurrentChart({
           <span className="text-slate-500">Passa con il mouse sul grafico per leggere i tempi.</span>
         )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-slate-300">
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.65625rem] text-slate-300">
         <LegendItem swatch={<span className="inline-block h-0.5 w-4" style={{ background: C.thermal }} />} label="Modello (da freddo)" />
         <LegendItem
           swatch={<span className="inline-block h-3 w-3 rounded-sm" style={{ background: C.magnetic, opacity: 0.35 }} />}
@@ -316,7 +316,7 @@ export function ResidualChart({
           Corrente differenziale in multipli di IΔn ({idnMa} mA)
         </text>
       </svg>
-      <div className="mt-1 min-h-[16px] font-mono text-[10.5px] text-slate-200">
+      <div className="mt-1 min-h-[16px] font-mono text-[0.65625rem] text-slate-200">
         {hover !== null ? (
           <>
             {fmt(hover, 2)}·IΔn = {fmt(hover * idnMa, hover * idnMa < 10 ? 1 : 0)} mA →{' '}
@@ -339,7 +339,7 @@ export function OvercurrentTable({ inA, curve }: { inA: number; curve: TripCurve
   const [lo, hi] = MAGNETIC_BAND[curve];
   const rows = [1.13, 1.3, 1.45, 2, 2.55, 3, lo, hi, 20, 50].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
   return (
-    <table className="mt-2 w-full text-[10.5px]">
+    <table className="mt-2 w-full text-[0.65625rem]">
       <thead className="text-left text-slate-500">
         <tr>
           <th className="font-medium">I/In</th>
@@ -474,7 +474,7 @@ export function FuseChart({
           Corrente in multipli di In (gG {inA} A)
         </text>
       </svg>
-      <div className="mt-1 min-h-[16px] font-mono text-[10.5px] text-slate-200">
+      <div className="mt-1 min-h-[16px] font-mono text-[0.65625rem] text-slate-200">
         {hover !== null ? (
           <>
             {fmt(hover, 2)}·In = {fmt(hover * inA, 1)} A → {tHover !== null && Number.isFinite(tHover) ? `fusione in ${fmtTime(tHover)}` : 'non fonde'}
@@ -487,7 +487,7 @@ export function FuseChart({
           <span className="text-slate-500">Passa con il mouse sul grafico per leggere i tempi.</span>
         )}
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-slate-300">
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[0.65625rem] text-slate-300">
         <LegendItem swatch={<span className="inline-block h-0.5 w-4" style={{ background: C.magnetic }} />} label="Tempo di prearco (curva media, da freddo)" />
         {iccA ? <LegendItem swatch={<span className="inline-block h-3 w-0.5" style={{ background: C.icc }} />} label="Icc presunta" /> : null}
         <LegendItem swatch={<span className="text-slate-400">○ ×</span>} label={`${fmt(conv.if, 2)}·In fonde <1 h · ${fmt(conv.inf, 2)}·In non fonde`} />

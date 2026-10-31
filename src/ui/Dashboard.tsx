@@ -12,9 +12,9 @@ import { fmt, fmtCurrent, fmtPower, fmtTime } from './format';
 function Kpi({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-md border border-slate-800 bg-slate-950/70 px-3 py-2">
-      <div className="text-[10.5px] text-slate-500">{label}</div>
-      <div className="font-mono text-[17px] leading-6 text-emerald-300">{value}</div>
-      {sub && <div className="text-[10px] text-slate-500">{sub}</div>}
+      <div className="text-[0.65625rem] text-slate-500">{label}</div>
+      <div className="font-mono text-[1.0625rem] leading-6 text-emerald-300">{value}</div>
+      {sub && <div className="text-[0.625rem] text-slate-500">{sub}</div>}
     </div>
   );
 }
@@ -31,7 +31,7 @@ export function Dashboard() {
   if (!running) return null;
 
   const header = (
-    <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200">
+    <button onClick={() => setOpen(!open)} className="flex w-full items-center gap-2 border-b border-slate-800 px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400 hover:text-slate-200">
       {open ? <ChevronDown size={13} /> : <ChevronUp size={13} />} Dashboard di simulazione
       {faultCount > 0 && <span className="rounded bg-red-600 px-1.5 normal-case tracking-normal text-white">{faultCount} {faultCount === 1 ? 'guasto inserito' : 'guasti inseriti'}</span>}
       {result && result.ok && result.alerts.some((a) => a.severity === 'errore') && (
@@ -44,7 +44,7 @@ export function Dashboard() {
     return (
       <div className="shrink-0 border-t border-slate-800 bg-slate-900">
         {header}
-        {open && <div className="p-4 text-[12px] text-amber-300">{result ? result.reason : 'Calcolo in corso…'}</div>}
+        {open && <div className="p-4 text-[0.75rem] text-amber-300">{result ? result.reason : 'Calcolo in corso…'}</div>}
       </div>
     );
   }
@@ -57,7 +57,7 @@ export function Dashboard() {
     <div className="shrink-0 border-t border-slate-800 bg-slate-900">
       {header}
       {open && (
-        <div className="overflow-x-auto"><div className={`grid h-[250px] gap-3 p-3 ${tri ? 'min-w-[1280px] grid-cols-[250px_220px_1.25fr_1fr_1fr]' : 'min-w-[1040px] grid-cols-[250px_1.25fr_1fr_1fr]'}`}>
+        <div className="overflow-x-auto"><div className={`grid h-[15.625rem] gap-3 p-3 ${tri ? 'min-w-[80rem] grid-cols-[15.625rem_13.75rem_1.25fr_1fr_1fr]' : 'min-w-[65rem] grid-cols-[15.625rem_1.25fr_1fr_1fr]'}`}>
           <div className="grid grid-cols-2 content-start gap-2">
             {tri ? (
               <>
@@ -76,14 +76,14 @@ export function Dashboard() {
 
           {tri && (
             <div className="min-h-0 rounded-md border border-slate-800 p-1.5">
-              <div className="mb-0.5 text-[10.5px] text-slate-500">Diagramma fasoriale</div>
+              <div className="mb-0.5 text-[0.65625rem] text-slate-500">Diagramma fasoriale</div>
               <PhasorDiagram result={result} project={project} />
             </div>
           )}
 
           <div className="min-h-0 overflow-y-auto rounded-md border border-slate-800">
-            <table className="w-full text-[11.5px]">
-              <thead className="sticky top-0 bg-slate-900 text-left text-[10.5px] text-slate-500">
+            <table className="w-full text-[0.71875rem]">
+              <thead className="sticky top-0 bg-slate-900 text-left text-[0.65625rem] text-slate-500">
                 <tr>
                   <th className="px-2 py-1 font-medium">Circuito</th>
                   {tri && <th className="px-2 py-1 font-medium">Fase</th>}
@@ -118,8 +118,8 @@ export function Dashboard() {
           </div>
 
           <div className="min-h-0 overflow-y-auto rounded-md border border-slate-800">
-            <table className="w-full text-[11.5px]">
-              <thead className="sticky top-0 bg-slate-900 text-left text-[10.5px] text-slate-500">
+            <table className="w-full text-[0.71875rem]">
+              <thead className="sticky top-0 bg-slate-900 text-left text-[0.65625rem] text-slate-500">
                 <tr>
                   <th className="px-2 py-1 font-medium">Dispositivo</th>
                   <th className="px-2 py-1 font-medium">Stato</th>
@@ -137,7 +137,7 @@ export function Dashboard() {
                       <td className="px-2 py-1 text-slate-200">
                         {d.label}
                         {isResidualDevice(d.params.kind) && (
-                          <span className="ml-1 text-[10px] text-slate-500">IΔ {fmt((result.residual.get(d.id) ?? 0) * 1000, 1)} mA</span>
+                          <span className="ml-1 text-[0.625rem] text-slate-500">IΔ {fmt((result.residual.get(d.id) ?? 0) * 1000, 1)} mA</span>
                         )}
                       </td>
                       <td className={`px-2 py-1 font-sans ${prot[d.id]?.tripped ? 'font-semibold text-amber-300' : d.closed ? 'text-red-300' : 'text-emerald-300'}`}>
@@ -159,14 +159,14 @@ export function Dashboard() {
                 })}
               </tbody>
             </table>
-            <div className="border-t border-slate-800 px-2 py-1.5 text-[10.5px] text-slate-500">Termico: stato termico in % della soglia di intervento (memoria termica). Velocità del tempo selezionabile nella barra superiore.</div>
+            <div className="border-t border-slate-800 px-2 py-1.5 text-[0.65625rem] text-slate-500">Termico: stato termico in % della soglia di intervento (memoria termica). Velocità del tempo selezionabile nella barra superiore.</div>
           </div>
 
           <div className="flex min-h-0 flex-col rounded-md border border-slate-800">
-            <div className="border-b border-slate-800 px-2 py-1 text-[10.5px] text-slate-500">Registro eventi (tempo simulato)</div>
+            <div className="border-b border-slate-800 px-2 py-1 text-[0.65625rem] text-slate-500">Registro eventi (tempo simulato)</div>
             <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
               {[...events].reverse().map((e) => (
-                <div key={e.id} className="flex gap-2 px-1 py-0.5 text-[11px]">
+                <div key={e.id} className="flex gap-2 px-1 py-0.5 text-[0.6875rem]">
                   <span className="shrink-0 font-mono text-slate-500">{fmtTime(e.t)}</span>
                   <SeverityIcon s={e.level} size={12} />
                   <span className={e.level === 'errore' ? 'text-red-300' : e.level === 'attenzione' ? 'text-amber-200' : 'text-slate-300'}>{e.text}</span>

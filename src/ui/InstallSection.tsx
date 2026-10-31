@@ -21,10 +21,10 @@ export function InstallSection({ comp }: { comp: ComponentInstance }) {
     <Section title="Conduttura: dati per le verifiche">
       {!inst ? (
         <div className="space-y-2">
-          <p className="text-[11.5px] leading-snug text-violet-200">
+          <p className="text-[0.71875rem] leading-snug text-violet-200">
             Dati di posa non inseriti: la verifica Ib ≤ In ≤ Iz risulta «dati insufficienti». La portata non dipende solo dalla sezione.
           </p>
-          <button onClick={() => set({})} className="w-full rounded-md border border-slate-700 py-1.5 text-[12px] text-slate-200 hover:bg-slate-800">
+          <button onClick={() => set({})} className="w-full rounded-md border border-slate-700 py-1.5 text-[0.75rem] text-slate-200 hover:bg-slate-800">
             Inserisci i dati di posa
           </button>
         </div>
@@ -59,12 +59,12 @@ export function InstallSection({ comp }: { comp: ComponentInstance }) {
               <Row k="I0 (tabella)" v={`${fmt(calc.i0, 1)} A`} />
               <Row k="k1 temperatura · k2 raggruppamento" v={`${fmt(calc.k1, 2)} · ${fmt(calc.k2, 2)}`} />
               <Row k="Portata Iz" v={`${fmt(calc.iz, 1)} A`} />
-              <p className="text-[10.5px] leading-snug text-slate-500">{AMPACITY_SOURCE}</p>
+              <p className="text-[0.65625rem] leading-snug text-slate-500">{AMPACITY_SOURCE}</p>
             </>
           ) : (
-            <p className="text-[11px] text-amber-300">Temperatura fuori dai valori tabellati.</p>
+            <p className="text-[0.6875rem] text-amber-300">Temperatura fuori dai valori tabellati.</p>
           )}
-          <button onClick={() => set(null)} className="text-[11px] text-slate-500 hover:text-slate-300">
+          <button onClick={() => set(null)} className="text-[0.6875rem] text-slate-500 hover:text-slate-300">
             Rimuovi i dati di posa
           </button>
         </>
@@ -73,7 +73,7 @@ export function InstallSection({ comp }: { comp: ComponentInstance }) {
         k={`Corrente d'impiego IB = P / (${p.phases === 3 ? '3 × ' : ''}230 V${(p.cosPhi ?? 1) < 1 ? ' × cos φ' : ''})`}
         v={`${fmt(p.powerW / (230 * (p.phases === 3 ? 3 : 1) * (p.cosPhi ?? 1)), 2)} A`}
       />
-      <label className="flex items-center gap-2 text-[12px] text-slate-300">
+      <label className="flex items-center gap-2 text-[0.75rem] text-slate-300">
         <input type="checkbox" checked={hasSockets} onChange={(e) => update(comp.id, { kind: 'load', p: { ...p, hasSockets: e.target.checked } })} />
         Il circuito alimenta prese a spina
       </label>
