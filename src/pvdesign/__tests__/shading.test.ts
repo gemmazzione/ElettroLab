@@ -17,7 +17,7 @@ function design(): PvDesign {
   const d = defaultDesign();
   return syncRoof({ ...d, location: { lat: 41.9, lon: 12.5, address: '', zoom: 20 }, roof: { ...d.roof, footprint: rect(12, 8), slope: -1 }, modulesPerString: 9, strings: 1 });
 }
-const tree = (x: number, y: number, height = 12, size = 6): Obstacle => ({ id: 't', kind: 'albero', x, y, height, size, depth: size });
+const tree = (x: number, y: number, height = 12, size = 6): Obstacle => ({ id: 't', kind: 'albero', x, y, height, size, depth: size, z0: 0 });
 
 describe('ombre sui moduli', () => {
   it('casa a due falde senza ostacoli: la falda a sud non è in ombra', () => {
@@ -35,7 +35,7 @@ describe('ombre sui moduli', () => {
 
   it("un edificio alto a sud ombreggia più d'inverno: perdita maggiore dei moduli più bassi", () => {
     const d = design();
-    const b: Obstacle = { id: 'b', kind: 'edificio', x: 0, y: -14, height: 14, size: 30, depth: 6 };
+    const b: Obstacle = { id: 'b', kind: 'edificio', x: 0, y: -14, height: 14, size: 30, depth: 6, z0: 0 };
     const s = annualShading(d, [b])!;
     expect(s.lossPct).toBeGreaterThan(5);
     expect(s.lossPct).toBeLessThan(80);

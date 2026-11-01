@@ -1,10 +1,12 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
-import { batteryAdvice, f, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
+import { batteryAdvice, EV_KWH_PER_KM, f, fieldDesign, fields, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
 import { DEFAULT_PRICES, ECONOMIC_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
 import { isHybrid, type PvDesign } from './design';
-import { roofLayout, ROOF_TYPES } from './roof';
+import { lossRgb, planImage, type PlanImage } from './pdfPlan';
+import { fieldLayouts, roofLayout, ROOF_TYPES } from './roof';
+import { annualShading, type ShadingResult } from './shading';
 
 const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
@@ -13,15 +15,17 @@ const ACCENT: [number, number, number] = [180, 120, 10];
 const T = (s: string) => pdfSafe(s);
 const eur = (v: number) => `${f(v)} EUR`;
 
-/** Scarica la relazione del progetto fotovoltaico. */
-export function exportPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null): void {
-  buildPvDesignPdf(d, r, view3d).save(pdfFileName(d));
+/** Scarica la relazione del progetto fotovoltaico (con la pianta sulla foto satellitare, se si riesce a scaricarla). */
+export async function exportPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null): Promise<void> {
+  const shading = d.obstacles.length ? annualShading(d) : null;
+  const plan = await planImage(d, shading).catch(() => null);
+  buildPvDesignPdf(d, r, view3d, plan, shading).save(pdfFileName(d));
 }
 
 export const pdfFileName = (d: PvDesign) => `${d.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'progetto'}_fotovoltaico.pdf`;
 
 /** Relazione del progetto fotovoltaico: dati, verifiche, cavi, produzione, costi, ipotesi di calcolo. */
-export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null): jsPDF {
+export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string | null = null, plan: PlanImage | null = null, shading: ShadingResult | null = d.obstacles.length ? annualShading(d) : null): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const date = new Date().toLocaleDateString('it-IT');
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
@@ -70,6 +74,68 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
       y += lines.length * 3.8 + 1;
     }
   };
+  /** Schema unifilare semplificato disegnato con linee e riquadri. */
+  const singleLine = () => {
+    const fv = fields(d);
+    const bat = isHybrid(d) && d.batteryKWh > 0;
+    const hgt = 30 + fv.length * 20 + (bat ? 6 : 0);
+    if (y + hgt + 14 > 285) {
+      doc.addPage();
+      y = MARGIN;
+    }
+    y += 8;
+    doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...INK);
+    doc.text('Schema unifilare semplificato', MARGIN, y);
+    const top = y + 6;
+    const box = (x: number, yy: number, w: number, h: number, title: string, sub = '') => {
+      doc.setDrawColor(...INK).setLineWidth(0.35).setFillColor(248, 250, 252);
+      doc.roundedRect(x, yy, w, h, 1.2, 1.2, 'FD');
+      // Titolo e sottotitolo vanno a capo dentro il riquadro: il sottotitolo parte sotto l'ultima riga del titolo.
+      doc.setFont('helvetica', 'bold').setFontSize(7.5).setTextColor(...INK);
+      const tl = doc.splitTextToSize(T(title), w - 2) as string[];
+      doc.text(tl, x + w / 2, yy + 3.8, { align: 'center' });
+      if (sub) {
+        doc.setFont('helvetica', 'normal').setFontSize(6.5).setTextColor(...MUTED);
+        doc.text(doc.splitTextToSize(T(sub), w - 2), x + w / 2, yy + 3.8 + tl.length * 3.1, { align: 'center' });
+      }
+    };
+    const line = (x1: number, y1: number, x2: number, y2: number) => {
+      doc.setDrawColor(...INK).setLineWidth(0.35);
+      doc.line(x1, y1, x2, y2);
+    };
+    const invY = top + 2;
+    const invH = Math.max(18, fv.length * 20 - 2);
+    const invX = 112;
+    fv.forEach((v, i) => {
+      const yy = top + i * 20;
+      const fd = fieldDesign(d, v);
+      box(MARGIN, yy, 44, 16, `${fv.length > 1 ? `Falda ${i + 1}: ` : ''}${v.strings} x ${v.modulesPerString} moduli`, `${f((v.strings * v.modulesPerString * d.module.moduleWp) / 1000, 2)} kWp, ${f(v.tilt)}° / ${f(v.azimuth)}°${d.optimizers ? ', ottimizzatori' : ''}`);
+      const pr = r.protection;
+      const fuse = fd.strings > 1 && pr.fusesNeeded;
+      box(66, yy + 1, 34, 14, fuse ? 'Fusibili gPV + sezionatore DC' : 'Sezionatore DC', `${pr.switchV} V DC, SPD ${pr.spdUcpv} V`);
+      line(MARGIN + 44, yy + 8, 66, yy + 8);
+      line(100, yy + 8, invX, Math.min(invY + invH - 3, Math.max(invY + 3, yy + 8)));
+      doc.setFont('helvetica', 'normal').setFontSize(6.3).setTextColor(...MUTED);
+      doc.text(T(`${r.dc.section} mm²`), MARGIN + 46, yy + 6.6);
+    });
+    box(invX, invY, 30, invH, 'Inverter', `${d.inverter.label}`);
+    const midY = invY + invH / 2;
+    box(150, midY - 7, 22, 14, 'Magnetoterm. differenziale', `${r.ac.inA} A`);
+    line(invX + 30, midY, 150, midY);
+    doc.setFont('helvetica', 'normal').setFontSize(6.3).setTextColor(...MUTED);
+    doc.text(T(`${r.ac.section} mm²`), invX + 31, midY - 1.5);
+    box(178, midY - 7, 18, 14, 'Quadro e contatore', 'rete');
+    line(172, midY, 178, midY);
+    if (bat) {
+      const by = invY + invH + 6;
+      box(invX, by, 30, 10, `Batteria ${f(d.batteryKWh, 1)} kWh`);
+      line(invX + 15, invY + invH, invX + 15, by);
+    }
+    y = top + hgt - 8;
+    doc.setFont('helvetica', 'normal').setFontSize(7).setTextColor(...MUTED);
+    doc.text(T('Schema indicativo: protezioni, interfaccia di rete e messa a terra si definiscono nel progetto esecutivo.'), MARGIN, y + 4);
+    y += 5;
+  };
   const status = (ok: boolean | null) => (ok === true ? 'OK' : ok === false ? 'NON SUPERATA' : 'DA VALUTARE');
 
   // ---------------------------------------------------------------- copertina
@@ -87,10 +153,13 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     [],
     [
       ['Potenza di picco', `${f(peakW(d) / 1000, 2)} kWp (${moduleCount(d)} moduli da ${d.module.moduleWp} Wp)`],
-      ['Configurazione', `${d.strings} ${d.strings > 1 ? 'stringhe' : 'stringa'} da ${d.modulesPerString} moduli, ${stringsPerMppt(d)} per ingresso MPPT`],
+      ...fields(d).map((fv) => [
+        fields(d).length > 1 ? `Configurazione falda ${fv.index + 1}` : 'Configurazione',
+        `${fv.strings} ${fv.strings > 1 ? 'stringhe' : 'stringa'} da ${fv.modulesPerString} moduli, ${stringsPerMppt(fieldDesign(d, fv))} per ingresso MPPT${fields(d).length > 1 ? `, ${f(fv.tilt)}° / ${f(fv.azimuth)}°` : ''}${d.optimizers ? ', con ottimizzatori' : ''}`,
+      ]),
       ['Inverter', `${d.inverter.label} (${f(d.inverter.pacW)} W)${isHybrid(d) && d.batteryKWh > 0 ? `, batteria ${f(d.batteryKWh, 1)} kWh` : ''}`],
       ['Produzione annua stimata', `${f(r.yield.productionKWh)} kWh (${f(r.yield.specificYield)} kWh/kWp, PR ${f(r.yield.pr * 100, 1)}%)`],
-      ['Consumi annui', `${f(d.consumption.annualKWh)} kWh`],
+      ['Consumi annui', `${f(d.consumption.annualKWh)} kWh${r.yield.extrasKWh > 0 ? ` + ${f(r.yield.extrasKWh)} kWh di pompa di calore e auto elettrica` : ''}`],
       ['Autoconsumo / autosufficienza', `${f(r.yield.selfConsumptionPct)}% / ${f(r.yield.selfSufficiencyPct)}%`],
       ['Costo totale stimato (IVA inclusa)', eur(r.economics.total)],
       ['Rientro semplice', r.economics.paybackYears === null ? 'oltre la durata dell\'analisi' : `${f(r.economics.paybackYears, 1)} anni`],
@@ -100,7 +169,11 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   );
 
   // ---------------------------------------------------------------- 1. sito
-  heading('1. Sito e orientamento', 'Dati climatici indicativi o inseriti dall\'utente: per un progetto definitivo vanno usati i dati del sito (UNI 10349, PVGIS).');
+  const w = d.site.weather;
+  heading(
+    '1. Sito e orientamento',
+    w ? `Dati climatici dell'anno tipo PVGIS del sito (${w.source}${w.period ? `, ${w.period}` : ''}), con il profilo dell'orizzonte.` : "Dati climatici indicativi o inseriti dall'utente: per un progetto definitivo vanno usati i dati del sito (UNI 10349, PVGIS).",
+  );
   table(
     [],
     [
@@ -109,13 +182,15 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
             ['Posizione', `${f(d.location.lat, 5)}, ${f(d.location.lon ?? 0, 5)}${d.location.address ? ` - ${d.location.address}` : ''}`],
           ]
         : []),
-      ['Zona climatica', d.site.presetId === 'auto' ? 'Stimata dalla latitudine (interpolazione tra zone indicative)' : (site?.label ?? 'Dati personalizzati')],
+      ['Dati climatici', w ? `Anno tipo PVGIS (${w.source}), ${f(w.lat, 2)}, ${f(w.lon, 2)}: 8.760 ore con irraggiamento, temperatura e orizzonte` : d.site.presetId === 'auto' ? 'Stimati dalla latitudine (interpolazione tra zone indicative)' : (site?.label ?? 'Dati personalizzati')],
       ['Latitudine', `${f(d.site.latitude, 2)}° N`],
       ['Inclinazione / orientamento', `${f(d.site.tilt)}° / ${f(d.site.azimuth)}° (0 = sud, -90 = est, +90 = ovest)`],
       ['Albedo / ombreggiamento', `${f(d.site.albedo, 2)} / ${f(d.site.shadingPct, 1)}%`],
       ['Montaggio', MOUNTINGS[d.site.mounting].label],
       ['Temperature di progetto', `minima ${f(d.site.tMin)} °C, massima ${f(d.site.tMax)} °C`],
-      ['Profilo dei consumi', LOAD_PROFILES[d.consumption.profile].label],
+      ['Profilo dei consumi', d.consumption.measured ? `Curva di carico misurata (${d.consumption.measuredSource})` : LOAD_PROFILES[d.consumption.profile].label],
+      ...(d.consumption.heatPumpKWh > 0 ? [['Pompa di calore', `${f(d.consumption.heatPumpKWh)} kWh all'anno, nei mesi freddi`]] : []),
+      ...(d.consumption.evKm > 0 ? [['Auto elettrica', `${f(d.consumption.evKm)} km all'anno (circa ${f(d.consumption.evKm * EV_KWH_PER_KM)} kWh), ricarica ${d.consumption.evCharge === 'giorno' ? 'di giorno (10-16)' : 'di sera (19-23)'}`]] : []),
       ['Potenza della fornitura', `${f(d.consumption.contractKW, 1)} kW`],
     ],
     undefined,
@@ -131,9 +206,61 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
       [
         ['Tipo di tetto', ROOF_TYPES[d.roof.type]],
         ['Pianta', `${f(roof.geo.footprintM2)} m² (${f(roof.geo.rect.length, 1)} x ${f(roof.geo.rect.width, 1)} m)`],
-        ['Falda scelta', `${roof.slope.label}: orientamento ${f(roof.slope.azimuth)}°, inclinazione ${f(roof.slope.tilt)}°, superficie ${f(roof.layout.slopeM2)} m²`],
+        ...fieldLayouts(d).map((l) => [
+          l.field === 0 ? 'Falda scelta' : 'Seconda falda',
+          `${l.slope.label}: orientamento ${f(l.slope.azimuth)}°, inclinazione ${f(l.slope.tilt)}°, superficie ${f(l.layout.slopeM2)} m², ${l.installed.length} moduli su ${l.usable.length} posti utili${l.excluded.length ? ` (${l.excluded.length} posti esclusi)` : ''}`,
+        ]),
         ['Posa', `moduli in ${d.roof.orientation}, ${f(d.roof.setbackM, 1)} m dai bordi${d.roof.type === 'piano' ? `, file distanziate ${f(roof.layout.rowPitch, 2)} m` : ''}`],
-        ['Moduli', `${moduleCount(d)} nel progetto, ${roof.layout.panels.length} al massimo sulla falda`],
+        ['Moduli', `${moduleCount(d)} nel progetto`],
+      ],
+      undefined,
+      true,
+    );
+  }
+  if (plan) {
+    const pw = 182;
+    const ph = Math.min(150, pw / plan.ratio);
+    const iw = ph * plan.ratio;
+    if (y + ph + 20 > 285) {
+      doc.addPage();
+      y = MARGIN;
+    }
+    y += 8;
+    doc.setFont('helvetica', 'bold').setFontSize(10).setTextColor(...INK);
+    doc.text(T(plan.photo ? 'Pianta sulla foto satellitare' : 'Pianta del tetto'), MARGIN, y);
+    try {
+      doc.addImage(plan.dataUrl, 'JPEG', MARGIN + (pw - iw) / 2, y + 2, iw, ph);
+      y += ph + 4;
+    } catch {
+      y += 2;
+    }
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...MUTED);
+    const legend = shading
+      ? 'Moduli colorati secondo la perdita annua per ombra: verde nessuna, giallo circa 5%, rosso 15% o più. Verde scuro: alberi; grigio: edifici e camini.'
+      : 'Blu: moduli della prima falda; viola: della seconda; tratteggio rosso: posti esclusi.';
+    const ll = doc.splitTextToSize(T(`${legend}${plan.photo ? ' Foto aerea © Esri, Maxar, Earthstar Geographics.' : ''}`), 182);
+    doc.text(ll, MARGIN, y + 2);
+    y += ll.length * 3.4 + 1;
+    if (shading) {
+      for (let i = 0; i < 5; i++) {
+        doc.setFillColor(...lossRgb((i / 4) * 0.15));
+        doc.rect(MARGIN + i * 8, y, 8, 2.5, 'F');
+      }
+      doc.text('0%      5%      10%    15%+', MARGIN + 42, y + 2.2);
+      y += 4;
+    }
+  }
+  if (shading) {
+    heading('Ombre', 'Ombre di alberi, edifici e camini calcolate ora per ora su un anno con il percorso del sole. Senza ottimizzatori i moduli in ombra frenano gli altri della stessa stringa.');
+    const worst = Math.max(0, ...shading.perPanel) * 100;
+    table(
+      [],
+      [
+        ['Perdita con moduli in stringa', `${f(shading.stringLossPct, 1)}%${d.optimizers ? '' : ' (configurazione del progetto)'}`],
+        ['Perdita con ottimizzatori', `${f(shading.lossPct, 1)}%${d.optimizers ? ' (configurazione del progetto)' : ''}`],
+        ['Modulo più ombreggiato', `${f(worst, 1)}% di energia persa in un anno`],
+        ['Perdita usata nel calcolo', `${f(d.site.shadingPct, 1)}%`],
+        ['Ostacoli', d.obstacles.map((o) => `${o.kind} ${f(o.height, 1)} m`).join(', ')],
       ],
       undefined,
       true,
@@ -185,9 +312,15 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     [3, 1.2, 1.2, 2, 1.2, 1.5, 1.4],
   );
   bullets([...r.dc.notes, ...r.ac.notes, ...r.protection.notes]);
+  singleLine();
 
   // ---------------------------------------------------------------- 4. produzione
-  heading('4. Produzione e autoconsumo mese per mese', 'Giorno medio di ogni mese a passi di 15 minuti. Il giorno medio non contiene l\'alternanza di giornate serene e nuvolose: l\'autoconsumo risulta un po\' ottimistico.');
+  heading(
+    '4. Produzione e autoconsumo mese per mese',
+    r.yield.hourly
+      ? "Calcolo ora per ora sulle 8.760 ore dell'anno tipo PVGIS, con giornate serene e nuvolose e l'orizzonte del sito."
+      : "Giorno medio di ogni mese a passi di 15 minuti. Il giorno medio non contiene l'alternanza di giornate serene e nuvolose: l'autoconsumo risulta un po' ottimistico.",
+  );
   const m = r.yield.months;
   table(
     ['Mese', 'Irr. moduli kWh/m²', 'Prodotta kWh', 'Consumata kWh', 'Autoconsumata kWh', 'Immessa kWh', 'Prelevata kWh'],
@@ -240,11 +373,14 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   table(
     [],
     [
-      ['Prezzo energia prelevata / valore energia immessa', `${f(e.importPrice, 3)} / ${f(e.exportPrice, 3)} EUR/kWh`],
+      e.tariff === 'fasce'
+        ? ['Prezzo energia prelevata F1 / F2 / F3', `${e.bandPrices.map((v) => f(v, 3)).join(' / ')} EUR/kWh; energia immessa ${f(e.exportPrice, 3)} EUR/kWh`]
+        : ['Prezzo energia prelevata / valore energia immessa', `${f(e.importPrice, 3)} / ${f(e.exportPrice, 3)} EUR/kWh`],
+      ...(e.cer ? [['Comunità energetica', `${f(e.cerSharedPct)}% dell'energia immessa condivisa, incentivo ${f(e.cerIncentive, 3)} EUR/kWh per 20 anni = ${eur(ec.firstYearCer)} il primo anno`]] : []),
       ['Detrazione fiscale', `${f(e.deductionPct)}% in ${e.deductionYears} anni = ${eur(ec.deductionTotal)}`],
       ['Aumento annuo energia / degrado moduli', `${f(e.energyInflationPct, 1)}% / ${f(d.losses.degradationPct, 1)}%`],
       ['Manutenzione / sostituzione inverter', `${eur(e.omPerYear)} all'anno / anno ${e.inverterReplaceYear || '-'}`],
-      ['Risparmio del primo anno', `${eur(ec.firstYearSaving)} di energia non acquistata + ${eur(ec.firstYearExport)} di energia venduta`],
+      ['Risparmio del primo anno', `${eur(ec.firstYearSaving)} di energia non acquistata + ${eur(ec.firstYearExport)} di energia venduta${ec.firstYearCer > 0 ? ` + ${eur(ec.firstYearCer)} di incentivo CER` : ''}`],
       ['Spesa energia senza / con impianto', `${eur(ec.billBefore)} / ${eur(ec.billAfter)} all'anno`],
       ['Rientro semplice', ec.paybackYears === null ? 'oltre la durata dell\'analisi' : `${f(ec.paybackYears, 1)} anni`],
       [`Valore attuale netto (${e.years} anni, tasso ${f(e.discountPct, 1)}%)`, eur(ec.npv)],
@@ -271,6 +407,8 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   addSrc('Valore dell\'energia immessa', ECONOMIC_SOURCES.exportPrice.sources);
   addSrc('Detrazione fiscale', ECONOMIC_SOURCES.deduction.sources);
   addSrc('IVA', ECONOMIC_SOURCES.vat.sources);
+  if (e.cer) addSrc('Incentivo CER', ECONOMIC_SOURCES.cer.sources);
+  if (w) srcRows.push(['Dati climatici', `PVGIS, Commissione europea JRC: anno tipo, banca dati ${w.source}`, 'https://re.jrc.ec.europa.eu/pvg_tools/it/']);
   table(['Voce', 'Fonte e dato', 'Indirizzo'], srcRows, [2, 4, 3.6]);
 
   // ---------------------------------------------------------------- ipotesi
@@ -278,12 +416,17 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   y = MARGIN;
   heading('Modello di calcolo e approssimazioni');
   bullets([
-    'Irraggiamento sul piano dei moduli: giorno medio del mese (Klein), indice di serenità, frazione diffusa di Erbs, ripartizione oraria di Collares-Pereira e Rabl e di Liu e Jordan, modello isotropo per il piano inclinato (Duffie e Beckman).',
+    r.yield.hourly
+      ? "Irraggiamento sul piano dei moduli ora per ora dall'anno tipo PVGIS (radiazione diretta e diffusa misurate), posizione del sole con l'equazione del tempo, modello isotropo per il piano inclinato, radiazione diretta bloccata dall'orizzonte del sito."
+      : 'Irraggiamento sul piano dei moduli: giorno medio del mese (Klein), indice di serenità, frazione diffusa di Erbs, ripartizione oraria di Collares-Pereira e Rabl e di Liu e Jordan, modello isotropo per il piano inclinato (Duffie e Beckman).',
+    'Ombre di ostacoli vicini: raggi verso il sole da cinque punti di ogni modulo; senza ottimizzatori la stringa lavora alla corrente che rende di più, con diodi di bypass a livello di modulo.',
     'Temperatura delle celle dal NOCT, con una sovratemperatura indicativa che dipende dal montaggio; temperatura dell\'aria con un andamento giornaliero di +/- 5 °C attorno alla media mensile.',
     'Potenza del generatore proporzionale all\'irraggiamento, corretta con il coefficiente di temperatura della potenza; perdite di riflessione, sporcamento, disaccoppiamento e disponibilità come percentuali fisse.',
     'Inverter con rendimento europeo costante e limitazione alla potenza nominale; perdite nei cavi proporzionali al quadrato della corrente.',
     `Batteria: capacità utilizzabile ${f(90)}%, rendimento di andata e ritorno 90%, potenza circa 0,5 C (valori indicativi).`,
-    'Consumi: ripartizione mensile e profilo orario tipici, scalati sul consumo annuo indicato.',
+    d.consumption.measured
+      ? 'Consumi: curva di carico misurata dal distributore, media per mese e ora del giorno; i mesi mancanti sono ricavati dai presenti.'
+      : 'Consumi: ripartizione mensile e profilo orario tipici, scalati sul consumo annuo indicato.',
     'Costi: listino indicativo; IVA, detrazioni e valore dell\'energia sono parametri da verificare secondo la normativa fiscale e il mercato del momento. Non sono considerate quote fisse della bolletta, finanziamenti e costi di connessione.',
     'Criteri per cavi e fusibili di stringa ripresi dalla pratica di progetto (IEC 62548) e riferimenti CEI 0-21 indicati come non verificati sul testo.',
   ]);

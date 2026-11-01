@@ -30,6 +30,9 @@ export const GLOSSARY = {
   irraggiamento: ['Irraggiamento', 'L\'energia del sole che arriva su un metro quadrato, in kWh/m². Più è alto, più i moduli producono.'],
   ombre: ['Ombreggiamento', 'La parte di produzione persa per ombre di alberi, camini o edifici vicini. Senza ombre evidenti si mette 0–3%.'],
   caduta: ['Caduta di tensione', 'La tensione persa lungo il cavo: è energia sprecata in calore. Di solito si tiene sotto l\'1–2%.'],
+  ottimizzatori: ['Ottimizzatori di potenza', "Piccoli convertitori montati dietro ogni modulo: ognuno lavora al suo punto migliore, così un modulo in ombra non frena tutta la stringa. Permettono anche di vedere la produzione modulo per modulo."],
+  fasce: ['Fasce orarie', 'F1: giorni feriali 8–19. F2: feriali 7–8 e 19–23, sabato 7–23. F3: notte, domenica e festivi.'],
+  cer: ['Comunità energetica rinnovabile (CER)', "Gruppo di utenti vicini che condividono l'energia prodotta: per l'energia immessa da un impianto e consumata nello stesso momento da altri membri il GSE riconosce un incentivo per 20 anni."],
   detrazione: ['Detrazione fiscale', 'Parte della spesa che recuperi dalle tasse in rate annuali. Percentuale e durata dipendono dalle regole fiscali in vigore: verificale.'],
 } as const;
 
@@ -291,6 +294,7 @@ const FIX: Record<string, string> = {
   'roof-fit': 'Sulla falda scelta non ci stanno tutti i moduli: riducili, cambia falda o riduci la distanza dai bordi.',
   roof: 'I moduli occupano più superficie di quella disponibile: riduci il numero di moduli.',
   battery: 'Per usare una batteria scegli un inverter ibrido.',
+  'mppt-fields': "Le due falde hanno orientamenti diversi: scegli un inverter con almeno due ingressi MPPT.",
 };
 
 export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () => void }) {
@@ -308,7 +312,7 @@ export function CheckSummary({ checks, onFix }: { checks: PvCheck[]; onFix?: () 
           <div key={c.id} className="mt-1.5 flex gap-2">
             <span className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${c.ok === false ? 'bg-red-400' : 'bg-amber-300'}`} />
             <span>
-              <span className="font-medium">{c.title}.</span> {FIX[c.id] ?? c.detail}
+              <span className="font-medium">{c.title}.</span> {FIX[c.id.replace(/-\d$/, '')] ?? c.detail}
             </span>
           </div>
         ))}

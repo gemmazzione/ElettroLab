@@ -1,9 +1,8 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Crosshair, Eraser, MapPin, PenLine, Search, Undo2 } from 'lucide-react';
+import { Crosshair, Eraser, Grid3x3, MapPin, PenLine, Search, Undo2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { moduleCount } from '../../pvdesign/calc';
-import { centroidLatLon, panelCorners, roofLayout, toLatLon } from '../../pvdesign/roof';
+import { centroidLatLon, fieldLayouts, panelCorners, roofLayout, toLatLon } from '../../pvdesign/roof';
 import { usePvDesign } from '../../pvdesign/store';
 
 /*
@@ -28,6 +27,8 @@ export function RoofMap() {
   const layers = useRef<L.LayerGroup | null>(null);
   const draft = useRef<[number, number][]>([]);
   const [drawing, setDrawing] = useState(false);
+  /** Modifica dei posti: un clic su un posto lo esclude (camino, lucernario) o lo rende di nuovo disponibile. */
+  const [editSpots, setEditSpots] = useState(false);
   const [draftN, setDraftN] = useState(0);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Place[] | null>(null);
@@ -89,34 +90,50 @@ export function RoofMap() {
     if (!r) return;
     const origin = centroidLatLon(d.roof.footprint);
     const ll = (p: { x: number; y: number }) => toLatLon(p, origin);
-    // Falda scelta (contorno in pianta) e moduli: pieni quelli del progetto, tratteggiati i posti liberi.
-    const s = r.slope;
     const flat = d.roof.type === 'piano';
-    const cosT = flat ? 1 : Math.cos((s.tilt * Math.PI) / 180);
-    const slant = flat ? s.depth : s.depth / cosT;
-    const half = (w: number) => w / 2;
-    const at = (a: number, bh: number) => ll({ x: s.eave.x + s.along.x * a - s.down.x * bh, y: s.eave.y + s.along.y * a - s.down.y * bh });
-    L.polygon([at(-half(s.bottom), 0), at(half(s.bottom), 0), at(half(s.top), slant * cosT), at(-half(s.top), slant * cosT)], { color: '#f59e0b', weight: 1, dashArray: '3 3', fill: false }).addTo(g);
-    const used = moduleCount(d);
-    const key = [d.roof.footprint.flat().join(','), d.roof.type, d.roof.slope, d.roof.pitch, d.roof.setbackM, d.roof.orientation, d.module.id, d.site.tilt].join('|');
-    const animate = laidOut.current !== key;
+    const lays = fieldLayouts(d);
+    const key = [d.roof.footprint.flat().join(','), d.roof.type, d.roof.slope, d.roof.pitch, d.roof.setbackM, d.roof.orientation, d.module.id, d.site.tilt, d.field2.enabled, d.field2.slope].join('|');
+    const animate = laidOut.current !== key && !editSpots;
     laidOut.current = key;
-    // Ritardo complessivo limitato: con molti moduli la posa resta sotto il secondo e mezzo.
-    const gap = Math.min(45, 1400 / Math.max(1, r.layout.panels.length));
-    r.layout.panels.forEach((p, i) => {
-      const c = panelCorners(s, r.layout, p, 0, flat).map(ll);
-      const poly = L.polygon(
-        c,
-        i < used
-          ? { color: '#1e3a8a', weight: 1, fillColor: '#1d4ed8', fillOpacity: 0.85, className: animate ? 'pv-panel-anim' : '' }
-          : { color: '#93c5fd', weight: 1, dashArray: '2 2', fillOpacity: 0, className: animate ? 'pv-panel-anim' : '' },
-      ).addTo(g);
-      if (animate) {
-        const el = poly.getElement() as SVGElement | undefined;
-        if (el) el.style.animationDelay = `${Math.round(i * gap)}ms`;
-      }
-    });
-  }, [d, drawing, draftN]);
+    const toggleSpot = (field: 0 | 1, spot: number) =>
+      update((x) => {
+        const list = field === 0 ? (x.roof.excluded ?? []) : (x.field2.excluded ?? []);
+        const next = list.includes(spot) ? list.filter((i) => i !== spot) : [...list, spot];
+        return field === 0 ? { ...x, roof: { ...x.roof, excluded: next } } : { ...x, field2: { ...x.field2, excluded: next } };
+      });
+    for (const l of lays) {
+      // Falda (contorno in pianta) e posti: pieni i moduli del progetto, tratteggiati i posti liberi, barrati quelli esclusi.
+      const s = l.slope;
+      const cosT = flat ? 1 : Math.cos((s.tilt * Math.PI) / 180);
+      const slant = flat ? s.depth : s.depth / cosT;
+      const at = (a: number, bh: number) => ll({ x: s.eave.x + s.along.x * a - s.down.x * bh, y: s.eave.y + s.along.y * a - s.down.y * bh });
+      const tone = l.field === 0 ? { edge: '#f59e0b', fill: '#1d4ed8', line: '#1e3a8a' } : { edge: '#c084fc', fill: '#7c3aed', line: '#4c1d95' };
+      L.polygon([at(-s.bottom / 2, 0), at(s.bottom / 2, 0), at(s.top / 2, slant * cosT), at(-s.top / 2, slant * cosT)], { color: tone.edge, weight: 1, dashArray: '3 3', fill: false, interactive: false }).addTo(g);
+      const installed = new Set(l.installed);
+      const excluded = new Set(l.excluded);
+      // Ritardo complessivo limitato: con molti moduli la posa resta sotto il secondo e mezzo.
+      const gap = Math.min(45, 1400 / Math.max(1, l.layout.panels.length));
+      l.layout.panels.forEach((pp, i) => {
+        const c = panelCorners(s, l.layout, pp, 0, flat).map(ll);
+        const style: L.PolylineOptions = excluded.has(i)
+          ? { color: '#f87171', weight: 1.5, fillColor: '#7f1d1d', fillOpacity: 0.35 }
+          : installed.has(i)
+            ? { color: tone.line, weight: 1, fillColor: tone.fill, fillOpacity: 0.85 }
+            : { color: '#93c5fd', weight: 1, dashArray: '2 2', fillOpacity: editSpots ? 0.05 : 0 };
+        const poly = L.polygon(c, { ...style, interactive: editSpots, className: animate ? 'pv-panel-anim' : editSpots ? 'cursor-pointer' : '' }).addTo(g);
+        if (excluded.has(i)) L.polyline([c[0]!, c[2]!], { color: '#f87171', weight: 1.5, interactive: false }).addTo(g);
+        if (editSpots)
+          poly.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            toggleSpot(l.field, i);
+          });
+        if (animate) {
+          const el = poly.getElement() as SVGElement | undefined;
+          if (el) el.style.animationDelay = `${Math.round(i * gap)}ms`;
+        }
+      });
+    }
+  }, [d, drawing, draftN, editSpots]);
 
   const search = async () => {
     const q = query.trim();
@@ -223,6 +240,15 @@ export function RoofMap() {
             <Eraser size={14} /> Cancella la pianta
           </button>
         )}
+        {!drawing && d.roof.footprint.length > 0 && (
+          <button
+            onClick={() => setEditSpots((v) => !v)}
+            aria-pressed={editSpots}
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] ${editSpots ? 'bg-sky-600 font-semibold text-white' : 'text-slate-300 hover:bg-slate-800'}`}
+          >
+            <Grid3x3 size={14} /> {editSpots ? 'Fine modifica dei posti' : 'Modifica i posti dei moduli'}
+          </button>
+        )}
         {d.location.lat !== null && (
           <button onClick={() => map.current?.setView([d.location.lat!, d.location.lon!], 20)} className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800">
             <Crosshair size={14} /> Centra sulla casa
@@ -232,8 +258,10 @@ export function RoofMap() {
       <p className="text-[0.71875rem] leading-snug text-slate-400">
         {drawing
           ? 'Clicca sugli angoli del tetto uno dopo l\'altro, seguendo il bordo della gronda; poi «Chiudi la pianta». Per i tetti a falde basta il contorno esterno.'
-          : d.roof.footprint.length
-            ? 'In blu i moduli del progetto, tratteggiati i posti ancora liberi sulla falda scelta.'
+          : editSpots
+            ? 'Clicca un posto per escluderlo (camino, lucernario, antenna) o per renderlo di nuovo disponibile: i moduli si spostano sui posti liberi.'
+            : d.roof.footprint.length
+            ? `In blu i moduli del progetto${d.field2.enabled ? ', in viola quelli della seconda falda' : ''}, tratteggiati i posti liberi, in rosso quelli esclusi.`
             : 'Cerca l\'indirizzo o spostati sulla mappa, avvicinati alla casa e disegna la pianta del tetto. Un clic sulla mappa segna la posizione della casa.'}
       </p>
       {/* Leaflet aggiunge le sue classi al contenitore: lo stile che cambia sta sull'involucro esterno. */}

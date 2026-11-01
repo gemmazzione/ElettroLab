@@ -4,7 +4,8 @@ import type { InverterParams, PvArrayParams, WireSection } from '../model/types'
 import { ampacity, tempFactor } from '../rules/ampacity';
 import { INVERTERS, MOUNTINGS, profileWeights, MONTH_DAYS, MONTH_LOAD_WEIGHTS, MONTH_REP_DAY, SOLAR_CABLE_AMPACITY, SOLAR_CABLE_SECTIONS, type PriceId } from './data';
 import { isHybrid, type PvDesign } from './design';
-import { roofCapacity } from './roof';
+import { roofCapacity, sunPosition } from './roof';
+import { horizonElevation, isWeather } from './weather';
 import { declination } from './sun';
 
 export { declination };
@@ -144,15 +145,67 @@ export const inverterParams = (d: PvDesign): InverterParams => ({
 /** Potenza di carica/scarica della batteria: circa 0,5 C, al massimo la potenza dell'inverter (indicativo). */
 export const batteryPowerW = (d: PvDesign) => Math.min(d.inverter.pacW, d.batteryKWh * 500);
 
-export const moduleCount = (d: PvDesign) => d.modulesPerString * d.strings;
+/** Campo di moduli su una falda: stringhe uguali, stessa inclinazione e orientamento, propri ingressi MPPT. */
+export interface FieldView {
+  index: 0 | 1;
+  tilt: number;
+  azimuth: number;
+  modulesPerString: number;
+  strings: number;
+}
+
+export function fields(d: PvDesign): FieldView[] {
+  const f1: FieldView = { index: 0, tilt: d.site.tilt, azimuth: d.site.azimuth, modulesPerString: d.modulesPerString, strings: d.strings };
+  if (!d.field2?.enabled) return [f1];
+  return [f1, { index: 1, tilt: d.field2.tilt, azimuth: d.field2.azimuth, modulesPerString: d.field2.modulesPerString, strings: d.field2.strings }];
+}
+
+/**
+ * Progetto ridotto a un solo campo: stessi dati, con stringhe, orientamento e falda del campo e metà degli ingressi
+ * MPPT (ogni falda ha i suoi). Serve a riusare verifiche di stringa, cavi e protezioni campo per campo.
+ */
+export function fieldDesign(d: PvDesign, f: FieldView): PvDesign {
+  if (!d.field2?.enabled) return d;
+  const mppt = Math.max(1, Math.floor(d.inverter.mppt / 2));
+  return {
+    ...d,
+    modulesPerString: f.modulesPerString,
+    strings: f.strings,
+    site: { ...d.site, tilt: f.tilt, azimuth: f.azimuth },
+    inverter: { ...d.inverter, mppt },
+    field2: { ...d.field2, enabled: false },
+    roof: f.index === 1 ? { ...d.roof, slope: d.field2.slope, excluded: d.field2.excluded } : d.roof,
+  };
+}
+
+export const moduleCount = (d: PvDesign) => fields(d).reduce((a, x) => a + x.modulesPerString * x.strings, 0);
 export const peakW = (d: PvDesign) => moduleCount(d) * d.module.moduleWp;
 /** Stringhe collegate allo stesso ingresso MPPT (ripartite in modo uniforme). */
 export const stringsPerMppt = (d: PvDesign) => Math.ceil(d.strings / Math.max(1, d.inverter.mppt));
 
 export function generatorChecks(d: PvDesign): PvCheck[] {
+  if (!d.field2?.enabled) return [...fieldChecks(d), ...globalChecks(d)];
+  // Due falde: verifiche di stringa e di posa per ciascuna, poi quelle dell'impianto intero.
+  const out: PvCheck[] = [];
+  for (const fv of fields(d)) {
+    for (const c of fieldChecks(fieldDesign(d, fv))) out.push({ ...c, id: `${c.id}-${fv.index + 1}`, title: `Falda ${fv.index + 1}: ${c.title}` });
+  }
+  out.push({
+    id: 'mppt-fields',
+    title: 'Un ingresso MPPT per ogni falda',
+    ok: d.inverter.mppt >= 2,
+    detail:
+      d.inverter.mppt >= 2
+        ? `L'inverter ha ${d.inverter.mppt} ingressi MPPT: ogni falda ha il suo, così orientamenti diversi non si penalizzano a vicenda.`
+        : "Le due falde hanno orientamenti diversi e non possono stare sullo stesso inseguitore: serve un inverter con almeno due ingressi MPPT.",
+  });
+  return [...out, ...globalChecks(d)];
+}
+
+/** Verifiche di un solo campo: stringhe sull'inverter e moduli sulla falda. */
+function fieldChecks(d: PvDesign): PvCheck[] {
   const env = { irradiance: 1000, ambientC: 25, minAmbientC: d.site.tMin, maxAmbientC: d.site.tMax };
   const perInput = stringChecks(arrayParams(d, stringsPerMppt(d)), inverterParams(d), env).filter((c) => c.id !== 'dc-ac');
-  const ratio = peakW(d) / d.inverter.pacW;
   const out: PvCheck[] = [
     ...perInput.map((c) => (c.id === 'isc-max' ? { ...c, title: `${c.title} (per ingresso MPPT)` } : c)),
     {
@@ -160,18 +213,6 @@ export function generatorChecks(d: PvDesign): PvCheck[] {
       title: 'Stringhe e ingressi MPPT',
       ok: d.strings <= d.inverter.mppt || d.strings % Math.max(1, d.inverter.mppt) === 0 ? true : null,
       detail: `${d.strings} stringhe su ${d.inverter.mppt} ingressi MPPT: ${stringsPerMppt(d)} per ingresso. Con stringhe in parallelo sullo stesso ingresso le stringhe devono essere uguali (stesso numero di moduli, stessa esposizione).`,
-    },
-    {
-      id: 'dc-ac',
-      title: 'Rapporto potenza DC / AC',
-      ok: ratio >= 0.8 && ratio <= 1.3 ? true : null,
-      detail: `${f(peakW(d))} Wp / ${f(d.inverter.pacW)} W = ${f(ratio, 2)}. Valori tra circa 0,8 e 1,3 sono comuni (indicazione di massima): sopra, l'inverter taglia la potenza nelle ore migliori; sotto, è sovradimensionato.`,
-    },
-    {
-      id: 'contract',
-      title: 'Potenza dell\'inverter e potenza della fornitura',
-      ok: d.inverter.pacW <= Math.max(d.consumption.contractKW, 6) * 1000 ? true : null,
-      detail: `Inverter ${f(d.inverter.pacW / 1000, 1)} kW, fornitura ${f(d.consumption.contractKW, 1)} kW. La potenza immettibile e l'eventuale adeguamento della connessione vanno concordati con il distributore (CEI 0-21, riferimento non verificato su testo).`,
     },
   ];
   if (d.site.roofM2 > 0) {
@@ -189,9 +230,29 @@ export function generatorChecks(d: PvDesign): PvCheck[] {
       id: 'roof-fit',
       title: 'Moduli che stanno sulla falda',
       ok: moduleCount(d) <= cap,
-      detail: `${moduleCount(d)} moduli previsti, sulla falda scelta ne stanno ${cap} con la distanza dai bordi indicata (disposizione a griglia, da verificare sul posto).`,
+      detail: `${moduleCount(d)} moduli previsti, sulla falda scelta ne stanno ${cap} con la distanza dai bordi indicata e i posti esclusi (disposizione a griglia, da verificare sul posto).`,
     });
   }
+  return out;
+}
+
+/** Verifiche dell'impianto intero: potenze e batteria. */
+function globalChecks(d: PvDesign): PvCheck[] {
+  const ratio = peakW(d) / d.inverter.pacW;
+  const out: PvCheck[] = [
+    {
+      id: 'dc-ac',
+      title: 'Rapporto potenza DC / AC',
+      ok: ratio >= 0.8 && ratio <= 1.3 ? true : null,
+      detail: `${f(peakW(d))} Wp / ${f(d.inverter.pacW)} W = ${f(ratio, 2)}. Valori tra circa 0,8 e 1,3 sono comuni (indicazione di massima): sopra, l'inverter taglia la potenza nelle ore migliori; sotto, è sovradimensionato.`,
+    },
+    {
+      id: 'contract',
+      title: 'Potenza dell\'inverter e potenza della fornitura',
+      ok: d.inverter.pacW <= Math.max(d.consumption.contractKW, 6) * 1000 ? true : null,
+      detail: `Inverter ${f(d.inverter.pacW / 1000, 1)} kW, fornitura ${f(d.consumption.contractKW, 1)} kW. La potenza immettibile e l'eventuale adeguamento della connessione vanno concordati con il distributore (CEI 0-21, riferimento non verificato su testo).`,
+    },
+  ];
   if (d.batteryKWh > 0 && !isHybrid(d)) {
     out.push({ id: 'battery', title: 'Batteria e inverter', ok: false, detail: "Per una batteria serve un inverter ibrido (o un inverter di batteria dedicato, non considerato qui): scegli un inverter ibrido o togli l'accumulo." });
   }
@@ -302,7 +363,7 @@ export interface MonthResult {
   exportKWh: number;
   importKWh: number;
   clipKWh: number;
-  /** Andamento del giorno medio a passi di 15 minuti [W] */
+  /** Andamento della giornata tipo del mese [W]: passi di 15 minuti (stima mensile) o di un'ora (anno tipo) */
   pv: number[];
   load: number[];
   soc: number[];
@@ -312,6 +373,9 @@ export interface LossItem {
   label: string;
   kWh: number;
 }
+
+/** Energia per fascia oraria F1, F2, F3 [kWh]. */
+export type Bands = [number, number, number];
 
 export interface YieldResult {
   months: MonthResult[];
@@ -329,115 +393,299 @@ export interface YieldResult {
   losses: LossItem[];
   /** Energia ideale: potenza di picco × irraggiamento sul piano dei moduli / 1 kW/m² */
   idealKWh: number;
+  /** Calcolo ora per ora sull'anno tipo PVGIS (altrimenti giorno medio di ogni mese) */
+  hourly: boolean;
+  /** Consumi aggiunti da pompa di calore e auto elettrica [kWh] */
+  extrasKWh: number;
+  /** Consumi, energia autoconsumata e prelevata per fascia oraria */
+  bands: { load: Bands; self: Bands; import: Bands };
 }
 
+/** Ripartizione di un'ora del giorno (ora legale locale) tra le fasce F1, F2, F3 in una settimana tipo. */
+export function bandFractions(hour: number): Bands {
+  const h = Math.floor(((hour % 24) + 24) % 24);
+  const weekday: Bands = h >= 8 && h < 19 ? [1, 0, 0] : (h >= 7 && h < 8) || (h >= 19 && h < 23) ? [0, 1, 0] : [0, 0, 1];
+  const saturday: Bands = h >= 7 && h < 23 ? [0, 1, 0] : [0, 0, 1];
+  return [0, 1, 2].map((i) => (5 * weekday[i]! + saturday[i]!) / 7 + (i === 2 ? 1 / 7 : 0)) as Bands;
+}
+
+/** Profilo orario tipico di una pompa di calore per il riscaldamento (peso relativo). */
+const HEAT_PUMP_HOURS = [0.5, 0.5, 0.5, 0.5, 0.6, 0.9, 1.4, 1.5, 1.2, 0.9, 0.8, 0.8, 0.8, 0.8, 0.8, 0.9, 1.1, 1.4, 1.5, 1.4, 1.2, 1.0, 0.8, 0.6];
+/** Consumo indicativo di un'auto elettrica [kWh/km]. */
+export const EV_KWH_PER_KM = 0.17;
+
+/** Consumi della casa: potenza media [W] in una data ora (locale) del giorno tipo di un mese, compresi gli extra. */
+function loadModel(d: PvDesign) {
+  const c = d.consumption;
+  const prof = profileWeights(c);
+  const profSum = prof.reduce((a, b) => a + b, 0) || 1;
+  const mw = MONTH_LOAD_WEIGHTS.map((w, i) => w * MONTH_DAYS[i]!);
+  const mwSum = mw.reduce((a, b) => a + b, 0);
+  const hdd = d.site.tMean.map((t, m) => Math.max(0, 17 - t) * MONTH_DAYS[m]!);
+  const hddSum = hdd.reduce((a, b) => a + b, 0) || 1;
+  const hpSum = HEAT_PUMP_HOURS.reduce((a, b) => a + b, 0);
+  const evDayWh = (c.evKm * EV_KWH_PER_KM * 1000) / 365;
+  const evHours = c.evCharge === 'giorno' ? [10, 16] : [19, 23];
+  const measured = c.measured && c.measured.length === 12 && c.measured.every((r) => r.length === 24) ? c.measured : null;
+  return (m: number, hour: number): { base: number; extra: number } => {
+    const h = Math.floor(((hour % 24) + 24) % 24);
+    const days = MONTH_DAYS[m]!;
+    const base = measured ? measured[m]![h]! * 1000 : (((c.annualKWh * 1000 * mw[m]!) / mwSum / days) * prof[h]!) / profSum;
+    const hp = c.heatPumpKWh > 0 ? (((c.heatPumpKWh * 1000 * hdd[m]!) / hddSum / days) * HEAT_PUMP_HOURS[h]!) / hpSum : 0;
+    const ev = evDayWh > 0 && h >= evHours[0]! && h < evHours[1]! ? evDayWh / (evHours[1]! - evHours[0]!) : 0;
+    return { base, extra: hp + ev };
+  };
+}
+
+/** Equazione del tempo [minuti] (Spencer, forma semplificata). */
+function equationOfTime(n: number): number {
+  const b = ((2 * Math.PI) / 364) * (n - 81);
+  return 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+}
+
+/** Ora legale in Italia: dall'ultima domenica di marzo all'ultima di ottobre (giorni approssimati). */
+const dstOffset = (n: number) => (n >= 87 && n < 301 ? 1 : 0);
+
 export function computeYield(d: PvDesign): YieldResult {
+  const fv = fields(d);
   const pstc = peakW(d);
-  const dc = dcCable(d);
+  const fieldPeak = fv.map((x) => x.modulesPerString * x.strings * d.module.moduleWp);
+  const dcLoss = fv.map((x) => dcCable(fieldDesign(d, x)).lossPct);
   const ac = acCable(d);
   const inv = d.inverter;
   const eta = inv.euroEff / 100;
-  const prof = profileWeights(d.consumption);
-  const profSum = prof.reduce((a, b) => a + b, 0);
-  const mw = MONTH_LOAD_WEIGHTS.map((w, i) => w * MONTH_DAYS[i]!);
-  const mwSum = mw.reduce((a, b) => a + b, 0);
+  const opt = d.optimizers;
+  const mismatch = (opt ? 0.5 : 1) * d.losses.mismatchPct;
+  const load = loadModel(d);
   const battery = isHybrid(d) && d.batteryKWh > 0;
   const capWh = battery ? d.batteryKWh * 1000 * BATTERY_USABLE : 0;
   const pBat = battery ? batteryPowerW(d) : 0;
   const etaOneWay = Math.sqrt(BATTERY_ROUND_TRIP);
   const extraC = MOUNTINGS[d.site.mounting]?.extraC ?? 0;
-  const L = { shading: 0, optical: 0, temp: 0, soiling: 0, mismatch: 0, dcCable: 0, inverter: 0, clip: 0, acCable: 0, avail: 0 };
-  let ideal = 0;
-  const months: MonthResult[] = [];
   const avail = 1 - d.losses.availabilityPct / 100;
-  for (let m = 0; m < 12; m++) {
-    const sun = monthSun(d.site.latitude, m, d.site.hDay[m] ?? 0, d.site.tilt, d.site.azimuth, d.site.albedo);
-    const days = MONTH_DAYS[m]!;
-    const dayLoadWh = ((d.consumption.annualKWh * 1000 * mw[m]!) / mwSum) / days;
-    const pvDay: number[] = [];
-    const loadDay: number[] = [];
-    let clipWh = 0;
-    for (let i = 0; i < sun.poa.length; i++) {
-      const hour = (i + 0.5) * STEP;
-      const g = sun.poa[i]!;
-      const p0 = (pstc * g) / 1000;
-      ideal += p0 * STEP * days;
-      // Temperatura dell'aria nel giorno: minima verso l'alba, massima verso le 15 (±5 °C, andamento semplificato).
-      const ta = (d.site.tMean[m] ?? 15) + 5 * Math.cos((2 * Math.PI * (hour - 15)) / 24);
+  const L = { shading: 0, optical: 0, temp: 0, soiling: 0, mismatch: 0, dcCable: 0, optimizer: 0, inverter: 0, clip: 0, acCable: 0, avail: 0 };
+  let ideal = 0;
+  const bands = { load: [0, 0, 0] as Bands, self: [0, 0, 0] as Bands, import: [0, 0, 0] as Bands };
+  let extrasWh = 0;
+
+  /** Catena delle perdite: dall'irraggiamento sui moduli di ogni falda alla potenza AC [W]. w = peso del passo [h]. */
+  const acPower = (poa: number[], ta: number, w: number): { p: number; clip: number } => {
+    let dcSum = 0;
+    fv.forEach((_, k) => {
+      const g = poa[k] ?? 0;
+      const p0 = (fieldPeak[k]! * g) / 1000;
+      ideal += p0 * w;
       const tc = ta + ((d.module.noct - 20) / 800 + extraC / 1000) * g;
       let p = p0;
       const step = (key: keyof typeof L, next: number) => {
-        L[key] += (p - next) * STEP * days;
+        L[key] += (p - next) * w;
         p = next;
       };
       step('shading', p * (1 - d.site.shadingPct / 100));
       step('optical', p * (1 - d.losses.opticalPct / 100));
       step('temp', Math.max(0, p * (1 + (d.module.tcPmax / 100) * (tc - 25))));
       step('soiling', p * (1 - d.losses.soilingPct / 100));
-      step('mismatch', p * (1 - d.losses.mismatchPct / 100));
+      step('mismatch', p * (1 - mismatch / 100));
       // Le perdite nei cavi crescono col quadrato della corrente: in percentuale sono proporzionali alla potenza.
-      step('dcCable', p * (1 - (dc.lossPct / 100) * (p / pstc)));
-      step('inverter', p * eta);
-      const clipped = Math.min(p, inv.pacW);
-      clipWh += (p - clipped) * STEP;
-      step('clip', clipped);
-      step('acCable', p * (1 - (ac.lossPct / 100) * (p / inv.pacW)));
-      step('avail', p * avail);
-      pvDay.push(p);
-      loadDay.push((dayLoadWh * prof[Math.floor(hour)]!) / profSum);
-    }
-    // Bilancio del giorno medio con la batteria: due passate, la seconda parte dallo stato di carica di fine giornata.
-    let soc = capWh * 0.3;
-    let self = 0;
-    let exp = 0;
-    let imp = 0;
-    const socDay: number[] = [];
-    for (let pass = 0; pass < 2; pass++) {
-      self = exp = imp = 0;
-      socDay.length = 0;
-      for (let i = 0; i < pvDay.length; i++) {
-        const pvI = pvDay[i]!;
-        const loadI = loadDay[i]!;
-        let net = loadI - pvI;
-        const direct = Math.min(pvI, loadI);
-        let fromBat = 0;
-        if (capWh > 0 && net < 0) {
-          const charge = Math.min(-net, pBat, (capWh - soc) / (STEP * etaOneWay));
-          soc += charge * STEP * etaOneWay;
-          net += charge;
-        } else if (capWh > 0 && net > 0) {
-          const out = Math.min(net, pBat, (soc * etaOneWay) / STEP);
-          soc -= (out * STEP) / etaOneWay;
-          net -= out;
-          fromBat = out;
-        }
-        self += (direct + fromBat) * STEP;
-        if (net > 0) imp += net * STEP;
-        else exp += -net * STEP;
-        socDay.push(capWh > 0 ? soc / capWh : 0);
-      }
-    }
-    const prodWh = pvDay.reduce((a, b) => a + b, 0) * STEP;
-    const k = days / 1000;
-    months.push({
-      hPoa: sun.hPoa * days,
-      productionKWh: prodWh * k,
-      consumptionKWh: dayLoadWh * k,
-      selfKWh: self * k,
-      exportKWh: exp * k,
-      importKWh: imp * k,
-      clipKWh: clipWh * k,
-      pv: pvDay,
-      load: loadDay,
-      soc: socDay,
+      step('dcCable', p * (1 - (dcLoss[k]! / 100) * (p / Math.max(1, fieldPeak[k]!))));
+      if (opt) step('optimizer', p * 0.99);
+      dcSum += p;
     });
+    let p = dcSum;
+    const step = (key: keyof typeof L, next: number) => {
+      L[key] += (p - next) * w;
+      p = next;
+    };
+    step('inverter', p * eta);
+    const clipped = Math.min(p, inv.pacW);
+    const clip = p - clipped;
+    step('clip', clipped);
+    step('acCable', p * (1 - (ac.lossPct / 100) * (p / inv.pacW)));
+    step('avail', p * avail);
+    return { p, clip };
+  };
+
+  /** Bilancio di un passo con la batteria; restituisce energie [Wh] e aggiorna lo stato di carica. */
+  let soc = capWh * 0.5;
+  const balance = (pv: number, ld: number, dt: number, bandHour: number, w: number) => {
+    let net = ld - pv;
+    const direct = Math.min(pv, ld);
+    let fromBat = 0;
+    if (capWh > 0 && net < 0) {
+      const charge = Math.min(-net, pBat, (capWh - soc) / (dt * etaOneWay));
+      soc += charge * dt * etaOneWay;
+      net += charge;
+    } else if (capWh > 0 && net > 0) {
+      const out = Math.min(net, pBat, (soc * etaOneWay) / dt);
+      soc -= (out * dt) / etaOneWay;
+      net -= out;
+      fromBat = out;
+    }
+    const self = (direct + fromBat) * dt;
+    const imp = net > 0 ? net * dt : 0;
+    const exp = net < 0 ? -net * dt : 0;
+    const bf = bandFractions(bandHour);
+    for (let b = 0; b < 3; b++) {
+      bands.load[b] = (bands.load[b] ?? 0) + (ld * dt * w * bf[b]!) / 1000;
+      bands.self[b] = (bands.self[b] ?? 0) + (self * w * bf[b]!) / 1000;
+      bands.import[b] = (bands.import[b] ?? 0) + (imp * w * bf[b]!) / 1000;
+    }
+    return { self, imp, exp };
+  };
+
+  const months: MonthResult[] = [];
+  const hPoaField: number[] = fv.map(() => 0);
+  const weather = isWeather(d.site.weather) ? d.site.weather : null;
+
+  if (weather) {
+    // ---------------------------------------------------------------- anno tipo, ora per ora
+    const lat = d.site.latitude;
+    const lon = weather.lon;
+    const normals = fv.map((x) => {
+      const b = (x.tilt * Math.PI) / 180;
+      const g = (x.azimuth * Math.PI) / 180;
+      return { x: -Math.sin(b) * Math.sin(g), y: -Math.sin(b) * Math.cos(g), z: Math.cos(b), cosB: Math.cos(b) };
+    });
+    let i = 0;
+    for (let m = 0; m < 12; m++) {
+      const days = MONTH_DAYS[m]!;
+      const acc = { prod: 0, cons: 0, self: 0, exp: 0, imp: 0, clip: 0, hpoa: 0 };
+      const dayPv = new Array<number>(24).fill(0);
+      const dayLoad = new Array<number>(24).fill(0);
+      const daySoc = new Array<number>(24).fill(0);
+      for (let k = 0; k < days * 24; k++, i++) {
+        const n = Math.floor(i / 24) + 1;
+        const utc = (i % 24) + 0.5;
+        const solar = utc + lon / 15 + equationOfTime(n) / 60;
+        const local = utc + 1 + dstOffset(n);
+        const sp = sunPosition(lat, n, solar);
+        const el = (sp.elevation * Math.PI) / 180;
+        const az = (sp.azimuth * Math.PI) / 180;
+        const sun = { x: -Math.sin(az) * Math.cos(el), y: -Math.cos(az) * Math.cos(el), z: Math.sin(el) };
+        const visible = sp.elevation > 0 && sp.elevation >= horizonElevation(weather, sp.azimuth);
+        const g = weather.g[i] ?? 0;
+        const dni = visible ? Math.min(1100, weather.b[i] ?? 0) : 0;
+        const dhi = weather.d[i] ?? 0;
+        const poa = normals.map((nn, f) => {
+          const cosI = Math.max(0, nn.x * sun.x + nn.y * sun.y + nn.z * sun.z);
+          const v = Math.max(0, dni * cosI + (dhi * (1 + nn.cosB)) / 2 + (g * d.site.albedo * (1 - nn.cosB)) / 2);
+          hPoaField[f]! += v / 1000;
+          return v;
+        });
+        acc.hpoa += (poa[0] ?? 0) / 1000;
+        const { p, clip } = acPower(poa, weather.t[i] ?? 15, 1);
+        const l = load(m, local);
+        extrasWh += l.extra;
+        const ld = l.base + l.extra;
+        const r = balance(p, ld, 1, local, 1);
+        acc.prod += p;
+        acc.cons += ld;
+        acc.self += r.self;
+        acc.exp += r.exp;
+        acc.imp += r.imp;
+        acc.clip += clip;
+        const hh = Math.floor(local) % 24;
+        dayPv[hh]! += p / days;
+        dayLoad[hh]! += ld / days;
+        daySoc[hh]! += (capWh > 0 ? soc / capWh : 0) / days;
+      }
+      months.push({
+        hPoa: acc.hpoa,
+        productionKWh: acc.prod / 1000,
+        consumptionKWh: acc.cons / 1000,
+        selfKWh: acc.self / 1000,
+        exportKWh: acc.exp / 1000,
+        importKWh: acc.imp / 1000,
+        clipKWh: acc.clip / 1000,
+        pv: dayPv,
+        load: dayLoad,
+        soc: daySoc,
+      });
+    }
+  } else {
+    // ---------------------------------------------------------------- giorno medio di ogni mese, passi di 15 minuti
+    for (let m = 0; m < 12; m++) {
+      const suns = fv.map((x) => monthSun(d.site.latitude, m, d.site.hDay[m] ?? 0, x.tilt, x.azimuth, d.site.albedo));
+      const days = MONTH_DAYS[m]!;
+      const pvDay: number[] = [];
+      const loadDay: number[] = [];
+      let clipWh = 0;
+      suns.forEach((s, f) => (hPoaField[f]! += s.hPoa * days));
+      for (let i = 0; i < suns[0]!.poa.length; i++) {
+        const hour = (i + 0.5) * STEP;
+        // Temperatura dell'aria nel giorno: minima verso l'alba, massima verso le 15 (±5 °C, andamento semplificato).
+        const ta = (d.site.tMean[m] ?? 15) + 5 * Math.cos((2 * Math.PI * (hour - 15)) / 24);
+        const { p, clip } = acPower(
+          suns.map((s) => s.poa[i]!),
+          ta,
+          STEP * days,
+        );
+        clipWh += clip * STEP;
+        pvDay.push(p);
+        const l = load(m, hour);
+        extrasWh += l.extra * STEP * days;
+        loadDay.push(l.base + l.extra);
+      }
+      // Bilancio del giorno medio con la batteria: due passate, la seconda parte dallo stato di carica di fine giornata.
+      soc = capWh * 0.3;
+      let self = 0;
+      let exp = 0;
+      let imp = 0;
+      const socDay: number[] = [];
+      const saved = bands.load.slice() as Bands;
+      const savedSelf = bands.self.slice() as Bands;
+      const savedImp = bands.import.slice() as Bands;
+      for (let pass = 0; pass < 2; pass++) {
+        self = exp = imp = 0;
+        socDay.length = 0;
+        bands.load = saved.slice() as Bands;
+        bands.self = savedSelf.slice() as Bands;
+        bands.import = savedImp.slice() as Bands;
+        for (let i = 0; i < pvDay.length; i++) {
+          const r = balance(pvDay[i]!, loadDay[i]!, STEP, (i + 0.5) * STEP, days);
+          self += r.self;
+          imp += r.imp;
+          exp += r.exp;
+          socDay.push(capWh > 0 ? soc / capWh : 0);
+        }
+      }
+      const k = days / 1000;
+      const prodWh = pvDay.reduce((a, b) => a + b, 0) * STEP;
+      months.push({
+        hPoa: suns[0]!.hPoa * days,
+        productionKWh: prodWh * k,
+        consumptionKWh: loadDay.reduce((a, b) => a + b, 0) * STEP * k,
+        selfKWh: self * k,
+        exportKWh: exp * k,
+        importKWh: imp * k,
+        clipKWh: clipWh * k,
+        pv: pvDay,
+        load: loadDay,
+        soc: socDay,
+      });
+    }
   }
+
   const sum = (key: keyof MonthResult) => months.reduce((a, mm) => a + (mm[key] as number), 0);
   const production = sum('productionKWh');
   const consumption = sum('consumptionKWh');
   const self = sum('selfKWh');
-  const hPoaYear = sum('hPoa');
+  // Irraggiamento sui moduli: media delle falde pesata con la loro potenza.
+  const hPoaYear = pstc > 0 ? hPoaField.reduce((a, h, k) => a + h * fieldPeak[k]!, 0) / pstc : 0;
   const kwh = (wh: number) => wh / 1000;
+  const lossItems: LossItem[] = [
+    { label: `Ombreggiamento (${f(d.site.shadingPct, 1)}%)`, kWh: kwh(L.shading) },
+    { label: `Riflessione, spettro e basso irraggiamento (${f(d.losses.opticalPct, 1)}%)`, kWh: kwh(L.optical) },
+    { label: `Temperatura delle celle (${MOUNTINGS[d.site.mounting]?.label.toLowerCase() ?? ''})`, kWh: kwh(L.temp) },
+    { label: `Sporcamento (${f(d.losses.soilingPct, 1)}%)`, kWh: kwh(L.soiling) },
+    { label: `Disaccoppiamento tra moduli (${f(mismatch, 1)}%${opt ? ', ridotto dagli ottimizzatori' : ''})`, kWh: kwh(L.mismatch) },
+    { label: 'Cavi lato DC', kWh: kwh(L.dcCable) },
+    ...(opt ? [{ label: 'Ottimizzatori (rendimento 99%)', kWh: kwh(L.optimizer) }] : []),
+    { label: `Conversione dell'inverter (rendimento europeo ${f(inv.euroEff, 1)}%)`, kWh: kwh(L.inverter) },
+    { label: "Limitazione di potenza dell'inverter", kWh: kwh(L.clip) },
+    { label: 'Cavi lato AC', kWh: kwh(L.acCable) },
+    { label: `Fermi e disponibilità (${f(d.losses.availabilityPct, 1)}%)`, kWh: kwh(L.avail) },
+  ];
   return {
     months,
     hPoaYear,
@@ -451,18 +699,10 @@ export function computeYield(d: PvDesign): YieldResult {
     selfConsumptionPct: production > 0 ? (self / production) * 100 : 0,
     selfSufficiencyPct: consumption > 0 ? (self / consumption) * 100 : 0,
     idealKWh: kwh(ideal),
-    losses: [
-      { label: `Ombreggiamento (${f(d.site.shadingPct, 1)}%)`, kWh: kwh(L.shading) },
-      { label: `Riflessione, spettro e basso irraggiamento (${f(d.losses.opticalPct, 1)}%)`, kWh: kwh(L.optical) },
-      { label: `Temperatura delle celle (${MOUNTINGS[d.site.mounting]?.label.toLowerCase() ?? ''})`, kWh: kwh(L.temp) },
-      { label: `Sporcamento (${f(d.losses.soilingPct, 1)}%)`, kWh: kwh(L.soiling) },
-      { label: `Disaccoppiamento tra moduli (${f(d.losses.mismatchPct, 1)}%)`, kWh: kwh(L.mismatch) },
-      { label: 'Cavi lato DC', kWh: kwh(L.dcCable) },
-      { label: `Conversione dell'inverter (rendimento europeo ${f(inv.euroEff, 1)}%)`, kWh: kwh(L.inverter) },
-      { label: 'Limitazione di potenza dell\'inverter', kWh: kwh(L.clip) },
-      { label: 'Cavi lato AC', kWh: kwh(L.acCable) },
-      { label: `Fermi e disponibilità (${f(d.losses.availabilityPct, 1)}%)`, kWh: kwh(L.avail) },
-    ],
+    losses: lossItems,
+    hourly: !!weather,
+    extrasKWh: kwh(extrasWh),
+    bands,
   };
 }
 
@@ -536,6 +776,8 @@ export interface Economics {
   /** Beneficio del primo anno: energia non acquistata + energia venduta [€] */
   firstYearSaving: number;
   firstYearExport: number;
+  /** Incentivo della comunità energetica nel primo anno [€] */
+  firstYearCer: number;
   billBefore: number;
   billAfter: number;
   cashflow: { year: number; flow: number; cumulative: number }[];
@@ -548,20 +790,23 @@ export interface Economics {
 export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
   const price = (id: PriceId) => d.economics.prices.find((p) => p.id === id)?.price ?? 0;
   const label = (id: PriceId) => d.economics.prices.find((p) => p.id === id);
-  const prot = dcProtection(d);
+  const fv = fields(d);
+  const fuses = fv.reduce((a, x) => a + (dcProtection(fieldDesign(d, x)).fusesNeeded ? x.strings : 0), 0);
+  const totalStrings = fv.reduce((a, x) => a + x.strings, 0);
   const kwp = peakW(d) / 1000;
   const items: [PriceId, number][] = [
     ['module', peakW(d)],
     ['inverter', d.inverter.pacW / 1000],
     ['battery', isHybrid(d) ? d.batteryKWh : 0],
     ['mounting', moduleCount(d)],
-    ['dcCable', d.strings * 2 * d.cables.dcLengthM],
+    ['dcCable', totalStrings * 2 * d.cables.dcLengthM],
     ['acCable', 3 * d.cables.acLengthM],
     ['dcBox', 1],
-    ['stringFuse', prot.fusesNeeded ? d.strings : 0],
+    ['stringFuse', fuses],
     ['acBox', 1],
     ['labour', kwp],
     ['design', 1],
+    ['optimizer', d.optimizers ? moduleCount(d) : 0],
   ];
   const lines: CostLine[] = items
     .filter(([, q]) => q > 0)
@@ -579,10 +824,17 @@ export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
   const e = d.economics;
   const deductionTotal = total * (e.deductionPct / 100);
   const inverterCost = (d.inverter.pacW / 1000) * price('inverter') * (1 + e.vatPct / 100);
+  // Prezzo dell'energia prelevata: unico o per fasce F1, F2, F3.
+  const bp: Bands = e.tariff === 'fasce' ? e.bandPrices : [e.importPrice, e.importPrice, e.importPrice];
+  const byBand = (v: Bands) => v.reduce((a, x, i) => a + x * bp[i]!, 0);
+  const selfValue = byBand(y.bands.self);
+  const exportValue = y.exportKWh * e.exportPrice;
+  // Comunità energetica: incentivo sull'energia condivisa per 20 anni.
+  const cerValue = e.cer ? y.exportKWh * (e.cerSharedPct / 100) * e.cerIncentive : 0;
   const saving = (k: number) => {
     const deg = (1 - d.losses.degradationPct / 100) ** (k - 1);
     const infl = (1 + e.energyInflationPct / 100) ** (k - 1);
-    return deg * infl * (y.selfKWh * e.importPrice + y.exportKWh * e.exportPrice);
+    return deg * infl * (selfValue + exportValue) + (k <= 20 ? deg * cerValue : 0);
   };
   const cashflow: Economics['cashflow'] = [{ year: 0, flow: -total, cumulative: -total }];
   let cum = -total;
@@ -610,10 +862,11 @@ export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
     total,
     perKWp: kwp > 0 ? total / kwp : 0,
     deductionTotal,
-    firstYearSaving: y.selfKWh * e.importPrice,
-    firstYearExport: y.exportKWh * e.exportPrice,
-    billBefore: y.consumptionKWh * e.importPrice,
-    billAfter: y.importKWh * e.importPrice - y.exportKWh * e.exportPrice,
+    firstYearSaving: selfValue,
+    firstYearExport: exportValue,
+    firstYearCer: cerValue,
+    billBefore: byBand(y.bands.load),
+    billAfter: byBand(y.bands.import) - exportValue,
     cashflow,
     paybackYears: payback,
     npv,

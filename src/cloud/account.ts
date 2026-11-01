@@ -4,6 +4,7 @@ import { replaceLessonProgress, type LessonProgress } from '../academy/lessons';
 import type { Project } from '../model/types';
 import { clearStorageSpace, currentSpace, onPersist, setStorageSpace, withoutSync, type PersistEvent } from '../persistence/space';
 import { loadCurrent, replaceLibrary, storeCurrentLocal, validateProject } from '../persistence/storage';
+import { mergeLibraries, usePvDesign, validLibrary } from '../pvdesign/store';
 import { DEMO_PROJECTS } from '../projects/demos';
 import { useStore } from '../store/projectStore';
 import { api, ApiError, type AccountUser } from './api';
@@ -80,6 +81,7 @@ export const useAccount = create<AccountState>((set, get) => ({
     // Il progetto dell'account non resta aperto: si torna a quello locale.
     withoutSync(() => useStore.getState().openProject(loadCurrent() ?? DEMO_PROJECTS[0]!.build()));
     useStore.setState({ progress: loadProgress() });
+    usePvDesign.getState().reload();
     set({ phase: 'signed-out', user: null, sync: 'idle', syncError: null, dataVersion: get().dataVersion + 1 });
   },
 }));
@@ -92,8 +94,10 @@ const newer = (a: Project | null, b: Project | null): Project | null => {
 
 /** Carica i dati dell'account e attiva la sincronizzazione. */
 async function enterAccount(user: AccountUser, interactive: boolean): Promise<void> {
-  const [lib, state] = await Promise.all([api.projects(), api.state()]);
+  // I progetti FV si leggono a parte: un server non ancora aggiornato non ha questa azione.
+  const [lib, state, pv] = await Promise.all([api.projects(), api.state(), api.pv().catch(() => null)]);
   const before = useStore.getState().project;
+  const beforePv = usePvDesign.getState().library;
   setStorageSpace(spaceOf(user));
   const cachedCurrent = loadCurrent();
   let cloudCurrent: Project | null = null;
@@ -108,8 +112,13 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
     replaceLessonProgress((state.lessons ?? {}) as Record<string, LessonProgress>);
   });
   useStore.setState({ progress: loadProgress() });
+  usePvDesign.getState().reload();
+  const cloudPv = validLibrary(pv?.pv);
+  const pvLib = mergeLibraries(cloudPv, interactive ? beforePv : validLibrary(localPvLibrary()));
+  if (pvLib) withoutSync(() => usePvDesign.getState().replaceLibrary(pvLib));
   useAccount.setState((s) => ({ phase: 'signed-in', user, dataVersion: s.dataVersion + 1, sync: 'idle', syncError: null }));
 
+  if (pvLib && pv && JSON.stringify(pvLib) !== JSON.stringify(cloudPv)) queue({ type: 'pv', data: pvLib });
   const accountCurrent = newer(cachedCurrent, cloudCurrent);
   if (!interactive) {
     // Sessione già aperta (ricarica della pagina): si riprende il lavoro dell'account.
@@ -129,6 +138,26 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
 // ------------------------------------------------------------------ sincronizzazione
 
 const DEBOUNCE_MS = { current: 3000, lessons: 1000, exercises: 1000 } as const;
+let pvTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingPv: unknown = undefined;
+
+function flushPv(): Promise<void> {
+  if (pvTimer) clearTimeout(pvTimer);
+  pvTimer = null;
+  if (pendingPv === undefined) return chain;
+  const data = pendingPv;
+  pendingPv = undefined;
+  return run(() => api.savePv(data));
+}
+
+/** Libreria FV già presente nello spazio locale dell'account (sessione riaperta). */
+function localPvLibrary(): unknown {
+  try {
+    return JSON.parse(localStorage.getItem(`electrolab.pvdesign.library@${currentSpace()}`) ?? 'null');
+  } catch {
+    return null;
+  }
+}
 let pendingState: { current?: Project; lessons?: unknown; exercises?: unknown } = {};
 let stateTimer: ReturnType<typeof setTimeout> | null = null;
 let chain: Promise<void> = Promise.resolve();
@@ -157,7 +186,7 @@ function flushState(): Promise<void> {
 }
 
 export function flushPending(): Promise<void> {
-  return flushState();
+  return flushPv().then(flushState);
 }
 
 function queue(e: PersistEvent): void {
@@ -178,6 +207,11 @@ function queue(e: PersistEvent): void {
     case 'exercises':
       pendingState.exercises = e.data;
       break;
+    case 'pv':
+      pendingPv = e.data;
+      if (pvTimer) clearTimeout(pvTimer);
+      pvTimer = setTimeout(() => void flushPv(), 4000);
+      return;
   }
   const wait = DEBOUNCE_MS[e.type];
   if (stateTimer) clearTimeout(stateTimer);

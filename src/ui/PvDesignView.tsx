@@ -1,16 +1,19 @@
 import { Check, ChevronLeft, ChevronRight, FileDown, Home, Map as MapIcon, PencilRuler, RotateCcw, Sun, Wallet, Wand2, Zap } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { computeDesign, f, moduleCount, peakW, proposeSizing, stringsPerMppt, type DesignResults, type MonthResult } from '../pvdesign/calc';
+import { computeDesign, f, fieldDesign, fields, moduleCount, peakW, proposeSizing, stringsPerMppt, type DesignResults, type MonthResult } from '../pvdesign/calc';
 import { DEFAULT_PRICES, ECONOMIC_SOURCES, INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
 import { isHybrid, type PvDesign } from '../pvdesign/design';
-import { compassName, roofLayout, ROOF_TYPES, type RoofType } from '../pvdesign/roof';
+import { compassName, roofCapacity, roofLayout, ROOF_TYPES, type RoofType } from '../pvdesign/roof';
 import { usePvDesign } from '../pvdesign/store';
 import { designToProject } from '../pvdesign/toProject';
 import { INSTALL_METHODS, type InstallMethod } from '../rules/ampacity';
 import { useStore } from '../store/projectStore';
 import { NumberInput, Select, TextInput } from './fields';
 import { Animated, CheckSummary, FieldLabel, FlashRow, Grid, Kpi, More, Notes, Num, Step, Term } from './pvdesign/kit';
+import { FutureLoads, MeasuredImport } from './pvdesign/ConsumptionExtras';
 import { LoadProfileEditor } from './pvdesign/LoadProfileEditor';
+import { ProjectBar } from './pvdesign/ProjectLibrary';
+import { WeatherPanel } from './pvdesign/WeatherPanel';
 import { BatteryStep, Sources } from './pvdesign/BatteryStep';
 
 // Mappa e vista 3D caricate solo quando servono (Leaflet e three.js sono librerie pesanti).
@@ -53,6 +56,7 @@ export function PvDesignView() {
       <div className="mx-auto grid max-w-[85rem] gap-5 px-4 pb-24 pt-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:pb-8 xl:grid-cols-[12.5rem_minmax(0,1fr)_18rem]">
         <StepNav step={step} done={done} bad={bad} progress={progress} go={go} />
         <div className="min-w-0 space-y-4">
+          <ProjectBar />
           <div key={step} className={direction > 0 ? 'pv-step-fwd' : 'pv-step-back'}>
             {step === 0 && <HouseStep n={n} />}
             {step === 1 && <RoofStep n={n} />}
@@ -396,13 +400,54 @@ function RoofStep({ n }: { n: number }) {
                       <span className={good ? 'text-emerald-300' : Math.abs(s.azimuth) <= 100 ? 'text-amber-200' : 'text-red-300'}>
                         {good ? 'ottima esposizione' : Math.abs(s.azimuth) <= 100 ? 'esposizione discreta' : 'poco sole'}
                       </span>
-                      {sel && ` · ci stanno ${r.layout.panels.length} moduli`}
+                      {sel && ` · ci stanno ${roofCapacity(d) ?? r.layout.panels.length} moduli`}
                     </div>
                   </button>
                 );
               })}
             </div>
           </div>
+          {!flat && r.geo.slopes.length > 1 && (
+            <div className="space-y-2">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-slate-950/60 px-3 py-2.5 text-[0.78125rem] text-slate-200">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 accent-violet-500"
+                  checked={d.field2.enabled}
+                  onChange={(e) => up((x) => ({ ...x, field2: { ...x.field2, enabled: e.target.checked, slope: -1, excluded: [] } }))}
+                />
+                <span>
+                  <b>Usa anche una seconda falda</b> (per esempio est e ovest)
+                  <span className="block text-[0.71875rem] text-slate-400">
+                    Più moduli e una produzione più distribuita nella giornata: utile se la falda migliore è piccola o se consumi molto al mattino e alla sera. Ogni falda va su un suo ingresso MPPT.
+                  </span>
+                </span>
+              </label>
+              {d.field2.enabled && (
+                <div className="pv-pop-in grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Seconda falda">
+                  {r.geo.slopes.map((s2, i) =>
+                    i === d.roof.slope ? null : (
+                      <button
+                        key={i}
+                        role="radio"
+                        aria-checked={i === d.field2.slope}
+                        onClick={() => up((x) => ({ ...x, field2: { ...x.field2, slope: i, excluded: [] } }))}
+                        className={`rounded-lg border px-3 py-2 text-left text-[0.75rem] transition-colors ${i === d.field2.slope ? 'border-violet-400 bg-violet-500/10' : 'border-slate-800 bg-slate-950/60 hover:border-slate-600'}`}
+                      >
+                        <div className="flex items-center justify-between font-semibold text-slate-100">
+                          Seconda falda: {s2.label.replace('Falda ', '')}
+                          {i === d.field2.slope && <Check size={15} className="pv-pop text-violet-300" />}
+                        </div>
+                        <div className="text-slate-400">
+                          {f(s2.tilt)}° · orientamento {f(s2.azimuth)}°
+                        </div>
+                      </button>
+                    ),
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Kpi label="Pianta" value={`${f(r.geo.footprintM2, 0)} m²`} sub={`${f(r.geo.rect.length, 1)} × ${f(r.geo.rect.width, 1)} m`} />
             <Kpi label={flat ? 'Superficie del tetto' : 'Superficie della falda'} value={`${f(r.layout.slopeM2, 0)} m²`} />
@@ -444,21 +489,25 @@ function SiteStep({ n }: { n: number }) {
       }
       help={
         hasLoc
-          ? 'Hai scelto la casa sulla mappa: il clima è già stimato dalla sua latitudine. Ti resta solo da indicare le ombre, se ce ne sono.'
+          ? 'Con la casa sulla mappa scarico i dati meteo reali del sito da PVGIS. Ti resta solo da indicare le ombre, se ce ne sono (oppure misurale nella vista 3D).'
           : 'Scegli la zona più vicina alla casa e, se non hai disegnato il tetto, indica inclinazione e orientamento dei moduli.'
       }
     >
+      <WeatherPanel />
       <Grid>
         <div className="col-span-2">
           <FieldLabel label="Clima" hint="Ordine di grandezza per l'Italia. Per un progetto vero servono i dati del sito (UNI 10349 o PVGIS).">
             <Select
               value={s.presetId}
-              options={[...(hasLoc ? ['auto'] : []), ...SITES.map((x) => x.id), 'custom']}
-              format={(id) => (id === 'auto' ? 'Stimato dalla posizione della casa' : (SITES.find((x) => x.id === id)?.label ?? 'Dati personalizzati'))}
+              options={[...(s.weather ? ['pvgis'] : []), ...(hasLoc ? ['auto'] : []), ...SITES.map((x) => x.id), 'custom']}
+              format={(id) =>
+                id === 'pvgis' ? 'Dati reali del sito (PVGIS)' : id === 'auto' ? 'Stimato dalla posizione della casa' : (SITES.find((x) => x.id === id)?.label ?? 'Dati personalizzati')
+              }
               onChange={(id) => {
                 const p = SITES.find((x) => x.id === id);
-                if (p) set({ presetId: id, ...(hasLoc ? {} : { latitude: p.latitude }), hDay: [...p.hDay], tMean: [...p.tMean], tMin: p.tMin, tMax: p.tMax });
-                else set({ presetId: id });
+                if (id === 'pvgis') return;
+                if (p) set({ presetId: id, weather: null, ...(hasLoc ? {} : { latitude: p.latitude }), hDay: [...p.hDay], tMean: [...p.tMean], tMin: p.tMin, tMax: p.tMax });
+                else set({ presetId: id, weather: null });
               }}
             />
           </FieldLabel>
@@ -551,8 +600,18 @@ function ConsumptionStep({ n }: { n: number }) {
       help="Somma i kWh delle bollette degli ultimi 12 mesi (la voce «consumi» o «energia prelevata»). Se non li hai sotto mano, un valore di riferimento per una famiglia tipo è 2.700 kWh all'anno."
     >
       <Grid>
-        <Num label="Consumo annuo" value={c.annualKWh} onChange={(v) => set({ annualKWh: v })} suffix="kWh" min={100} max={50000} step={100} hint="La somma dei consumi delle bollette di un anno" />
+        <Num
+          label="Consumo annuo"
+          value={c.annualKWh}
+          onChange={(v) => set(c.measured ? { annualKWh: v, measured: scaleMeasured(c.measured, v) } : { annualKWh: v })}
+          suffix="kWh"
+          min={100}
+          max={50000}
+          step={100}
+          hint={c.measured ? 'Calcolato dal file; se lo cambi, i consumi ora per ora si scalano in proporzione' : 'La somma dei consumi delle bollette di un anno'}
+        />
         <Num label="Potenza della fornitura" value={c.contractKW} onChange={(v) => set({ contractKW: v })} suffix="kW" min={1} max={30} step={0.5} hint="Si legge in bolletta: «potenza impegnata», di solito 3 kW" />
+        {!c.measured && (
         <div className="col-span-2">
           <FieldLabel label="Quando si consuma">
             <Select
@@ -563,8 +622,10 @@ function ConsumptionStep({ n }: { n: number }) {
             />
           </FieldLabel>
         </div>
+        )}
       </Grid>
-      {c.profile === 'manuale' ? (
+      <MeasuredImport c={c} set={set} />
+      {c.measured ? null : c.profile === 'manuale' ? (
         <div key="manual" className="pv-step-fwd">
           <LoadProfileEditor weights={c.customWeights} annualKWh={c.annualKWh} onChange={(w) => set({ customWeights: w })} />
         </div>
@@ -576,8 +637,15 @@ function ConsumptionStep({ n }: { n: number }) {
           </button>
         </p>
       )}
+      <FutureLoads c={c} set={set} />
     </Step>
   );
+}
+
+/** Scala i consumi misurati per un nuovo totale annuo. */
+function scaleMeasured(m: number[][], annualKWh: number): number[][] {
+  const now = m.reduce((s, r, i) => s + r.reduce((a, b) => a + b, 0) * MONTH_DAYS[i]!, 0) || 1;
+  return m.map((r) => r.map((v) => Math.round(((v * annualKWh) / now) * 1000) / 1000));
 }
 
 // ------------------------------------------------------------------ 5. moduli e inverter
@@ -653,6 +721,18 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
           {isHybrid(d) && d.batteryKWh > 0 ? `Con batteria da ${f(d.batteryKWh, 1)} kWh.` : 'Senza batteria.'} L'accumulo si sceglie nel prossimo passo.
         </div>
       </Grid>
+      <SecondField />
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-slate-950/60 px-3 py-2.5 text-[0.78125rem] text-slate-200">
+        <input type="checkbox" className="mt-0.5 accent-amber-500" checked={d.optimizers} onChange={(e) => up((x) => ({ ...x, optimizers: e.target.checked }))} />
+        <span>
+          <b>
+            <Term k="ottimizzatori">Ottimizzatori</Term> su ogni modulo
+          </b>
+          <span className="block text-[0.71875rem] text-slate-400">
+            Ogni modulo lavora al suo punto migliore: se uno è in ombra non frena gli altri della stringa. Convengono con ombre parziali (camini, alberi) o moduli su più orientamenti; costano circa 40 € a modulo.
+          </span>
+        </span>
+      </label>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label={<Term k="kwp">Potenza di picco</Term>} value={<Animated value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />} sub={`${moduleCount(d)} moduli`} />
         <Kpi label="Superficie dei moduli" value={`${f(moduleCount(d) * d.module.areaM2, 1)} m²`} />
@@ -684,6 +764,48 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
         </Grid>
       </More>
     </Step>
+  );
+}
+
+/** Seconda falda: stringhe proprie su un altro ingresso MPPT. */
+function SecondField() {
+  const d = usePvDesign((x) => x.design);
+  const up = useUpdate();
+  const hasRoof = d.roof.footprint.length >= 3 && d.roof.type !== 'piano';
+  const set = (patch: Partial<PvDesign['field2']>) => up((x) => ({ ...x, field2: { ...x.field2, ...patch } }));
+  if (!d.field2.enabled && hasRoof) return null;
+  if (!d.field2.enabled) {
+    return (
+      <label className="flex cursor-pointer items-center gap-2.5 text-[0.75rem] text-slate-300">
+        <input type="checkbox" className="accent-violet-500" checked={false} onChange={() => set({ enabled: true })} />
+        Aggiungi un secondo campo di moduli con un altro orientamento (per esempio est-ovest)
+      </label>
+    );
+  }
+  const cap = roofCapacity(fieldDesign(d, fields(d)[1]!));
+  return (
+    <div className="pv-pop-in space-y-3 rounded-lg border border-violet-500/30 bg-violet-500/[0.05] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-[0.8125rem] font-semibold text-violet-100">Seconda falda</h3>
+        <button onClick={() => set({ enabled: false })} className="rounded-md px-2 py-1 text-[0.71875rem] text-slate-400 hover:bg-slate-800 hover:text-white">
+          Togli
+        </button>
+      </div>
+      <Grid>
+        <Num label="Moduli per stringa" value={d.field2.modulesPerString} onChange={(v) => set({ modulesPerString: Math.round(v) })} min={1} max={40} />
+        <Num label="Stringhe" value={d.field2.strings} onChange={(v) => set({ strings: Math.round(v) })} min={1} max={6} />
+        {hasRoof ? (
+          <div className="col-span-2 self-end text-[0.75rem] text-slate-300">
+            {f(d.field2.tilt)}° di pendenza, orientata a {compassName(d.field2.azimuth)} ({f(d.field2.azimuth)}°){cap !== null && ` · sulla falda ci stanno ${cap} moduli`}
+          </div>
+        ) : (
+          <>
+            <Num label="Inclinazione" value={d.field2.tilt} onChange={(v) => set({ tilt: v })} suffix="°" min={0} max={90} />
+            <Num label={<Term k="azimut">Orientamento</Term>} value={d.field2.azimuth} onChange={(v) => set({ azimuth: v })} suffix="°" min={-180} max={180} hint="0° = sud, −90° = est, +90° = ovest" />
+          </>
+        )}
+      </Grid>
+    </div>
   );
 }
 
@@ -777,7 +899,7 @@ function View3DStep({ n }: { n: number }) {
       n={n}
       title="Vista 3D"
       intro="La tua casa ricostruita dalla pianta, con i moduli del progetto e il sole nel mese e nell'ora che scegli."
-      help="Aggiungi gli alberi e gli edifici vicini con i pulsanti sotto la vista e cliccando sul terreno: la mappa delle ombre calcola quanta energia perdi in un anno, e con «Usa nel calcolo» la riporto nella produzione. Con il cursore dell'ora vedi dove cadono le ombre."
+      help="Aggiungi alberi, edifici vicini e camini con i pulsanti sotto la vista, cliccando sul terreno o sul tetto: la mappa delle ombre calcola quanta energia perdi in un anno, e con «Usa nel calcolo» la riporto nella produzione. Con il cursore dell'ora vedi dove cadono le ombre."
     >
       <Suspense fallback={<Loading />}>
         <Roof3D />
@@ -807,6 +929,12 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
         <Kpi label={<Term k="autosufficienza">Autosufficienza</Term>} value={<Animated value={y.selfSufficiencyPct} format={(v) => `${f(v)}%`} />} sub="dei tuoi consumi" />
         <Kpi label={<Term k="pr">Rendimento</Term>} value={`${f(y.pr * 100, 1)}%`} sub="indice PR" />
       </div>
+      <p className={`rounded-lg px-3 py-2 text-[0.75rem] ${y.hourly ? 'bg-emerald-500/[0.07] text-emerald-100' : 'bg-slate-950/60 text-slate-400'}`}>
+        {y.hourly
+          ? `Calcolo ora per ora su tutte le 8.760 ore dell'anno tipo PVGIS, con giornate serene e nuvolose e l'ombra delle montagne all'orizzonte.`
+          : `Calcolo sulla giornata media di ogni mese, con l'irraggiamento stimato. Con la posizione della casa e i dati PVGIS (passo «Clima e ombre») il calcolo diventa ora per ora.`}
+        {y.extrasKWh > 0 && ` I consumi comprendono ${f(y.extrasKWh)} kWh in più di pompa di calore e auto elettrica.`}
+      </p>
       <MonthChart months={y.months} selected={month} onSelect={setMonth} />
       <div className="grid gap-4 xl:grid-cols-2">
         <div>
@@ -994,7 +1122,11 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Kpi label="Costo totale" value={<Animated value={ec.total} format={eur} />} sub={`IVA inclusa, ${eur(ec.perKWp)} per kWp`} />
         <Kpi label={<Term k="rientro">Si ripaga in</Term>} value={ec.paybackYears === null ? 'oltre la durata' : <Animated value={ec.paybackYears} format={(v) => `${f(v, 1)} anni`} />} />
-        <Kpi label="Risparmio del primo anno" value={<Animated value={ec.firstYearSaving + ec.firstYearExport} format={eur} />} sub={`di cui ${eur(ec.firstYearExport)} di energia venduta`} />
+        <Kpi
+          label="Risparmio del primo anno"
+          value={<Animated value={ec.firstYearSaving + ec.firstYearExport + ec.firstYearCer} format={eur} />}
+          sub={`di cui ${eur(ec.firstYearExport)} di energia venduta${ec.firstYearCer > 0 ? ` e ${eur(ec.firstYearCer)} di incentivo CER` : ''}`}
+        />
         <Kpi label="Bolletta dell'energia" value={`${eur(ec.billBefore)} → ${eur(Math.max(0, ec.billAfter))}`} sub="all'anno, senza e con impianto" />
       </div>
       <CashChart cash={ec.cashflow} />
@@ -1004,6 +1136,74 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
         <Num label={<Term k="detrazione">Detrazione</Term>} value={e.deductionPct} onChange={(v) => set({ deductionPct: v })} suffix="%" min={0} max={110} hint="Dipende dalle regole fiscali dell'anno e dal tipo di immobile: verificale" />
         <Num label="IVA" value={e.vatPct} onChange={(v) => set({ vatPct: v })} suffix="%" min={0} max={30} hint="Aliquota agevolata comune per gli impianti sulle abitazioni: verifica il caso specifico" />
       </Grid>
+      <More label={`Tariffa a fasce orarie${e.tariff === 'fasce' ? ' · attiva' : ''}`} defaultOpen={e.tariff === 'fasce' || undefined}>
+        <div className="flex flex-wrap items-center gap-2 text-[0.75rem] text-slate-300" role="radiogroup" aria-label="Tipo di tariffa">
+          La mia bolletta è:
+          {(['monoraria', 'fasce'] as const).map((k) => (
+            <button
+              key={k}
+              role="radio"
+              aria-checked={e.tariff === k}
+              onClick={() => set({ tariff: k })}
+              className={`rounded-md border px-2.5 py-1 ${e.tariff === k ? 'border-amber-400 bg-amber-500/10 text-white' : 'border-slate-700 text-slate-400 hover:border-slate-500'}`}
+            >
+              {k === 'monoraria' ? 'monoraria (un solo prezzo)' : 'a fasce F1, F2, F3'}
+            </button>
+          ))}
+        </div>
+        {e.tariff === 'fasce' && (
+          <div className="pv-pop-in space-y-2">
+            <Grid>
+              {(['F1', 'F2', 'F3'] as const).map((band, i) => (
+                <Num
+                  key={band}
+                  label={i === 0 ? <Term k="fasce">Prezzo in F1</Term> : `Prezzo in ${band}`}
+                  value={e.bandPrices[i]!}
+                  onChange={(v) => set({ bandPrices: e.bandPrices.map((p, j) => (j === i ? v : p)) as [number, number, number] })}
+                  suffix="€/kWh"
+                  min={0}
+                  max={2}
+                  step={0.01}
+                  hint={['Giorni feriali dalle 8 alle 19', 'Feriali 7–8 e 19–23, sabato 7–23', 'Notte, domenica e festivi'][i]}
+                />
+              ))}
+            </Grid>
+            <p className="text-[0.71875rem] text-slate-400">
+              Dei tuoi consumi, {(['F1', 'F2', 'F3'] as const).map((b, i) => `${f((r.yield.bands.load[i]! / Math.max(1, r.yield.bands.load.reduce((a, b) => a + b, 0))) * 100)}% in ${b}`).join(', ')}. L'energia dei
+              moduli si consuma quasi tutta in F1, la fascia più cara.
+            </p>
+          </div>
+        )}
+      </More>
+      <More label={`Comunità energetica (CER)${e.cer ? ` · +${eur(ec.firstYearCer)} il primo anno` : ''}`} defaultOpen={e.cer || undefined}>
+        <label className="flex cursor-pointer items-start gap-2.5 text-[0.78125rem] text-slate-200">
+          <input type="checkbox" className="mt-0.5 accent-amber-500" checked={e.cer} onChange={(ev) => set({ cer: ev.target.checked })} />
+          <span>
+            Partecipo a una <Term k="cer">comunità energetica</Term>
+            <span className="block text-[0.71875rem] text-slate-400">
+              Parte dell'energia che mandi in rete viene usata nello stesso momento da altri membri: per quella quota il GSE riconosce un incentivo per 20 anni, oltre al prezzo dell'energia venduta.
+            </span>
+          </span>
+        </label>
+        {e.cer && (
+          <div className="pv-pop-in space-y-2">
+            <Grid>
+              <Num
+                label="Energia immessa condivisa"
+                value={e.cerSharedPct}
+                onChange={(v) => set({ cerSharedPct: v })}
+                suffix="%"
+                min={0}
+                max={100}
+                step={5}
+                hint="Quanta dell'energia mandata in rete viene consumata in contemporanea dai membri: dipende da quanti sono e da quando consumano"
+              />
+              <Num label="Incentivo" value={e.cerIncentive} onChange={(v) => set({ cerIncentive: v })} suffix="€/kWh" min={0} max={0.3} step={0.005} hint="Tariffa incentivante sull'energia condivisa" />
+            </Grid>
+            <Sources {...ECONOMIC_SOURCES.cer} />
+          </div>
+        )}
+      </More>
       <More label={`Da dove vengono questi valori (fonti aggiornate a ${PRICES_CHECKED})`}>
         <div className="grid gap-3 xl:grid-cols-2">
           {(
@@ -1212,7 +1412,7 @@ function SummaryActions({ r }: { r: DesignResults }) {
     setBusy(true);
     try {
       const { exportPvDesignPdf } = await import('../pvdesign/pdf');
-      exportPvDesignPdf(d, r, usePvDesign.getState().snapshot);
+      await exportPvDesignPdf(d, r, usePvDesign.getState().snapshot);
     } finally {
       setBusy(false);
     }

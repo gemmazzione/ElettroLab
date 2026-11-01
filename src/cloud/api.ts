@@ -31,7 +31,9 @@ const BASE = './api/index.php';
 async function call<T>(action: string, body?: unknown): Promise<T> {
   let r: Response;
   try {
-    r = await fetch(`${BASE}?action=${encodeURIComponent(action)}`, {
+    // Parametri aggiuntivi in coda all'azione ("azione&chiave=valore"), già codificati da chi chiama.
+    const [act, ...extra] = action.split('&');
+    r = await fetch(`${BASE}?action=${encodeURIComponent(act ?? '')}${extra.length ? '&' + extra.join('&') : ''}`, {
       method: body === undefined ? 'GET' : 'POST',
       credentials: 'same-origin',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'X-ElectroLab': '1' },
@@ -58,6 +60,9 @@ export const api = {
   logout: () => call<object>('logout', {}),
   changePassword: (old: string, next: string) => call<object>('password', { old, new: next }),
   projects: () => call<{ projects: Project[] }>('projects'),
+  pvgis: (lat: number, lon: number) => call<{ weather: unknown }>(`pvgis&lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`),
+  pv: () => call<{ pv: unknown }>('pv'),
+  savePv: (pv: unknown) => call<object>('pv_save', { pv }),
   saveProject: (project: Project) => call<object>('project_save', { project }),
   deleteProject: (id: string) => call<object>('project_delete', { id }),
   state: () => call<{ current: Project | null; lessons: Record<string, unknown> | null; exercises: Record<string, unknown> | null; updatedAt: string | null }>('state'),

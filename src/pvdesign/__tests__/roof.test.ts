@@ -16,7 +16,7 @@ function rect(L: number, W: number, deg: number): [number, number][] {
   ];
   return pts.map(([x, y]) => toLatLon({ x: x! * Math.cos(a) - y! * Math.sin(a), y: x! * Math.sin(a) + y! * Math.cos(a) }, ORIGIN));
 }
-const roof = (patch: Partial<RoofSpec> = {}): RoofSpec => ({ footprint: rect(12, 8, 0), type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale', ...patch });
+const roof = (patch: Partial<RoofSpec> = {}): RoofSpec => ({ footprint: rect(12, 8, 0), type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale', excluded: [], ...patch });
 
 describe('tetto disegnato sul satellite', () => {
   it('rettangolo di area minima di una pianta ruotata', () => {

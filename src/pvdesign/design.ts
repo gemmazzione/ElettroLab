@@ -1,6 +1,7 @@
 import type { InstallMethod } from '../rules/ampacity';
 import type { RoofSpec } from './roof';
 import type { Obstacle } from './shading';
+import type { Weather } from './weather';
 import { DEFAULT_PRICES, INVERTERS, LOAD_PROFILES, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
 
 /** Dati di un progetto di impianto fotovoltaico (sezione «Progetta FV»). */
@@ -31,6 +32,8 @@ export interface PvDesign {
     roofM2: number;
     /** Montaggio dei moduli: influisce sulla temperatura delle celle */
     mounting: MountingId;
+    /** Dati meteo ora per ora del sito (anno tipo PVGIS); null = stima mensile */
+    weather: Weather | null;
   };
   consumption: {
     annualKWh: number;
@@ -38,10 +41,24 @@ export interface PvDesign {
     /** Profilo disegnato a mano: peso relativo di ciascuna delle 24 ore (si normalizza sul consumo annuo) */
     customWeights: number[];
     contractKW: number;
+    /** Consumi misurati (curva del distributore): potenza media [kW] per mese (12) e ora (24); null = profilo tipico */
+    measured: number[][] | null;
+    /** Descrizione del file importato */
+    measuredSource: string;
+    /** Pompa di calore in arrivo: consumo annuo aggiuntivo [kWh] */
+    heatPumpKWh: number;
+    /** Auto elettrica: chilometri all'anno ricaricati a casa */
+    evKm: number;
+    /** Quando si ricarica l'auto */
+    evCharge: 'giorno' | 'sera';
   };
   module: ModuleSpec;
   modulesPerString: number;
   strings: number;
+  /** Seconda falda (impianti est-ovest): stringhe su un altro ingresso MPPT */
+  field2: Field2;
+  /** Ottimizzatori di potenza su ogni modulo */
+  optimizers: boolean;
   inverter: InverterSpec;
   batteryKWh: number;
   losses: {
@@ -78,7 +95,30 @@ export interface PvDesign {
     discountPct: number;
     /** Versione del listino con cui sono stati impostati i prezzi */
     pricesVersion?: string;
+    /** Tariffa: prezzo unico o per fasce orarie F1, F2, F3 */
+    tariff: 'monoraria' | 'fasce';
+    /** Prezzi per fascia F1, F2, F3 [€/kWh] */
+    bandPrices: [number, number, number];
+    /** Comunità energetica rinnovabile */
+    cer: boolean;
+    /** Quota dell'energia immessa che risulta condivisa nella comunità [%] */
+    cerSharedPct: number;
+    /** Incentivo sull'energia condivisa [€/kWh] */
+    cerIncentive: number;
   };
+}
+
+export interface Field2 {
+  enabled: boolean;
+  /** Falda del tetto (indice tra quelle disponibili) */
+  slope: number;
+  modulesPerString: number;
+  strings: number;
+  /** Inclinazione e orientamento: dalla falda, oppure a mano senza tetto disegnato */
+  tilt: number;
+  azimuth: number;
+  /** Posti esclusi sulla falda (camini, lucernari...) */
+  excluded: number[];
 }
 
 const copy = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
@@ -89,12 +129,24 @@ export function defaultDesign(): PvDesign {
     name: 'Impianto fotovoltaico domestico',
     location: { lat: null, lon: null, address: '', zoom: 6 },
     obstacles: [],
-    roof: { footprint: [], type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale' },
-    site: { presetId: s.id, latitude: s.latitude, hDay: [...s.hDay], tMean: [...s.tMean], tMin: s.tMin, tMax: s.tMax, tilt: 25, azimuth: 0, albedo: 0.2, shadingPct: 2, roofM2: 0, mounting: 'complanare' },
-    consumption: { annualKWh: 3500, profile: 'uniforme', contractKW: 3, customWeights: [...LOAD_PROFILES.uniforme.weights] },
+    roof: { footprint: [], type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale', excluded: [] },
+    site: { presetId: s.id, latitude: s.latitude, hDay: [...s.hDay], tMean: [...s.tMean], tMin: s.tMin, tMax: s.tMax, tilt: 25, azimuth: 0, albedo: 0.2, shadingPct: 2, roofM2: 0, mounting: 'complanare', weather: null },
+    consumption: {
+      annualKWh: 3500,
+      profile: 'uniforme',
+      contractKW: 3,
+      customWeights: [...LOAD_PROFILES.uniforme.weights],
+      measured: null,
+      measuredSource: '',
+      heatPumpKWh: 0,
+      evKm: 0,
+      evCharge: 'sera',
+    },
     module: copy(MODULES[1]!),
     modulesPerString: 8,
     strings: 1,
+    field2: { enabled: false, slope: -1, modulesPerString: 6, strings: 1, tilt: 25, azimuth: 90, excluded: [] },
+    optimizers: false,
     inverter: copy(INVERTERS[0]!),
     batteryKWh: 0,
     losses: { opticalPct: 3, soilingPct: 2, mismatchPct: 1.5, availabilityPct: 1, degradationPct: 0.5 },
@@ -112,6 +164,11 @@ export function defaultDesign(): PvDesign {
       years: 25,
       discountPct: 3,
       pricesVersion: PRICES_VERSION,
+      tariff: 'monoraria',
+      bandPrices: [0.42, 0.4, 0.37],
+      cer: false,
+      cerSharedPct: 60,
+      cerIncentive: 0.08,
     },
   };
 }
@@ -140,7 +197,8 @@ export function normalizeDesign(x: unknown): PvDesign {
     ...o,
     location: { ...d.location, ...o.location },
     roof: { ...d.roof, ...o.roof },
-    obstacles: Array.isArray(o.obstacles) ? o.obstacles : [],
+    obstacles: Array.isArray(o.obstacles) ? o.obstacles.map((ob) => ({ ...ob, z0: ob.z0 ?? 0 })) : [],
+    field2: { ...d.field2, ...o.field2 },
     site: { ...d.site, ...o.site },
     consumption: { ...d.consumption, ...o.consumption },
     module: { ...d.module, ...o.module },

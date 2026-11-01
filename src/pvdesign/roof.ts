@@ -1,6 +1,7 @@
 import { SITES, type ModuleSpec } from './data';
 import type { PvDesign } from './design';
 import { declination } from './sun';
+import { isWeather, weatherSummary } from './weather';
 
 /*
  * Geometria del tetto disegnato sulla foto satellitare.
@@ -35,6 +36,8 @@ export interface RoofSpec {
   setbackM: number;
   /** Posa dei moduli */
   orientation: 'verticale' | 'orizzontale';
+  /** Posti esclusi sulla falda scelta (camini, lucernari, antenne): indici della griglia */
+  excluded: number[];
 }
 
 export interface XY {
@@ -348,10 +351,50 @@ export function roofLayout(d: PvDesign): { geo: RoofGeometry; slope: RoofSlope; 
   return { geo, slope, layout: layoutPanels(slope, d.roof, d.module, d.site.latitude, d.roof.type === 'piano') };
 }
 
+/** Posti della griglia ancora disponibili (non esclusi a mano per camini, lucernari, antenne). */
+export function usableSpots(layout: Layout, excluded: number[]): number[] {
+  const ex = new Set(excluded);
+  return layout.panels.map((_, i) => i).filter((i) => !ex.has(i));
+}
+
 /** Numero massimo di moduli sulla falda scelta (null se il tetto non è stato disegnato). */
 export function roofCapacity(d: PvDesign): number | null {
   const r = roofLayout(d);
-  return r ? r.layout.panels.length : null;
+  return r ? usableSpots(r.layout, d.roof.excluded ?? []).length : null;
+}
+
+export interface FieldLayout {
+  /** 0 = prima falda, 1 = seconda falda */
+  field: 0 | 1;
+  slope: RoofSlope;
+  slopeIndex: number;
+  layout: Layout;
+  /** Posti della griglia disponibili e, tra questi, quelli occupati dai moduli del progetto */
+  usable: number[];
+  installed: number[];
+  excluded: number[];
+}
+
+/** Disposizione dei moduli di ogni falda del progetto (vuoto se il tetto non è disegnato). */
+export function fieldLayouts(d: PvDesign): FieldLayout[] {
+  const r = roofLayout(d);
+  if (!r) return [];
+  const flat = d.roof.type === 'piano';
+  const out: FieldLayout[] = [];
+  const mk = (field: 0 | 1, slopeIndex: number, excluded: number[], n: number): FieldLayout | null => {
+    const slope = r.geo.slopes[slopeIndex];
+    if (!slope) return null;
+    const layout = field === 0 ? r.layout : layoutPanels(slope, d.roof, d.module, d.site.latitude, flat);
+    const usable = usableSpots(layout, excluded);
+    return { field, slope, slopeIndex, layout, usable, installed: usable.slice(0, n), excluded };
+  };
+  const f1 = mk(0, Math.min(r.geo.slopes.length - 1, Math.max(0, d.roof.slope)), d.roof.excluded ?? [], d.modulesPerString * d.strings);
+  if (f1) out.push(f1);
+  if (d.field2?.enabled && !flat) {
+    const f2 = mk(1, d.field2.slope, d.field2.excluded ?? [], d.field2.modulesPerString * d.field2.strings);
+    if (f2 && f2.slopeIndex !== f1?.slopeIndex) out.push(f2);
+  }
+  return out;
 }
 
 /**
@@ -367,6 +410,15 @@ export function syncRoof(input: PvDesign): PvDesign {
   }
   let site = d.site;
   if (d.location.lat !== null && Math.abs(d.location.lat - site.latitude) > 1e-6) site = { ...site, latitude: Math.round(d.location.lat * 1000) / 1000 };
+  // Dati PVGIS di un altro posto (la casa è stata spostata): si torna alla stima dalla latitudine.
+  const w = site.weather;
+  if (w && d.location.lat !== null && (Math.abs(w.lat - d.location.lat) > 0.02 || Math.abs(w.lon - (d.location.lon ?? w.lon)) > 0.02)) {
+    site = { ...site, weather: null, presetId: 'auto' };
+  }
+  if (site.weather && isWeather(site.weather)) {
+    const sum = weatherSummary(site.weather);
+    if (site.presetId !== 'pvgis' || sum.hDay.some((h, i) => h !== site.hDay[i])) site = { ...site, ...sum, presetId: 'pvgis' };
+  } else if (site.presetId === 'pvgis') site = { ...site, presetId: 'auto' };
   if (site.presetId === 'auto') {
     const c = climateFromLatitude(site.latitude);
     site = { ...site, ...c };
@@ -376,6 +428,18 @@ export function syncRoof(input: PvDesign): PvDesign {
     const tilt = d.roof.type === 'piano' ? site.tilt : r.slope.tilt;
     const azimuth = Math.round(r.slope.azimuth);
     if (tilt !== site.tilt || azimuth !== site.azimuth) site = { ...site, tilt, azimuth };
+    // Seconda falda: se non scelta (o coincide con la prima) si prende la migliore tra le altre; inclinazione e orientamento dal tetto.
+    if (d.field2?.enabled && d.roof.type !== 'piano') {
+      const others = r.geo.slopes.map((x, i) => ({ x, i })).filter((o) => o.i !== d.roof.slope);
+      let f2 = d.field2;
+      if (!others.some((o) => o.i === f2.slope) && others.length) {
+        const best = others.reduce((a, b) => (Math.abs(b.x.azimuth) < Math.abs(a.x.azimuth) ? b : a));
+        f2 = { ...f2, slope: best.i, excluded: [] };
+      }
+      const sl = r.geo.slopes[f2.slope];
+      if (sl && (f2.tilt !== sl.tilt || f2.azimuth !== Math.round(sl.azimuth))) f2 = { ...f2, tilt: sl.tilt, azimuth: Math.round(sl.azimuth) };
+      if (f2 !== d.field2) d = { ...d, field2: f2 };
+    }
   }
   return site === d.site ? d : { ...d, site };
 }

@@ -158,6 +158,7 @@ export type PriceId =
   | 'acBox'
   | 'labour'
   | 'design'
+  | 'optimizer'
   | 'misc';
 
 /** Data dell'ultimo controllo dei prezzi e delle fonti. */
@@ -176,6 +177,7 @@ export const DEFAULT_PRICES: PriceItem[] = [
   { id: 'acBox', label: 'Quadro lato alternata (magnetotermico differenziale, SPD)', unit: '€', price: 180 },
   { id: 'labour', label: 'Manodopera e installazione', unit: '€/kWp', price: 750 },
   { id: 'design', label: 'Progetto, pratiche di connessione e dichiarazioni', unit: '€', price: 500 },
+  { id: 'optimizer', label: 'Ottimizzatori di potenza', unit: '€/modulo', price: 40 },
   { id: 'misc', label: 'Varie e imprevisti', unit: '% sul totale', price: 5 },
 ];
 
@@ -215,6 +217,10 @@ export const PRICE_SOURCES: Partial<Record<PriceId, { why: string; sources: Pric
       },
     ],
   },
+  optimizer: {
+    why: "Listino online IVA esclusa più il margine dell'installatore.",
+    sources: [{ label: 'Panpower – Tigo TS4-A-O 700 W', url: 'https://panpower.eu/it/ottimizzatori-potenza-accessori-fotovoltaici/4238-ottimizzatore-tigo-ts4-a-o-700w.html', date: 'ottobre 2026', note: '33,26 € IVA esclusa per modulo' }],
+  },
   labour: {
     why: 'Tarata perché il totale chiavi in mano cada nella fascia di mercato.',
     sources: [
@@ -229,7 +235,18 @@ export const PRICE_SOURCES: Partial<Record<PriceId, { why: string; sources: Pric
 };
 
 /** Fonti dei parametri economici (prezzo dell'energia, valore dell'energia venduta, IVA, detrazione). */
-export const ECONOMIC_SOURCES: Record<'importPrice' | 'exportPrice' | 'vat' | 'deduction', { why: string; sources: PriceSource[] }> = {
+export const ECONOMIC_SOURCES: Record<'importPrice' | 'exportPrice' | 'vat' | 'deduction' | 'cer', { why: string; sources: PriceSource[] }> = {
+  cer: {
+    why: 'Con i prezzi zonali sopra 180 €/MWh (come a ottobre 2026) resta solo la parte fissa: 80 €/MWh. Verifica la cumulabilità con la detrazione fiscale.',
+    sources: [
+      {
+        label: 'Assolombarda – Decreto CER, criteri di incentivazione',
+        url: 'https://www.assolombarda.it/servizi/energia/informazioni/decreto-cer-pubblicati-i-criteri-di-incentivazione-per-lenergia-condivisa',
+        date: 'DM MASE 414/2023',
+        note: 'impianti fino a 200 kW: 80 €/MWh + max(0; 180 − prezzo zonale), al massimo 120 €/MWh, per 20 anni',
+      },
+    ],
+  },
   importPrice: {
     why: "Il risparmio vale sulla parte variabile della bolletta, un po' più bassa del prezzo medio con quote fisse.",
     sources: [

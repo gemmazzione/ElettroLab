@@ -141,6 +141,112 @@ function ensureSchema(): void
     }
 }
 
+/**
+ * Tabelle e colonne aggiunte dopo la prima versione: cache dei dati PVGIS e progetti fotovoltaici dell'account.
+ * Si creano al primo uso, così le installazioni esistenti si aggiornano da sole.
+ */
+function ensureExtras(): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+    ensureSchema();
+    $pdo = db();
+    if (isMysql()) {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS el_cache (k VARCHAR(80) PRIMARY KEY, data MEDIUMTEXT NOT NULL, created_at DATETIME NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci');
+    } else {
+        $pdo->exec('CREATE TABLE IF NOT EXISTS el_cache (k TEXT PRIMARY KEY, data TEXT NOT NULL, created_at TEXT NOT NULL)');
+    }
+    try {
+        $pdo->query('SELECT pv FROM el_state LIMIT 1');
+    } catch (PDOException $e) {
+        $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN pv MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN pv TEXT NULL');
+    }
+}
+
+/** Scarica un URL (HTTPS) con un tempo massimo; null se non raggiungibile. */
+function httpGet(string $url, int $timeout = 25): ?string
+{
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 10, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'ElectroLab']);
+        $out = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return is_string($out) && $code === 200 ? $out : null;
+    }
+    $ctx = stream_context_create(['http' => ['timeout' => $timeout, 'header' => "User-Agent: ElectroLab\r\n"]]);
+    $out = @file_get_contents($url, false, $ctx);
+    return is_string($out) ? $out : null;
+}
+
+/**
+ * Anno tipo (TMY) e orizzonte del sito da PVGIS (Commissione europea, JRC), ridotti a vettori orari compatti.
+ * Coordinate arrotondate al centesimo di grado (circa 1 km) e risultato in cache per 180 giorni.
+ */
+function pvgisWeather(float $lat, float $lon): array
+{
+    ensureExtras();
+    $lat = round($lat, 2);
+    $lon = round($lon, 2);
+    $key = sprintf('pvgis:%.2f:%.2f', $lat, $lon);
+    $st = db()->prepare('SELECT data, created_at FROM el_cache WHERE k = ?');
+    $st->execute([$key]);
+    $row = $st->fetch();
+    if ($row && strtotime($row['created_at'] . ' UTC') > time() - 180 * 86400) {
+        $cached = json_decode($row['data'], true);
+        if (is_array($cached)) {
+            return $cached + ['cached' => true];
+        }
+    }
+    $base = 'https://re.jrc.ec.europa.eu/api/v5_3/';
+    $q = 'lat=' . rawurlencode((string) $lat) . '&lon=' . rawurlencode((string) $lon) . '&outputformat=json';
+    $tmyRaw = httpGet($base . 'tmy?' . $q);
+    if ($tmyRaw === null) {
+        fail(502, 'PVGIS non raggiungibile dal server.');
+    }
+    $tmy = json_decode($tmyRaw, true);
+    $hours = $tmy['outputs']['tmy_hourly'] ?? null;
+    if (!is_array($hours) || count($hours) < 8760) {
+        fail(502, $tmy['message'] ?? 'Risposta di PVGIS non valida (punto in mare o fuori copertura?).');
+    }
+    $g = $b = $d = $t = [];
+    foreach (array_slice($hours, 0, 8760) as $h) {
+        $g[] = (int) round((float) ($h['G(h)'] ?? 0));
+        $b[] = (int) round((float) ($h['Gb(n)'] ?? 0));
+        $d[] = (int) round((float) ($h['Gd(h)'] ?? 0));
+        $t[] = round((float) ($h['T2m'] ?? 0), 1);
+    }
+    $years = array_map(fn($m) => (int) ($m['year'] ?? 0), $tmy['outputs']['months_selected'] ?? []);
+    $horizon = null;
+    $horRaw = httpGet($base . 'printhorizon?' . $q, 15);
+    if ($horRaw !== null) {
+        $hj = json_decode($horRaw, true);
+        $prof = $hj['outputs']['horizon_profile'] ?? null;
+        if (is_array($prof) && $prof) {
+            $horizon = array_map(fn($p) => [round((float) $p['A'], 1), round((float) $p['H_hor'], 1)], $prof);
+        }
+    }
+    $out = [
+        'source' => (string) ($tmy['inputs']['meteo_data']['radiation_db'] ?? 'PVGIS 5.3'),
+        'period' => $years ? (min($years) . '–' . max($years)) : '',
+        'lat' => $lat,
+        'lon' => $lon,
+        'g' => $g,
+        'b' => $b,
+        'd' => $d,
+        't' => $t,
+        'horizon' => $horizon,
+    ];
+    $json = json_encode($out);
+    $pdo = db();
+    $pdo->prepare('DELETE FROM el_cache WHERE k = ?')->execute([$key]);
+    $pdo->prepare('INSERT INTO el_cache (k, data, created_at) VALUES (?, ?, ?)')->execute([$key, $json, now()]);
+    return $out;
+}
+
 /** true se non esiste ancora un amministratore (tabelle assenti comprese). */
 function setupNeeded(): bool
 {

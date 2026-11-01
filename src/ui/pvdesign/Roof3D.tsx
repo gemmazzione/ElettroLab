@@ -1,12 +1,12 @@
-import { Building2, Camera, Compass, Eye, Pause, Play, RotateCw, Trash2, TreeDeciduous, X } from 'lucide-react';
+import { Building2, Camera, Compass, Eye, Factory, Pause, Play, RotateCw, Trash2, TreeDeciduous, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { f, moduleCount } from '../../pvdesign/calc';
+import { f } from '../../pvdesign/calc';
 import { MONTH_REP_DAY, MONTHS } from '../../pvdesign/data';
 import type { PvDesign } from '../../pvdesign/design';
 import { houseGeometry, type HouseGeometry } from '../../pvdesign/house';
-import { centroidLatLon, panelCorners, roofLayout, sunPosition, toLocal, type XYZ } from '../../pvdesign/roof';
+import { centroidLatLon, fieldLayouts, panelCorners, roofLayout, sunPosition, toLocal, type XYZ } from '../../pvdesign/roof';
 import { annualShading, OBSTACLE_DEFAULTS, type Obstacle, type ObstacleKind } from '../../pvdesign/shading';
 import { usePvDesign } from '../../pvdesign/store';
 import { Num } from './kit';
@@ -231,7 +231,7 @@ function buildHouse(group: THREE.Group, h: HouseGeometry, d: PvDesign) {
     for (let i = 0; i < pos.count; i++) uv.push(pos.getX(i) / 4, pos.getZ(i) / 4 + pos.getY(i) / 4);
     roofGeo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   }
-  add(roofGeo, roofMat);
+  add(roofGeo, roofMat).userData.roof = true;
   if (h.parapet.length) add(polyGeometry(h.parapet), new THREE.MeshStandardMaterial({ color: '#d6cdb9', roughness: 0.95, side: THREE.DoubleSide }));
   // Finestre e porta: vetro scuro con telaio chiaro, appena fuori dalla parete.
   const frameMat = new THREE.MeshStandardMaterial({ color: '#f8fafc', roughness: 0.6 });
@@ -256,6 +256,7 @@ function buildObstacles(group: THREE.Group, obstacles: Obstacle[]) {
   const crown = new THREE.MeshStandardMaterial({ color: '#3f7a3a', roughness: 0.9, flatShading: true });
   const bld = new THREE.MeshStandardMaterial({ color: '#cbd5e1', roughness: 0.9 });
   const bldRoof = new THREE.MeshStandardMaterial({ color: '#64748b', roughness: 0.9 });
+  const chimney = new THREE.MeshStandardMaterial({ color: '#b9a99a', roughness: 0.95 });
   for (const ob of obstacles) {
     if (ob.kind === 'albero') {
       const r = ob.size / 2;
@@ -270,6 +271,13 @@ function buildObstacles(group: THREE.Group, obstacles: Obstacle[]) {
         m.userData.obstacle = ob.id;
         group.add(m);
       }
+    } else if (ob.kind === 'camino') {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(ob.size, ob.height, ob.depth), chimney);
+      c.position.set(ob.x, (ob.z0 ?? 0) + ob.height / 2, -ob.y);
+      c.castShadow = true;
+      c.receiveShadow = true;
+      c.userData.obstacle = ob.id;
+      group.add(c);
     } else {
       const b = new THREE.Mesh(new THREE.BoxGeometry(ob.size, ob.height, ob.depth), [bld, bld, bldRoof, bld, bld, bld]);
       b.position.set(ob.x, ob.height / 2, -ob.y);
@@ -284,6 +292,7 @@ function buildObstacles(group: THREE.Group, obstacles: Obstacle[]) {
 // ------------------------------------------------------------------ componente
 
 type ViewPreset = 'sud' | 'est' | 'ovest' | 'alto' | 'tre-quarti';
+const OB_LABEL: Record<ObstacleKind, string> = { albero: 'Albero', edificio: 'Edificio', camino: 'Camino' };
 const VIEW_LABEL: Record<ViewPreset, string> = { 'tre-quarti': 'Prospettiva', sud: 'Da sud', est: 'Da est', ovest: 'Da ovest', alto: "Dall'alto" };
 
 export function Roof3D() {
@@ -390,9 +399,16 @@ export function Roof3D() {
       const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
       const ray = new THREE.Raycaster();
       ray.setFromCamera(ndc, camera);
-      const hit = ray.intersectObjects([ground, lawn], false)[0];
+      const targets = kind === 'camino' ? (three.current?.model.children.filter((o) => o instanceof THREE.Mesh && o.userData.roof) ?? []) : [ground, lawn];
+      const hit = ray.intersectObjects(targets, false)[0];
       if (!hit) return;
-      const ob: Obstacle = { ...OBSTACLE_DEFAULTS[kind], id: `ob${Date.now().toString(36)}`, x: Math.round(hit.point.x * 10) / 10, y: Math.round(-hit.point.z * 10) / 10 };
+      const ob: Obstacle = {
+        ...OBSTACLE_DEFAULTS[kind],
+        id: `ob${Date.now().toString(36)}`,
+        x: Math.round(hit.point.x * 10) / 10,
+        y: Math.round(-hit.point.z * 10) / 10,
+        z0: kind === 'camino' ? Math.round(hit.point.y * 100) / 100 - 0.2 : 0,
+      };
       usePvDesign.getState().update((x) => ({ ...x, obstacles: [...x.obstacles, ob] }));
       setPlacing(null);
     };
@@ -428,14 +444,15 @@ export function Roof3D() {
     const H = d.roof.heightM;
     buildHouse(t.model, house, d);
     const flat = d.roof.type === 'piano';
-    const n = Math.min(moduleCount(d), r.layout.panels.length);
+    const placed = fieldLayouts(d).flatMap((l) => l.installed.map((spot) => ({ l, spot })));
     const landscape = d.roof.orientation === 'orizzontale';
     const baseZ = flat ? H + 0.05 : H;
     const tex = cellTexture(landscape);
     const side = new THREE.MeshStandardMaterial({ color: '#c3c9d2', roughness: 0.4, metalness: 0.6 });
     const legMat = new THREE.MeshStandardMaterial({ color: '#9aa3ad', roughness: 0.5, metalness: 0.5 });
-    for (let i = 0; i < n; i++) {
-      const c = panelCorners(r.slope, r.layout, r.layout.panels[i]!, baseZ, flat);
+    for (let i = 0; i < placed.length; i++) {
+      const { l, spot } = placed[i]!;
+      const c = panelCorners(l.slope, l.layout, l.layout.panels[spot]!, baseZ, flat);
       const loss = shading?.perPanel[i] ?? 0;
       const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.25, metalness: 0.35, color: showMap ? lossColor(loss) : '#ffffff' });
       const m = panelMesh(c, top, side);
@@ -623,10 +640,12 @@ export function Roof3D() {
 
   const setObstacle = (id: string, patch: Partial<Obstacle>) => update((x) => ({ ...x, obstacles: x.obstacles.map((o) => (o.id === id ? { ...o, ...patch } : o)) }));
   const removeObstacle = (id: string) => update((x) => ({ ...x, obstacles: x.obstacles.filter((o) => o.id !== id) }));
-  const applyLoss = () => shading && update((x) => ({ ...x, site: { ...x.site, shadingPct: Math.round(shading.lossPct * 10) / 10 } }));
+  // Senza ottimizzatori conta l'effetto stringa (un modulo in ombra frena gli altri); con gli ottimizzatori i moduli sono indipendenti.
+  const effective = shading ? (d.optimizers ? shading.lossPct : shading.stringLossPct) : 0;
+  const applyLoss = () => shading && update((x) => ({ ...x, site: { ...x.site, shadingPct: Math.round(effective * 10) / 10 } }));
   const hh = Math.floor(hour);
   const mm = Math.round((hour - hh) * 60);
-  const loss = shading ? Math.round(shading.lossPct * 10) / 10 : 0;
+  const loss = Math.round(effective * 10) / 10;
   const worst = shading && shading.perPanel.length ? Math.max(...shading.perPanel) * 100 : 0;
 
   return (
@@ -651,7 +670,7 @@ export function Roof3D() {
         )}
         {placing && (
           <div className="pv-pop-in absolute bottom-2 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-lg bg-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white shadow-lg">
-            Clicca sul terreno dove si trova {placing === 'albero' ? "l'albero" : "l'edificio"}
+            {placing === 'camino' ? 'Clicca sul tetto dove si trova il camino' : `Clicca sul terreno dove si trova ${placing === 'albero' ? "l'albero" : "l'edificio"}`}
             <button onClick={() => setPlacing(null)} aria-label="Annulla" className="rounded p-0.5 hover:bg-sky-500">
               <X size={14} />
             </button>
@@ -726,18 +745,18 @@ export function Roof3D() {
         <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/50 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-[0.8125rem] font-semibold text-slate-100">Alberi ed edifici vicini</h3>
+              <h3 className="text-[0.8125rem] font-semibold text-slate-100">Alberi, edifici e camini</h3>
               <p className="text-[0.71875rem] leading-snug text-slate-400">Aggiungi ciò che può fare ombra al tetto: entra nella mappa delle ombre di tutto l'anno.</p>
             </div>
             <div className="flex gap-2">
-              {(['albero', 'edificio'] as const).map((k) => (
+              {(['albero', 'edificio', 'camino'] as const).map((k) => (
                 <button
                   key={k}
                   onClick={() => setPlacing(placing === k ? null : k)}
                   aria-pressed={placing === k}
                   className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] font-semibold ${placing === k ? 'bg-sky-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
                 >
-                  {k === 'albero' ? <TreeDeciduous size={14} /> : <Building2 size={14} />} {k === 'albero' ? 'Albero' : 'Edificio'}
+                  {k === 'albero' ? <TreeDeciduous size={14} /> : k === 'edificio' ? <Building2 size={14} /> : <Factory size={14} />} {OB_LABEL[k]}
                 </button>
               ))}
             </div>
@@ -747,15 +766,15 @@ export function Roof3D() {
               {d.obstacles.map((o) => (
                 <li key={o.id} className="pv-pop-in grid grid-cols-2 items-end gap-2 rounded-lg bg-slate-900/70 p-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
                   <div className="col-span-2 flex items-center gap-1.5 self-center text-[0.75rem] font-semibold text-slate-200 sm:col-span-1">
-                    {o.kind === 'albero' ? <TreeDeciduous size={14} className="text-emerald-400" /> : <Building2 size={14} className="text-slate-300" />}
-                    {o.kind === 'albero' ? 'Albero' : 'Edificio'}
+                    {o.kind === 'albero' ? <TreeDeciduous size={14} className="text-emerald-400" /> : o.kind === 'edificio' ? <Building2 size={14} className="text-slate-300" /> : <Factory size={14} className="text-stone-300" />}
+                    {OB_LABEL[o.kind]}
                     <span className="font-normal text-slate-500">
                       {f(Math.hypot(o.x, o.y))} m a {compassFrom(o.x, o.y)}
                     </span>
                   </div>
                   <Num label="Altezza" value={o.height} onChange={(v) => setObstacle(o.id, { height: v })} suffix="m" min={1} max={80} step={0.5} />
                   <Num label={o.kind === 'albero' ? 'Chioma' : 'Larghezza'} value={o.size} onChange={(v) => setObstacle(o.id, { size: v })} suffix="m" min={0.5} max={80} step={0.5} />
-                  {o.kind === 'edificio' ? <Num label="Profondità" value={o.depth} onChange={(v) => setObstacle(o.id, { depth: v })} suffix="m" min={0.5} max={80} step={0.5} /> : <span className="hidden sm:block" />}
+                  {o.kind !== 'albero' ? <Num label="Profondità" value={o.depth} onChange={(v) => setObstacle(o.id, { depth: v })} suffix="m" min={0.5} max={80} step={0.5} /> : <span className="hidden sm:block" />}
                   <button onClick={() => removeObstacle(o.id)} className="justify-self-end rounded-md p-2 text-slate-400 hover:bg-slate-800 hover:text-red-300" aria-label="Togli">
                     <Trash2 size={15} />
                   </button>
@@ -768,6 +787,13 @@ export function Roof3D() {
               <div className="text-[0.78125rem] leading-snug text-slate-300">
                 Perdita per ombre stimata in un anno: <b className="font-mono text-white">{f(loss, 1)}%</b>
                 {shading.perPanel.length > 1 && worst > loss + 0.5 && <span className="text-slate-400"> (modulo più ombreggiato {f(worst, 1)}%)</span>}
+                {shading.stringLossPct > shading.lossPct + 0.3 && (
+                  <span className="block text-[0.71875rem] text-amber-200/90">
+                    {d.optimizers
+                      ? `Con gli ottimizzatori: senza, l'effetto stringa porterebbe la perdita al ${f(shading.stringLossPct, 1)}%.`
+                      : `Effetto stringa compreso: con gli ottimizzatori scenderebbe al ${f(shading.lossPct, 1)}%.`}
+                  </span>
+                )}
                 <span className="block text-[0.6875rem] text-slate-500">Nel calcolo della produzione ora c'è {f(d.site.shadingPct, 1)}%.</span>
               </div>
               {Math.abs(loss - d.site.shadingPct) >= 0.1 && (
@@ -782,8 +808,7 @@ export function Roof3D() {
 
       <p className="text-[0.6875rem] leading-snug text-slate-500">
         Trascina per ruotare, rotella o pizzico per lo zoom, tasto destro o due dita per spostare. La mappa delle ombre traccia ogni mezz'ora del giorno medio di ogni mese la luce diretta
-        verso cinque punti di ogni modulo; la luce diffusa è considerata libera, quindi la perdita è un valore minimo. Camini, antenne e il disaccoppiamento tra moduli della stessa stringa non
-        sono considerati. Ora solare: a mezzogiorno il sole è a sud (con l'ora legale circa le 13).
+        verso cinque punti di ogni modulo; la luce diffusa è considerata libera, quindi la perdita è un valore minimo. L'effetto stringa considera i diodi di bypass a livello di modulo. Ora solare: a mezzogiorno il sole è a sud (con l'ora legale circa le 13).
       </p>
     </div>
   );

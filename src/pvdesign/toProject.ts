@@ -18,6 +18,7 @@ export function designToProject(d: PvDesign): Project {
     `Generato da «Progetta FV»: ${d.strings} × ${d.modulesPerString} moduli da ${d.module.moduleWp} Wp (${f(peakW(d) / 1000, 2)} kWp), inverter ${d.inverter.label}. ` +
     `Cavi DC ${dc.section} mm² da ${f(d.cables.dcLengthM)} m, linea AC ${ac.section} mm² da ${f(d.cables.acLengthM)} m protetta da ${ac.inA} A. ` +
     (d.inverter.mppt > 1 ? `Il laboratorio ha un solo ingresso DC: le stringhe sono in parallelo e la corrente massima in ingresso è la somma dei ${d.inverter.mppt} MPPT. ` : '') +
+    (d.field2.enabled ? `La seconda falda (${d.field2.strings} × ${d.field2.modulesPerString} moduli) non è rappresentata: il laboratorio mostra solo la prima. ` : '') +
     'Avvia la simulazione e cambia l\'irraggiamento nelle proprietà dell\'inverter.';
   p.pv = { irradiance: 800, ambientC: 25, minAmbientC: d.site.tMin, maxAmbientC: d.site.tMax };
   const ip = inverterParams(d);

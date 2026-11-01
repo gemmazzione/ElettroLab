@@ -175,6 +175,35 @@ try {
             ok();
 
         // -------------------------------------------------------------- amministrazione
+        // -------------------------------------------------------------- dati meteo PVGIS (pubblici, con cache)
+        case 'pvgis':
+            $lat = isset($_GET['lat']) ? (float) $_GET['lat'] : NAN;
+            $lon = isset($_GET['lon']) ? (float) $_GET['lon'] : NAN;
+            if (!is_finite($lat) || !is_finite($lon) || abs($lat) > 70 || abs($lon) > 180) {
+                fail(400, 'Coordinate non valide.');
+            }
+            ok(['weather' => pvgisWeather($lat, $lon)]);
+
+        // -------------------------------------------------------------- progetti fotovoltaici dell'account
+        case 'pv':
+            $u = requireUser();
+            ensureExtras();
+            $st = db()->prepare('SELECT pv FROM el_state WHERE user_id = ?');
+            $st->execute([$u['id']]);
+            $v = $st->fetchColumn();
+            ok(['pv' => is_string($v) ? json_decode($v, true) : null]);
+
+        case 'pv_save':
+            $u = requireUser();
+            ensureExtras();
+            $b = body();
+            $json = json_encode($b['pv'] ?? null, JSON_UNESCAPED_UNICODE);
+            if ($json === false || strlen($json) > MAX_STATE_BYTES) {
+                fail(413, 'Dati troppo grandi.');
+            }
+            upsertState($u['id'], ['pv' => $json]);
+            ok();
+
         case 'users':
             requireAdmin();
             $rows = db()->query('SELECT id, username, role, disabled, created_at, last_login FROM el_users ORDER BY username')->fetchAll();

@@ -43,7 +43,8 @@ export type PersistEvent =
   | { type: 'project-delete'; id: string }
   | { type: 'current'; project: Project }
   | { type: 'lessons'; data: unknown }
-  | { type: 'exercises'; data: unknown };
+  | { type: 'exercises'; data: unknown }
+  | { type: 'pv'; data: unknown };
 
 type Listener = (e: PersistEvent) => void;
 const listeners = new Set<Listener>();
