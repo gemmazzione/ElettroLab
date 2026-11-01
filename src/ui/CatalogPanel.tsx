@@ -41,7 +41,7 @@ function ItemRow({ item }: { item: CatalogItem }) {
             <span className="shrink-0 font-mono text-[0.625rem] text-slate-500">{item.kind === 'comb' ? 'barra' : `${item.modules}M`}</span>
           )}
           <button
-            className="shrink-0 rounded p-0.5 text-slate-500 opacity-0 hover:bg-slate-700 hover:text-sky-300 group-hover:opacity-100"
+            className="shrink-0 rounded p-0.5 text-slate-500 opacity-0 hover:bg-slate-700 hover:text-sky-300 focus-visible:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
             onClick={() => add(item.id)}
             title="Aggiungi"
           >
@@ -53,7 +53,7 @@ function ItemRow({ item }: { item: CatalogItem }) {
   );
 }
 
-export function CatalogPanel() {
+export function CatalogPanel({ className = 'w-64' }: { className?: string }) {
   const [query, setQuery] = useState('');
   const [closed, setClosed] = useState<Set<CatalogCategory>>(new Set(['Altri dispositivi']));
   const exId = useStore((s) => s.exercise?.id);
@@ -70,7 +70,7 @@ export function CatalogPanel() {
   }, [query, materials]);
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900/80">
+    <aside className={`flex h-full shrink-0 flex-col border-r border-slate-800 bg-slate-900/80 ${className}`}>
       <div className="border-b border-slate-800 p-3">
         <div className="mb-2 text-[0.6875rem] font-semibold uppercase tracking-wider text-slate-400">Catalogo componenti</div>
         <label className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 focus-within:border-sky-500">
@@ -114,7 +114,7 @@ export function CatalogPanel() {
         {groups.length === 0 && !materials && <div className="p-3 text-[0.75rem] text-slate-500">Nessun componente trovato.</div>}
       </div>
       <div className="border-t border-slate-800 p-3 text-[0.65625rem] leading-snug text-slate-500">
-        Trascina i dispositivi DIN sulle guide del quadro; gli utilizzatori e la fornitura si posizionano liberamente. Gli articoli con il lucchetto non sono ancora simulati.
+        Trascina i dispositivi sul quadro oppure premi <Plus size={11} className="inline" /> per aggiungerli. I dispositivi DIN vanno sulle guide; utilizzatori e fornitura si posizionano liberamente. Gli articoli con il lucchetto non sono ancora simulati.
       </div>
     </aside>
   );

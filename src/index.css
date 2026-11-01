@@ -274,3 +274,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .pv-attn { animation: none; box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.6); }
 }
+
+/* Pannelli a scomparsa del laboratorio su schermi stretti. */
+@keyframes drawer-left { from { transform: translateX(-100%); } to { transform: none; } }
+@keyframes drawer-right { from { transform: translateX(100%); } to { transform: none; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.drawer-left { animation: drawer-left 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.drawer-right { animation: drawer-right 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pv-fade-in { animation: fade-in 0.2s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-left,
+  .drawer-right { animation: fade-in 0.15s ease-out both; }
+}

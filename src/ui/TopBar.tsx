@@ -66,6 +66,8 @@ function Btn({
   );
 }
 
+const MODE_LABEL = { lab: 'Laboratorio', pv: 'Progetta FV', academy: 'Accademia' } as const;
+
 const Sep = () => <div className="mx-1 h-5 w-px bg-slate-700" />;
 
 export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => void }) {
@@ -89,10 +91,14 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
           <button
             key={m}
             onClick={() => s.setMode(m)}
+            title={MODE_LABEL[m]}
+            aria-label={MODE_LABEL[m]}
+            aria-pressed={s.mode === m}
             className={`flex items-center gap-1.5 rounded px-2 py-1 ${s.mode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            {m === 'lab' ? <Zap size={13} /> : m === 'pv' ? <Sun size={13} /> : <GraduationCap size={13} />}
-            {m === 'lab' ? 'Laboratorio' : m === 'pv' ? 'Progetta FV' : 'Accademia'}
+            {m === 'lab' ? <Zap size={14} /> : m === 'pv' ? <Sun size={14} /> : <GraduationCap size={14} />}
+            {/* Sui telefoni solo le icone: lo spazio serve ai comandi del laboratorio. */}
+            <span className={s.mode === m ? 'inline' : 'hidden sm:inline'}>{MODE_LABEL[m]}</span>
           </button>
         ))}
       </div>
@@ -234,7 +240,7 @@ function TextSize() {
   const i = UI_SCALES.indexOf(scale as (typeof UI_SCALES)[number]);
   const btn = 'flex h-7 w-7 items-center justify-center rounded text-slate-300 transition-colors hover:bg-slate-800 hover:text-white disabled:cursor-not-allowed disabled:opacity-30';
   return (
-    <div className="mr-1 flex shrink-0 items-center gap-0.5 rounded-md bg-slate-950 p-0.5" role="group" aria-label="Dimensione del testo">
+    <div className="mr-1 hidden shrink-0 items-center gap-0.5 rounded-md bg-slate-950 p-0.5 sm:flex" role="group" aria-label="Dimensione del testo">
       <button className={btn} onClick={() => setScale(UI_SCALES[Math.max(0, i - 1)]!)} disabled={i <= 0} aria-label="Testo più piccolo" title="Testo più piccolo">
         <span className="text-[0.75rem] font-semibold">A</span>
       </button>

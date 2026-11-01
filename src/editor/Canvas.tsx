@@ -233,7 +233,7 @@ export function Canvas() {
         <PanelBackdrop />
         <Controls showInteractive={false} position="bottom-left" />
         <Instruments />
-        <MiniMap pannable zoomable position="bottom-right" nodeColor="#64748b" maskColor="rgba(2,6,23,0.7)" style={{ width: 160, height: 110 }} />
+        <MiniMap pannable zoomable position="bottom-right" nodeColor="#64748b" maskColor="rgba(2,6,23,0.7)" style={{ width: 160, height: 110 }} className="max-lg:!hidden" />
       </ReactFlow>
     </div>
   );

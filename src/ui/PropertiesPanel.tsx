@@ -907,7 +907,7 @@ function ChecksTab() {
 
 const TAB_LABEL = { props: 'Proprietà', checks: 'Cablaggio', norm: 'Norma', info: 'Info', exercise: 'Esercizio' } as const;
 
-export function PropertiesPanel() {
+export function PropertiesPanel({ className = 'w-[20.625rem]' }: { className?: string }) {
   const selection = useStore((s) => s.selection);
   const project = useStore((s) => s.project);
   const tab = useStore((s) => s.rightTab);
@@ -918,7 +918,7 @@ export function PropertiesPanel() {
   const wire = selection?.type === 'wire' ? project.wires.find((w) => w.id === selection.id) : undefined;
 
   return (
-    <aside className="flex h-full w-[20.625rem] shrink-0 flex-col border-l border-slate-800 bg-slate-900/80">
+    <aside className={`flex h-full shrink-0 flex-col border-l border-slate-800 bg-slate-900/80 ${className}`}>
       <div className="flex border-b border-slate-800 text-[0.75rem]">
         {(exerciseActive ? (['exercise', 'props', 'checks', 'norm', 'info'] as const) : (['props', 'checks', 'norm', 'info'] as const)).map((t) => (
           <button

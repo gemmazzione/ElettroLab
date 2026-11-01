@@ -27,7 +27,8 @@ export function Dashboard() {
   const select = useStore((s) => s.select);
   const prot = useStore((s) => s.prot);
   const faultCount = useStore((s) => (s.project.faults ?? []).length);
-  const [open, setOpen] = useState(true);
+  // Su schermi bassi o stretti parte chiusa, per lasciare spazio allo schema.
+  const [open, setOpen] = useState(() => typeof window === 'undefined' || (window.innerWidth >= 1024 && window.innerHeight >= 1000));
   if (!running) return null;
 
   const header = (
