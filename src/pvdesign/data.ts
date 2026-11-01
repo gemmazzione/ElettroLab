@@ -294,6 +294,59 @@ export const ECONOMIC_SOURCES: Record<'importPrice' | 'exportPrice' | 'vat' | 'd
   },
 };
 
+/** Fonti della guida a risparmio e incentivi (verificate a novembre 2026). */
+export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'other', PriceSource[]> = {
+  deduction: [
+    {
+      label: 'Edilizia.com – Bonus fotovoltaico 2026',
+      url: 'https://www.edilizia.com/detrazioni-fiscali/bonus-fotovoltaico-2026-la-guida-alla-detrazione-50-e-requisiti-aggiornati/',
+      date: '2026',
+      note: '50% / 36%, limite 96.000 € per unità condiviso con le altre ristrutturazioni, 10 quote, bonifico parlante, comunicazione ENEA',
+    },
+    {
+      label: 'MySolution – Detrazioni confermate dalla legge di bilancio 2026',
+      url: 'https://www.mysolution.it/fisco/informazioni/news/2025/12/30/impianti-fotovoltaici-detrazioni-confermate-dalla-legge-di-bilancio-2026/',
+      date: 'dicembre 2025',
+      note: "abitazione principale: 50% nel 2026, 36% nel 2027; accumulo compreso",
+    },
+  ],
+  rid: [
+    {
+      label: 'QualEnergia – Fine dello scambio sul posto, ritiro dedicato',
+      url: 'https://www.qualenergia.it/articoli/fine-scambio-posto-nuovo-modello-unico-ritiro-dedicato/',
+      date: '2025',
+      note: 'niente scambio sul posto per gli impianti entrati in esercizio dopo il 29 maggio 2025',
+    },
+    { label: 'Solare Industriale – Ritiro dedicato', url: 'https://www.solareindustriale.it/incentivi/ritiro-dedicato', date: '2026', note: 'prezzo minimo garantito 47,5 €/MWh' },
+  ],
+  cer: [
+    {
+      label: 'ANCE – Decreto CER, nota di approfondimento',
+      url: 'https://ance.it/wp-content/uploads/allegati/20240125_Decreto_CER_Nota_di_approfondimento.pdf',
+      date: 'gennaio 2024',
+      note: 'tariffa per 20 anni più circa 8 €/MWh di ARERA; cumulabile con la detrazione al 50%, non con il Superbonus; tariffe fino al 31 dicembre 2027',
+    },
+    ...ECONOMIC_SOURCES.cer.sources,
+  ],
+  pnrr: [
+    {
+      label: 'Ediltecnico – Nuovo decreto CER 2025',
+      url: 'https://ediltecnico.it/nuovo-decreto-cer/',
+      date: '2025',
+      note: 'contributo PNRR del 40% esteso ai Comuni fino a 50.000 abitanti (DM 127/2025)',
+    },
+  ],
+  other: [
+    {
+      label: 'Money.it – Fotovoltaico 2026, cosa cambia dal 2027',
+      url: 'https://www.money.it/bonus-fotovoltaico-2026',
+      date: '2026',
+      note: 'Conto Termico 3.0 solo con una pompa di calore, alternativo alla detrazione; reddito energetico con ISEE sotto 15.000 €',
+    },
+    ...ECONOMIC_SOURCES.vat.sources,
+  ],
+};
+
 /** Pesi orari del profilo dei consumi del progetto (quello disegnato a mano o uno tipico). */
 export function profileWeights(c: { profile: LoadProfileId; customWeights: number[] }): number[] {
   if (c.profile === 'manuale' && c.customWeights.length === 24 && c.customWeights.some((w) => w > 0)) return c.customWeights.map((w) => Math.max(0, w));

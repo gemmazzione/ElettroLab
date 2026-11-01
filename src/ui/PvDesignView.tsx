@@ -13,6 +13,7 @@ import { Animated, CheckSummary, FieldLabel, FlashRow, Grid, Kpi, More, Notes, N
 import { FutureLoads, MeasuredImport } from './pvdesign/ConsumptionExtras';
 import { LoadProfileEditor } from './pvdesign/LoadProfileEditor';
 import { ProjectBar } from './pvdesign/ProjectLibrary';
+import { IncentivesGuide, SavingsBreakdown } from './pvdesign/SavingsGuide';
 import { WeatherPanel } from './pvdesign/WeatherPanel';
 import { BatteryStep, Sources } from './pvdesign/BatteryStep';
 
@@ -1130,6 +1131,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
         <Kpi label="Bolletta dell'energia" value={`${eur(ec.billBefore)} → ${eur(Math.max(0, ec.billAfter))}`} sub="all'anno, senza e con impianto" />
       </div>
       <CashChart cash={ec.cashflow} />
+      <SavingsBreakdown r={r} />
       <Grid>
         <Num label="Prezzo dell'energia" value={e.importPrice} onChange={(v) => set({ importPrice: v })} suffix="€/kWh" min={0} max={2} step={0.01} hint="Quanto paghi in tutto per ogni kWh in bolletta (energia, rete, oneri, imposte): dividi la spesa variabile per i kWh consumati" />
         <Num label="Energia venduta" value={e.exportPrice} onChange={(v) => set({ exportPrice: v })} suffix="€/kWh" min={0} max={1} step={0.01} hint="Quanto ti pagano l'energia mandata in rete (per esempio ritiro dedicato): varia con il mercato" />
@@ -1303,6 +1305,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
           <Kpi label="Detrazione totale" value={eur(ec.deductionTotal)} />
         </div>
       </More>
+      <IncentivesGuide r={r} />
       <p className="text-[0.71875rem] leading-snug text-slate-500">
         Prezzi, aliquote, detrazioni e valore dell'energia cambiano nel tempo e da caso a caso: sostituiscili con preventivi e condizioni reali. Non sono considerati quote fisse della bolletta,
         finanziamenti, costi di connessione del distributore e variazioni di tariffa.
