@@ -777,7 +777,7 @@ function View3DStep({ n }: { n: number }) {
       n={n}
       title="Vista 3D"
       intro="La tua casa ricostruita dalla pianta, con i moduli del progetto e il sole nel mese e nell'ora che scegli."
-      help="Sposta il cursore dell'ora o premi «Fai scorrere la giornata» e guarda dove cadono le ombre. Se molti moduli restano in ombra, aumenta l'ombreggiamento nel passo «Clima e ombre»."
+      help="Aggiungi gli alberi e gli edifici vicini con i pulsanti sotto la vista e cliccando sul terreno: la mappa delle ombre calcola quanta energia perdi in un anno, e con «Usa nel calcolo» la riporto nella produzione. Con il cursore dell'ora vedi dove cadono le ombre."
     >
       <Suspense fallback={<Loading />}>
         <Roof3D />

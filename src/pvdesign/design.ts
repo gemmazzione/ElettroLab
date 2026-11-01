@@ -1,5 +1,6 @@
 import type { InstallMethod } from '../rules/ampacity';
 import type { RoofSpec } from './roof';
+import type { Obstacle } from './shading';
 import { DEFAULT_PRICES, INVERTERS, LOAD_PROFILES, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
 
 /** Dati di un progetto di impianto fotovoltaico (sezione «Progetta FV»). */
@@ -9,6 +10,8 @@ export interface PvDesign {
   location: { lat: number | null; lon: number | null; address: string; zoom: number };
   /** Tetto disegnato sulla foto satellitare */
   roof: RoofSpec;
+  /** Alberi ed edifici vicini che possono fare ombra (vista 3D) */
+  obstacles: Obstacle[];
   site: {
     presetId: string;
     latitude: number;
@@ -85,6 +88,7 @@ export function defaultDesign(): PvDesign {
   return {
     name: 'Impianto fotovoltaico domestico',
     location: { lat: null, lon: null, address: '', zoom: 6 },
+    obstacles: [],
     roof: { footprint: [], type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale' },
     site: { presetId: s.id, latitude: s.latitude, hDay: [...s.hDay], tMean: [...s.tMean], tMin: s.tMin, tMax: s.tMax, tilt: 25, azimuth: 0, albedo: 0.2, shadingPct: 2, roofM2: 0, mounting: 'complanare' },
     consumption: { annualKWh: 3500, profile: 'uniforme', contractKW: 3, customWeights: [...LOAD_PROFILES.uniforme.weights] },
@@ -136,6 +140,7 @@ export function normalizeDesign(x: unknown): PvDesign {
     ...o,
     location: { ...d.location, ...o.location },
     roof: { ...d.roof, ...o.roof },
+    obstacles: Array.isArray(o.obstacles) ? o.obstacles : [],
     site: { ...d.site, ...o.site },
     consumption: { ...d.consumption, ...o.consumption },
     module: { ...d.module, ...o.module },
