@@ -15,14 +15,15 @@ export function SavingsBreakdown({ r }: { r: DesignResults }) {
   const ec = r.economics;
   const y = r.yield;
   const selfPrice = y.selfKWh > 0 ? ec.firstYearSaving / y.selfKWh : 0;
-  const dedYear = e.deductionYears > 0 ? ec.deductionTotal / e.deductionYears : 0;
+  const rate = e.deductionYears > 0 ? ec.deductionTotal / e.deductionYears : 0;
+  const dedYear = e.taxPerYear > 0 ? Math.min(rate, e.taxPerYear) : rate;
   const rows: { label: string; how: string; value: number; color: string }[] = [
     { label: 'Energia che non compri più', how: `${f(y.selfKWh)} kWh usati in casa × ${f(selfPrice, 3)} €/kWh`, value: ec.firstYearSaving, color: '#34d399' },
     { label: 'Energia venduta in rete', how: `${f(y.exportKWh)} kWh immessi × ${f(e.exportPrice, 3)} €/kWh (ritiro dedicato)`, value: ec.firstYearExport, color: '#38bdf8' },
     ...(ec.firstYearCer > 0
       ? [{ label: 'Incentivo della comunità energetica', how: `${f(y.exportKWh * (e.cerSharedPct / 100))} kWh condivisi × ${f(e.cerIncentive, 3)} €/kWh, per 20 anni`, value: ec.firstYearCer, color: '#a78bfa' }]
       : []),
-    ...(dedYear > 0 ? [{ label: 'Quota della detrazione fiscale', how: `${eur(ec.deductionTotal)} in ${e.deductionYears} rate annuali`, value: dedYear, color: '#fbbf24' }] : []),
+    ...(dedYear > 0 ? [{ label: 'Quota della detrazione fiscale', how: `${eur(ec.deductionTotal)} in ${e.deductionYears} rate annuali${dedYear < rate ? `, limitate dall'IRPEF (${eur(rate)} la rata piena)` : ''}`, value: dedYear, color: '#fbbf24' }] : []),
     ...(e.omPerYear > 0 ? [{ label: 'Manutenzione e assicurazione', how: 'spesa annua stimata', value: -e.omPerYear, color: '#f87171' }] : []),
   ];
   const net = rows.reduce((a, x) => a + x.value, 0);
@@ -192,7 +193,7 @@ export function IncentivesGuide({ r }: { r: DesignResults }) {
               <b>50%</b> nel 2026 sull'abitazione principale, per il proprietario o chi ha un diritto reale (usufrutto, abitazione). <b>36%</b> negli altri casi: seconde case, inquilini, familiari
               conviventi.
             </li>
-            <li>Dal 2027 è previsto un calo: per l'abitazione principale si parla del 36%.</li>
+            <li>Per le spese del 2027 la legge in vigore prevede il 36% (abitazione principale) e il 30% (altri immobili). La manovra approvata dal Consiglio dei ministri il 28 ottobre 2026 propone di confermare 50% e 36%: va ancora approvata dal Parlamento.</li>
             <li>Spesa massima 96.000 € per abitazione, insieme agli altri lavori di ristrutturazione. La batteria è compresa, anche se aggiunta dopo.</li>
             <li>
               Recuperi solo fino alle tasse che paghi: per {dedYear > 0 ? <>usare {eur(dedYear)} all'anno</> : 'usare ogni rata'} ti serve almeno altrettanta IRPEF. La parte che non trova

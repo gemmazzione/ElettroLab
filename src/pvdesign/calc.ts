@@ -773,6 +773,11 @@ export interface Economics {
   total: number;
   perKWp: number;
   deductionTotal: number;
+  /** Detrazione davvero recuperata (rate limitate dall'IRPEF) e quella persa [€] */
+  deductionUsed: number;
+  deductionLost: number;
+  /** Contributo a fondo perduto [€] */
+  grant: number;
   /** Beneficio del primo anno: energia non acquistata + energia venduta [€] */
   firstYearSaving: number;
   firstYearExport: number;
@@ -830,20 +835,26 @@ export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
   const selfValue = byBand(y.bands.self);
   const exportValue = y.exportKWh * e.exportPrice;
   // Comunità energetica: incentivo sull'energia condivisa per 20 anni.
-  const cerValue = e.cer ? y.exportKWh * (e.cerSharedPct / 100) * e.cerIncentive : 0;
+  // Con un contributo in conto capitale la tariffa cala in proporzione: con il 40% si dimezza, oltre il 40% non spetta.
+  const grant = total * (e.grantPct / 100);
+  const cerValue = e.cer ? y.exportKWh * (e.cerSharedPct / 100) * e.cerIncentive * Math.max(0, 1 - e.grantPct / 80) : 0;
   const saving = (k: number) => {
     const deg = (1 - d.losses.degradationPct / 100) ** (k - 1);
     const infl = (1 + e.energyInflationPct / 100) ** (k - 1);
     return deg * infl * (selfValue + exportValue) + (k <= 20 ? deg * cerValue : 0);
   };
-  const cashflow: Economics['cashflow'] = [{ year: 0, flow: -total, cumulative: -total }];
-  let cum = -total;
-  let npv = -total;
-  let pvCost = total;
+  const cashflow: Economics['cashflow'] = [{ year: 0, flow: grant - total, cumulative: grant - total }];
+  let cum = grant - total;
+  let npv = grant - total;
+  let pvCost = total - grant;
+  let dedUsed = 0;
   let pvEnergy = 0;
   let payback: number | null = null;
   for (let k = 1; k <= e.years; k++) {
-    const ded = k <= e.deductionYears && e.deductionYears > 0 ? deductionTotal / e.deductionYears : 0;
+    // La rata oltre l'IRPEF dell'anno non si recupera.
+    const rate = k <= e.deductionYears && e.deductionYears > 0 ? deductionTotal / e.deductionYears : 0;
+    const ded = e.taxPerYear > 0 ? Math.min(rate, e.taxPerYear) : rate;
+    dedUsed += ded;
     const cost = e.omPerYear + (k === e.inverterReplaceYear ? inverterCost : 0);
     const flow = saving(k) + ded - cost;
     const prev = cum;
@@ -862,6 +873,9 @@ export function computeEconomics(d: PvDesign, y: YieldResult): Economics {
     total,
     perKWp: kwp > 0 ? total / kwp : 0,
     deductionTotal,
+    deductionUsed: dedUsed,
+    deductionLost: deductionTotal - dedUsed,
+    grant,
     firstYearSaving: selfValue,
     firstYearExport: exportValue,
     firstYearCer: cerValue,

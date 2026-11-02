@@ -49,3 +49,20 @@ describe('relazione PDF con due falde, ombre, fasce e CER', () => {
     expect(doc.getNumberOfPages()).toBeGreaterThanOrEqual(5);
   });
 });
+
+describe('relazione PDF con risparmio, prestito e contatore', () => {
+  it('include agevolazioni, scenari, finanziamento e potenza', () => {
+    const base = defaultDesign();
+    const d = {
+      ...base,
+      consumption: { ...base.consumption, heatPumpKWh: 3000, evKm: 10000 },
+      economics: { ...base.economics, taxPerYear: 150, loan: { enabled: true, pct: 80, tanPct: 6.5, years: 8 } },
+    };
+    const doc = buildPvDesignPdf(d, computeDesign(d));
+    const text = Array.from({ length: doc.getNumberOfPages() }, (_, i) => {
+      doc.setPage(i + 1);
+      return (doc.internal as unknown as { pages: string[][] }).pages[i + 1]!.join('\n');
+    }).join('\n');
+    for (const k of ['Il risparmio nel dettaglio', 'Quale agevolazione conviene', 'Scenari', 'Finanziamento', 'Potenza del contatore']) expect(text).toContain(k);
+  });
+});

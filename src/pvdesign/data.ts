@@ -295,7 +295,7 @@ export const ECONOMIC_SOURCES: Record<'importPrice' | 'exportPrice' | 'vat' | 'd
 };
 
 /** Fonti della guida a risparmio e incentivi (verificate a novembre 2026). */
-export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'other', PriceSource[]> = {
+export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'other' | 'power', PriceSource[]> = {
   deduction: [
     {
       label: 'Edilizia.com – Bonus fotovoltaico 2026',
@@ -308,6 +308,12 @@ export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'o
       url: 'https://www.mysolution.it/fisco/informazioni/news/2025/12/30/impianti-fotovoltaici-detrazioni-confermate-dalla-legge-di-bilancio-2026/',
       date: 'dicembre 2025',
       note: "abitazione principale: 50% nel 2026, 36% nel 2027; accumulo compreso",
+    },
+    {
+      label: 'Infobuild – Bonus edilizi 2027: proroga del 50% e 36% in manovra',
+      url: 'https://www.infobuild.it/bonus-edilizi-2027-proroga-50-36-manovra',
+      date: '29 ottobre 2026',
+      note: 'legge in vigore per il 2027: 36% / 30%; il DDL di bilancio 2027 propone 50% / 36%, da approvare in Parlamento',
     },
   ],
   rid: [
@@ -344,6 +350,14 @@ export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'o
       note: 'Conto Termico 3.0 solo con una pompa di calore, alternativo alla detrazione; reddito energetico con ISEE sotto 15.000 €',
     },
     ...ECONOMIC_SOURCES.vat.sources,
+  ],
+  power: [
+    {
+      label: 'Luce-gas.it – Quanto costa aumentare la potenza del contatore',
+      url: 'https://luce-gas.it/guida/contatore/potenza/aumento',
+      date: 'ottobre 2026',
+      note: "delibera ARERA 575/2025: 62,30 €/kW (fino a 6 kW finali) o 78,81 €/kW, 23 € di pratica; quota potenza 23,72 €/kW all'anno, IVA esclusa",
+    },
   ],
 };
 

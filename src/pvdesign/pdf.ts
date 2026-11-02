@@ -2,9 +2,11 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
 import { batteryAdvice, EV_KWH_PER_KM, f, fieldDesign, fields, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
-import { DEFAULT_PRICES, ECONOMIC_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
+import { DEFAULT_PRICES, ECONOMIC_SOURCES, INCENTIVE_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
 import { isHybrid, type PvDesign } from './design';
+import { powerAdvice } from './money';
 import { lossRgb, planImage, type PlanImage } from './pdfPlan';
+import { savingsSection } from './pdfSavings';
 import { fieldLayouts, roofLayout, ROOF_TYPES } from './roof';
 import { annualShading, type ShadingResult } from './shading';
 
@@ -377,7 +379,8 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
         ? ['Prezzo energia prelevata F1 / F2 / F3', `${e.bandPrices.map((v) => f(v, 3)).join(' / ')} EUR/kWh; energia immessa ${f(e.exportPrice, 3)} EUR/kWh`]
         : ['Prezzo energia prelevata / valore energia immessa', `${f(e.importPrice, 3)} / ${f(e.exportPrice, 3)} EUR/kWh`],
       ...(e.cer ? [['Comunità energetica', `${f(e.cerSharedPct)}% dell'energia immessa condivisa, incentivo ${f(e.cerIncentive, 3)} EUR/kWh per 20 anni = ${eur(ec.firstYearCer)} il primo anno`]] : []),
-      ['Detrazione fiscale', `${f(e.deductionPct)}% in ${e.deductionYears} anni = ${eur(ec.deductionTotal)}`],
+      ['Detrazione fiscale', `${f(e.deductionPct)}% in ${e.deductionYears} anni = ${eur(ec.deductionTotal)}${ec.deductionLost > 1 ? `, di cui ${eur(ec.deductionLost)} persi per IRPEF insufficiente (${eur(e.taxPerYear)} all'anno)` : ''}`],
+      ...(ec.grant > 0 ? [['Contributo a fondo perduto', `${f(e.grantPct)}% = ${eur(ec.grant)}`]] : []),
       ['Aumento annuo energia / degrado moduli', `${f(e.energyInflationPct, 1)}% / ${f(d.losses.degradationPct, 1)}%`],
       ['Manutenzione / sostituzione inverter', `${eur(e.omPerYear)} all'anno / anno ${e.inverterReplaceYear || '-'}`],
       ['Risparmio del primo anno', `${eur(ec.firstYearSaving)} di energia non acquistata + ${eur(ec.firstYearExport)} di energia venduta${ec.firstYearCer > 0 ? ` + ${eur(ec.firstYearCer)} di incentivo CER` : ''}`],
@@ -395,6 +398,9 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     [1, 2, 2],
   );
 
+  // ---------------------------------------------------------------- risparmio e agevolazioni
+  savingsSection(d, r, { heading, table, bullets });
+
   // ---------------------------------------------------------------- fonti dei prezzi
   heading(`Fonti dei prezzi (aggiornate a ${PRICES_CHECKED})`, 'Listino IVA esclusa, comprensivo del margine di chi vende e installa. Le voci senza fonte sono stime. Le fonti riportano dati di mercato indicativi: per un impianto reale valgono i preventivi.');
   const srcRows: string[][] = [];
@@ -408,6 +414,11 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   addSrc('Detrazione fiscale', ECONOMIC_SOURCES.deduction.sources);
   addSrc('IVA', ECONOMIC_SOURCES.vat.sources);
   if (e.cer) addSrc('Incentivo CER', ECONOMIC_SOURCES.cer.sources);
+  addSrc('Detrazione: regole 2026 e 2027', INCENTIVE_SOURCES.deduction);
+  addSrc('Ritiro dedicato', INCENTIVE_SOURCES.rid);
+  addSrc('Comunità energetiche e PNRR', [...INCENTIVE_SOURCES.cer, ...INCENTIVE_SOURCES.pnrr]);
+  addSrc('Altri aiuti', INCENTIVE_SOURCES.other);
+  if (powerAdvice(d.consumption)) addSrc('Aumento di potenza', INCENTIVE_SOURCES.power);
   if (w) srcRows.push(['Dati climatici', `PVGIS, Commissione europea JRC: anno tipo, banca dati ${w.source}`, 'https://re.jrc.ec.europa.eu/pvg_tools/it/']);
   table(['Voce', 'Fonte e dato', 'Indirizzo'], srcRows, [2, 4, 3.6]);
 
@@ -427,7 +438,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     d.consumption.measured
       ? 'Consumi: curva di carico misurata dal distributore, media per mese e ora del giorno; i mesi mancanti sono ricavati dai presenti.'
       : 'Consumi: ripartizione mensile e profilo orario tipici, scalati sul consumo annuo indicato.',
-    'Costi: listino indicativo; IVA, detrazioni e valore dell\'energia sono parametri da verificare secondo la normativa fiscale e il mercato del momento. Non sono considerate quote fisse della bolletta, finanziamenti e costi di connessione.',
+    "Costi: listino indicativo; IVA, detrazioni e valore dell\'energia sono parametri da verificare secondo la normativa fiscale e il mercato del momento. Non sono considerate le quote fisse della bolletta e i costi di connessione; il finanziamento è calcolato solo se indicato. Gli scenari variano prezzi dell'energia, rincari e produzione attorno alle ipotesi del progetto.",
     'Criteri per cavi e fusibili di stringa ripresi dalla pratica di progetto (IEC 62548) e riferimenti CEI 0-21 indicati come non verificati sul testo.',
   ]);
   y += 4;

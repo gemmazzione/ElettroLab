@@ -14,6 +14,7 @@ import { FutureLoads, MeasuredImport } from './pvdesign/ConsumptionExtras';
 import { LoadProfileEditor } from './pvdesign/LoadProfileEditor';
 import { ProjectBar } from './pvdesign/ProjectLibrary';
 import { IncentivesGuide, SavingsBreakdown } from './pvdesign/SavingsGuide';
+import { DeductionSettings, IncentiveCompare, LoanPanel, MonthlyBills, PowerCheck, ScenarioRange } from './pvdesign/MoneyTools';
 import { WeatherPanel } from './pvdesign/WeatherPanel';
 import { BatteryStep, Sources } from './pvdesign/BatteryStep';
 
@@ -639,6 +640,7 @@ function ConsumptionStep({ n }: { n: number }) {
         </p>
       )}
       <FutureLoads c={c} set={set} />
+      <PowerCheck c={c} />
     </Step>
   );
 }
@@ -1131,13 +1133,16 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
         <Kpi label="Bolletta dell'energia" value={`${eur(ec.billBefore)} → ${eur(Math.max(0, ec.billAfter))}`} sub="all'anno, senza e con impianto" />
       </div>
       <CashChart cash={ec.cashflow} />
+      <ScenarioRange r={r} />
       <SavingsBreakdown r={r} />
+      <MonthlyBills r={r} />
       <Grid>
         <Num label="Prezzo dell'energia" value={e.importPrice} onChange={(v) => set({ importPrice: v })} suffix="€/kWh" min={0} max={2} step={0.01} hint="Quanto paghi in tutto per ogni kWh in bolletta (energia, rete, oneri, imposte): dividi la spesa variabile per i kWh consumati" />
         <Num label="Energia venduta" value={e.exportPrice} onChange={(v) => set({ exportPrice: v })} suffix="€/kWh" min={0} max={1} step={0.01} hint="Quanto ti pagano l'energia mandata in rete (per esempio ritiro dedicato): varia con il mercato" />
         <Num label={<Term k="detrazione">Detrazione</Term>} value={e.deductionPct} onChange={(v) => set({ deductionPct: v })} suffix="%" min={0} max={110} hint="Dipende dalle regole fiscali dell'anno e dal tipo di immobile: verificale" />
         <Num label="IVA" value={e.vatPct} onChange={(v) => set({ vatPct: v })} suffix="%" min={0} max={30} hint="Aliquota agevolata comune per gli impianti sulle abitazioni: verifica il caso specifico" />
       </Grid>
+      <DeductionSettings r={r} set={set} />
       <More label={`Tariffa a fasce orarie${e.tariff === 'fasce' ? ' · attiva' : ''}`} defaultOpen={e.tariff === 'fasce' || undefined}>
         <div className="flex flex-wrap items-center gap-2 text-[0.75rem] text-slate-300" role="radiogroup" aria-label="Tipo di tariffa">
           La mia bolletta è:
@@ -1206,6 +1211,8 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
           </div>
         )}
       </More>
+      <LoanPanel r={r} set={set} />
+      <IncentiveCompare r={r} />
       <More label={`Da dove vengono questi valori (fonti aggiornate a ${PRICES_CHECKED})`}>
         <div className="grid gap-3 xl:grid-cols-2">
           {(

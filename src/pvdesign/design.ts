@@ -105,6 +105,16 @@ export interface PvDesign {
     cerSharedPct: number;
     /** Incentivo sull'energia condivisa [€/kWh] */
     cerIncentive: number;
+    /** Regole della detrazione: anno della spesa (2027 secondo la legge in vigore o secondo la manovra proposta) */
+    taxYear: TaxYear;
+    /** Abitazione principale del proprietario (o di chi ha un diritto reale) */
+    mainHome: boolean;
+    /** IRPEF pagata in un anno [€]: la rata della detrazione oltre questo importo si perde; 0 = non considerata */
+    taxPerYear: number;
+    /** Contributo a fondo perduto sulla spesa (per esempio PNRR per le CER) [%]: riduce in proporzione la tariffa CER */
+    grantPct: number;
+    /** Finanziamento */
+    loan: { enabled: boolean; pct: number; tanPct: number; years: number };
   };
 }
 
@@ -169,6 +179,11 @@ export function defaultDesign(): PvDesign {
       cer: false,
       cerSharedPct: 60,
       cerIncentive: 0.08,
+      taxYear: '2026',
+      mainHome: true,
+      taxPerYear: 0,
+      grantPct: 0,
+      loan: { enabled: false, pct: 100, tanPct: 7, years: 10 },
     },
   };
 }
@@ -205,8 +220,17 @@ export function normalizeDesign(x: unknown): PvDesign {
     inverter: { ...d.inverter, ...o.inverter },
     losses: { ...d.losses, ...o.losses },
     cables: { ...d.cables, ...o.cables },
-    economics: { ...econ, prices },
+    economics: { ...econ, prices, loan: { ...d.economics.loan, ...o.economics?.loan } },
   };
 }
+
+export type TaxYear = '2026' | '2027' | '2027-manovra';
+/** Aliquote della detrazione [%] per abitazione principale e altri immobili. */
+export const DEDUCTION_RATES: Record<TaxYear, { label: string; main: number; other: number }> = {
+  '2026': { label: 'Spesa nel 2026', main: 50, other: 36 },
+  '2027': { label: 'Spesa nel 2027, legge in vigore', main: 36, other: 30 },
+  '2027-manovra': { label: 'Spesa nel 2027, se passa la manovra', main: 50, other: 36 },
+};
+export const deductionRate = (y: TaxYear, main: boolean) => DEDUCTION_RATES[y][main ? 'main' : 'other'];
 
 export const isHybrid = (d: PvDesign) => d.inverter.hybrid;
