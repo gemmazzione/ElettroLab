@@ -85,7 +85,47 @@ const MCCB_COMMON: InfoSection[] = [
   ),
 ];
 
+const MOTOR_COMMON: InfoSection[] = [
+  S('Come funziona', "Le tre correnti sfasate creano un campo magnetico rotante nello statore che trascina il rotore. A regime il motore assorbe la corrente nominale In = P / (√3 · 400 V · cos φ · η) con un fattore di potenza tra 0,8 e 0,9: serve potenza reattiva per magnetizzare il motore."),
+  S('Avviamento', "All'avvio il rotore è fermo e il motore assorbe da 6 a 8 volte la corrente nominale per qualche secondo. Con l'avviamento stella-triangolo la corrente di linea scende a un terzo; con un inverter resta vicina alla nominale. La protezione a monte deve sopportare lo spunto senza intervenire e proteggere comunque il motore dal sovraccarico."),
+  S('Come si protegge', "Di solito con un salvamotore (termico regolato sulla corrente del motore, classe 10 o 20, magnetico alto) e un contattore per il comando, oppure con interruttore magnetico, contattore e relè termico. Il magnetico deve stare sopra lo spunto; il termico non deve intervenire durante l'avviamento."),
+  S('Nel simulatore', "Carico trifase a stella con il cos φ di targa; la potenza assorbita è la potenza resa diviso il rendimento. Quando il motore viene alimentato, per il tempo di avviamento assorbe Ia/In volte la corrente nominale (con lo stesso cos φ: conta il modulo della corrente). Il picco asimmetrico del primo semiperiodo non è modellato."),
+];
+
+const CEE_COMMON: InfoSection[] = [
+  S('A cosa serve', "Le prese industriali CEE (CEI EN 60309) collegano macchine trifase e attrezzature di cantiere. Il colore indica la tensione (rossa: 400 V), la posizione del contatto di terra impedisce di inserire una spina di tensione diversa."),
+  S('Protezione', "Ogni presa va protetta da un interruttore con corrente nominale non superiore a quella della presa. Le prese interbloccate hanno un interruttore che impedisce di estrarre la spina sotto carico."),
+  S('Nel simulatore', "Carico trifase a stella con neutro, alla potenza dell'apparecchio collegato. Le verifiche trattano il circuito come circuito prese."),
+];
+
+const SALVAMOTORE: InfoSection[] = [
+      S('Regolazione', "Il termico Ir si regola sulla corrente di targa del motore. La classe (10 o 20) dice quanto il termico tollera l'avviamento: con 7,2 volte Ir interviene entro 10 s (classe 10) o 20 s (classe 20). Il magnetico è fisso, di solito circa 13 volte la taglia."),
+      S('Nel simulatore', "Termico di classe 10 o 20 (non intervento a 1,05·Ir, intervento a 1,2·Ir, a 7,2·Ir da freddo in circa 7 o 14 s); magnetico con la tolleranza di ±20% sulla soglia."),
+    ];
+
 export const COMPONENT_INFO: Record<string, ComponentInfo> = {
+  'motore-4kw': { title: 'Motore asincrono trifase 4 kW', summary: 'Motore a 4 poli con avviamento diretto: piccole macchine, pompe, nastri.', sections: MOTOR_COMMON },
+  'motore-15kw': { title: 'Motore asincrono trifase 15 kW', summary: 'Pompe, compressori e ventilatori: spunto alto con avviamento diretto.', sections: MOTOR_COMMON },
+  'motore-45kw': { title: 'Motore asincrono trifase 45 kW stella-triangolo', summary: 'Grandi motori: l\'avviamento stella-triangolo riduce lo spunto a un terzo.', sections: MOTOR_COMMON },
+  'rifasamento-50kvar': {
+    title: 'Batteria di condensatori di rifasamento',
+    summary: 'Fornisce la potenza reattiva chiesta dai motori: la rete non deve trasportarla.',
+    sections: [
+      S('A cosa serve', "Motori e trasformatori assorbono potenza reattiva induttiva. I condensatori ne producono di capacitiva: così la corrente al punto di consegna diminuisce, si riducono perdite e cadute di tensione e si evitano i corrispettivi per l'energia reattiva."),
+      S('Fattore di potenza', "Per le utenze non domestiche oltre 16,5 kW la bolletta conteggia l'energia reattiva in F1 e F2 quando supera il 33% di quella attiva, cioè con cos φ sotto 0,95, e con corrispettivi più alti sotto 0,8. ARERA sta rivedendo queste regole nel 2026 (delibera 350/2026/R/eel): verificale."),
+      S('Come si sceglie', "La potenza reattiva da installare è Q = P · (tan φ1 − tan φ2): con 100 kW da cos φ 0,8 a 0,95 servono circa 42 kvar. Oltre i condensatori fissi si usano batterie automatiche a gradini che seguono il carico."),
+      S('Nel simulatore', "Tre reattanze capacitive a stella, X = U² / Q per ramo. Il fattore di potenza risultante si legge sul punto di fornitura."),
+    ],
+  },
+  'presa-cee-16': { title: 'Presa industriale CEE 16 A', summary: 'Presa trifase 400 V da 16 A per macchine e attrezzature.', sections: CEE_COMMON },
+  'presa-cee-32': { title: 'Presa industriale CEE 32 A', summary: 'Presa trifase 400 V da 32 A.', sections: CEE_COMMON },
+  'presa-cee-63': { title: 'Presa industriale CEE 63 A', summary: 'Presa trifase 400 V da 63 A.', sections: CEE_COMMON },
+  'salvamotore-16': {
+    title: 'Salvamotore (interruttore per la protezione dei motori)',
+    summary: 'Termico regolato sulla corrente del motore e magnetico che sopporta lo spunto, in un solo apparecchio.',
+    sections: SALVAMOTORE,
+  },
+  'salvamotore-32': { title: 'Salvamotore 25–32 A', summary: 'Protezione di motori fino a circa 15 kW.', sections: SALVAMOTORE },
   'supply-cabina': {
     title: 'Cabina di trasformazione MT/BT (sistema TN-S)',
     summary: "Il trasformatore dell'azienda riceve la media tensione dal distributore e fornisce 400/230 V allo stabilimento.",

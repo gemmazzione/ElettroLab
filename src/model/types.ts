@@ -60,6 +60,8 @@ export type LoadCategory =
   | 'climatizzazione'
   | 'ricarica'
   | 'lavaggio'
+  | 'motore'
+  | 'rifasamento'
   | 'generico';
 
 // ---------------------------------------------------------------- parametri
@@ -125,6 +127,8 @@ export interface McbParams {
    */
   ir?: number;
   im?: number;
+  /** Classe d'intervento del relè termico per i motori (CEI EN 60947-4-1): 10 o 20; assente = termico di un interruttore */
+  tripClass?: 10 | 20;
 }
 
 /** Sezionatore portafusibili modulare con cartucce cilindriche gG. */
@@ -328,6 +332,23 @@ export interface LoadParams {
   designOn?: boolean;
   /** Stazione di ricarica per veicoli elettrici: gestione della potenza */
   evse?: EvseParams;
+  /** Motore asincrono: dati di targa e avviamento (powerW è la potenza elettrica assorbita = Pn / rendimento) */
+  motor?: MotorParams;
+  /** Batteria di condensatori di rifasamento: potenza reattiva [kvar] (sostituisce il carico ohmico-induttivo) */
+  kvar?: number;
+}
+
+/** Dati di targa di un motore asincrono e tipo di avviamento. */
+export interface MotorParams {
+  /** Potenza resa all'albero [W] */
+  pnW: number;
+  /** Rendimento [%] */
+  efficiency: number;
+  /** Corrente di avviamento diretto / corrente nominale (Ia/In) */
+  startRatio: number;
+  /** Durata dell'avviamento [s] */
+  startS: number;
+  starting: 'diretto' | 'stella-triangolo' | 'inverter';
 }
 
 /**

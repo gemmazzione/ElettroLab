@@ -1,4 +1,5 @@
 import { abs } from '../engine/complex';
+import { startFactor } from '../engine/motor';
 import { simulate, type SimResult } from '../engine/simulate';
 import { getPoles } from '../model/terminals';
 import type { ComponentInstance, Project } from '../model/types';
@@ -9,6 +10,7 @@ import {
   magneticBand,
   MAGNETIC_TRIP_S,
   magneticZone,
+  thermalModelOf,
   thermalSetting,
   residualTripTime,
   residualZone,
@@ -26,6 +28,9 @@ export interface DeviceProtState {
   warnedResidual?: boolean;
   /** Portafusibili: consumo di ogni cartuccia per polo (fonde a 1) */
   melt?: number[];
+  /** Motori: alimentato al passo precedente e secondi di avviamento che restano */
+  motorOn?: boolean;
+  startLeft?: number;
 }
 
 export type ProtState = Record<string, DeviceProtState>;
@@ -90,14 +95,48 @@ export function advance(
   let p = project;
   let cloned = false;
   const st: ProtState = structuredClone(prot);
-  let res = result ?? simulate(p);
   const events: StepEvent[] = [];
   let t = 0;
   let tripped = false;
   const horizonTotal = dt;
+  // Motori in avviamento: assorbono la corrente di spunto finché non finisce l'avviamento.
+  const startPower = () => {
+    const m = new Map<string, number>();
+    for (const c of p.components) {
+      const s = st[c.id];
+      if (c.params.kind === 'load' && c.params.p.motor && s?.startLeft && s.startLeft > 1e-6) m.set(c.id, c.params.p.powerW * startFactor(c.params.p.motor));
+    }
+    return m;
+  };
+  const sim = () => {
+    const m = startPower();
+    return m.size ? simulate(p, { loadPower: m }) : simulate(p);
+  };
+  let res = result && !startPower().size ? result : sim();
 
   for (let iter = 0; iter < 32; iter++) {
     const remaining = horizonTotal - t;
+    // Un motore appena alimentato inizia l'avviamento.
+    let started = false;
+    for (const c of p.components) {
+      if (c.params.kind !== 'load' || !c.params.p.motor) continue;
+      const s = (st[c.id] ??= { heat: 0 });
+      const on = res.ok && !!res.loads.get(c.id)?.energized && c.params.p.on;
+      if (on && !s.motorOn && c.params.p.motor.starting !== 'inverter') {
+        s.startLeft = c.params.p.motor.startS;
+        started = true;
+        events.push({
+          at: t,
+          level: 'info',
+          text: `${c.label} (${c.params.p.name}) si avvia: per ${f1(c.params.p.motor.startS, 1)} s assorbe circa ${f1(startFactor(c.params.p.motor), 1)} volte la corrente nominale (avviamento ${c.params.p.motor.starting}).`,
+          componentIds: [c.id],
+        });
+      }
+      if (!on) s.startLeft = 0;
+      s.motorOn = on;
+    }
+    if (started) res = sim();
+    const startMin = Math.min(Infinity, ...[...startPower().keys()].map((id) => st[id]!.startLeft!));
     const cands: Candidate[] = [];
     const ratios = new Map<string, number>();
     const fuseRatios = new Map<string, number[]>();
@@ -134,7 +173,7 @@ export function advance(
           const band = magneticBand(pr.p);
           const zone = magneticZone(ratio, band);
           // Il modello termico vale per i sovraccarichi: oltre la soglia magnetica certa prevale lo sganciatore magnetico.
-          const tt = zone === 'certa' ? Infinity : thermalTripTime(s.heat, thermalRatio);
+          const tt = zone === 'certa' ? Infinity : thermalTripTime(s.heat, thermalRatio, pr.kind === 'mcb' ? thermalModelOf(pr.p) : undefined);
           if (Number.isFinite(tt)) cands.push({ id: c.id, time: tt, cause: 'termico', current: i });
           if (zone === 'certa') cands.push({ id: c.id, time: MAGNETIC_TRIP_S, cause: 'magnetico', current: i });
           if (zone === 'incerta' && !s.warnedMagnetic) {
@@ -172,14 +211,16 @@ export function advance(
 
     const tmin = cands.reduce((m, c) => Math.min(m, c.time), Infinity);
     const limit = mode === 'step' ? remaining : horizonTotal - t;
-    const advanceBy = tmin <= limit ? tmin : mode === 'step' ? remaining : 0;
+    // Prossimo evento: un intervento o la fine di un avviamento.
+    const next = Math.min(tmin, startMin);
+    const advanceBy = next <= limit ? next : mode === 'step' ? remaining : startMin < Infinity ? Math.min(startMin, limit) : 0;
 
     // Evoluzione termica di tutti i magnetotermici nell'intervallo.
     if (advanceBy > 0) {
       for (const c of p.components) {
         if (c.params.kind !== 'mcb' && c.params.kind !== 'rcbo') continue;
         const s = st[c.id]!;
-        s.heat = heatAfter(s.heat, ratios.get(c.id) ?? 0, advanceBy);
+        s.heat = heatAfter(s.heat, ratios.get(c.id) ?? 0, advanceBy, c.params.kind === 'mcb' ? thermalModelOf(c.params.p) : undefined);
       }
       for (const c of p.components) {
         if (c.params.kind !== 'fuse') continue;
@@ -193,7 +234,24 @@ export function advance(
       }
     }
     t += advanceBy;
-    if (tmin > limit) break;
+    let startEnded = false;
+    for (const c of p.components) {
+      const s = st[c.id];
+      if (!s?.startLeft || s.startLeft <= 0) continue;
+      s.startLeft = Math.max(0, s.startLeft - advanceBy);
+      if (s.startLeft <= 1e-6) {
+        s.startLeft = 0;
+        startEnded = true;
+      }
+    }
+    if (tmin > advanceBy + 1e-9) {
+      // Nessun intervento in questo intervallo: se è finito un avviamento si ricalcola e si prosegue.
+      if (startEnded) {
+        res = sim();
+        if (t < horizonTotal - 1e-9) continue;
+      }
+      break;
+    }
 
     // Interventi simultanei (entro 1 ms): nessuna selettività garantita.
     const now = cands.filter((c) => c.time <= tmin + 1e-3);
@@ -258,7 +316,7 @@ export function advance(
         });
       }
     }
-    res = simulate(p);
+    res = sim();
   }
 
   return { project: p, prot: st, result: res, events, tripped, elapsed: t };

@@ -1,5 +1,5 @@
 import type { NodeProps } from '@xyflow/react';
-import { Activity, AirVent, Car, CookingPot, Droplets, Flame, Lightbulb, Plug, Power, Refrigerator, Sun, WashingMachine, Zap } from 'lucide-react';
+import { Activity, AirVent, Car, Cog, CookingPot, Droplets, Flame, Gauge, Lightbulb, Plug, Power, Refrigerator, Sun, WashingMachine, Zap } from 'lucide-react';
 import { memo } from 'react';
 import { deviceCurrent } from '../../engine/simulate';
 import { TERMINAL_Y_BOTTOM, TERMINAL_Y_TOP } from '../../model/geometry';
@@ -237,6 +237,8 @@ const LOAD_ICON: Record<LoadCategory, typeof Plug> = {
   ricarica: Car,
   refrigerazione: Refrigerator,
   riscaldamento: Flame,
+  motore: Cog,
+  rifasamento: Gauge,
   generico: Activity,
 };
 

@@ -1,6 +1,6 @@
 import { getPoles } from '../model/terminals';
 import type { ComponentInstance, TripCurve } from '../model/types';
-import { fuseConventional, fuseMeltTime, isIndustrialBreaker, magneticBand, magneticZone, thermalSetting, thermalTripTime } from '../protection/curves';
+import { fuseConventional, fuseMeltTime, isIndustrialBreaker, magneticBand, magneticZone, thermalModelOf, thermalSetting, thermalTripTime, type ThermalModel } from '../protection/curves';
 import { AMPACITY_SOURCE, K_ADIABATIC } from './ampacity';
 import type { CircuitCtx, NormCtx } from './context';
 import type { NormRef, Rule, RuleOutcome, RuleSet } from './types';
@@ -33,7 +33,7 @@ type R = Rule<NormCtx>;
  */
 const ocpParams = (
   c: ComponentInstance | undefined,
-): { in: number; icn: number; curve: TripCurve | null; band: [number, number] | null; label: string; iF: number; ifText: string } | null => {
+): { in: number; icn: number; curve: TripCurve | null; band: [number, number] | null; label: string; iF: number; ifText: string; model?: ThermalModel } | null => {
   if (!c) return null;
   if (c.params.kind === 'mcb' || c.params.kind === 'rcbo') {
     const p = c.params.p;
@@ -45,9 +45,10 @@ const ocpParams = (
         icn: p.icn,
         curve: p.curve,
         band: [(lo * p.in) / ir, (hi * p.in) / ir],
-        label: `Ir = ${f(ir)} A, Im = ${f(c.params.p.im!, 1)}·In`,
-        iF: 1.3 * ir,
-        ifText: '1,3 × Ir (corrente convenzionale di intervento, CEI EN 60947-2)',
+        label: `Ir = ${f(ir)} A, Im = ${f(c.params.p.im!, 1)}·In${c.params.p.tripClass ? `, classe ${c.params.p.tripClass}` : ''}`,
+        iF: (c.params.p.tripClass ? 1.2 : 1.3) * ir,
+        ifText: c.params.p.tripClass ? `1,2 × Ir (relè termico di classe ${c.params.p.tripClass}, CEI EN 60947-4-1)` : '1,3 × Ir (corrente convenzionale di intervento, CEI EN 60947-2)',
+        model: thermalModelOf(c.params.p),
       };
     }
     return { in: p.in, icn: p.icn, curve: p.curve, band: magneticBand(p), label: `curva ${p.curve}`, iF: 1.45 * p.in, ifText: '1,45 × In' };
@@ -153,7 +154,7 @@ function tripCurrentWithin(c: ComponentInstance, t: number): number | null {
     let hi = p.band[1];
     for (let k = 0; k < 60; k++) {
       const mid = (lo + hi) / 2;
-      if (thermalTripTime(0, mid) <= t) hi = mid;
+      if (thermalTripTime(0, mid, p.model) <= t) hi = mid;
       else lo = mid;
     }
     return Math.min(instant, hi * p.in);
@@ -587,7 +588,7 @@ const energiaPassante: R = {
           },
         ];
       }
-      const t = thermalTripTime(0, ratio);
+      const t = thermalTripTime(0, ratio, p.model);
       if (!Number.isFinite(t) || t > 5) {
         return [
           {

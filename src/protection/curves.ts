@@ -23,18 +23,38 @@ export const THERMAL_TAU_S = 66;
 export const K_TRIP = 1.3;
 export const H_TRIP = K_TRIP * K_TRIP;
 
+/** Parametri del modello termico: costante di tempo [s] e soglia di intervento H (= K²). */
+export interface ThermalModel {
+  tau: number;
+  h: number;
+}
+export const MCB_THERMAL: ThermalModel = { tau: THERMAL_TAU_S, h: H_TRIP };
+
+/**
+ * Relè termici per motori di classe 10 o 20 (CEI EN 60947-4-1): non intervento a 1,05·Ir, intervento a 1,2·Ir;
+ * a 7,2·Ir (avviamento bloccato) intervento entro 4–10 s per la classe 10 e 6–20 s per la classe 20.
+ * Il modello usa K = 1,15 e tara τ perché a 7,2·Ir da freddo intervenga in 7 s (classe 10) o 14 s (classe 20).
+ */
+export function thermalModelOf(p: { tripClass?: 10 | 20 }): ThermalModel {
+  if (!p.tripClass) return MCB_THERMAL;
+  const h = 1.15 * 1.15;
+  const x = 7.2 * 7.2;
+  const tp = p.tripClass === 20 ? 14 : 7;
+  return { tau: tp / Math.log(x / (x - h)), h };
+}
+
 /** Evoluzione esatta dello stato termico a corrente costante per un intervallo dt. */
-export function heatAfter(h0: number, ratio: number, dt: number): number {
+export function heatAfter(h0: number, ratio: number, dt: number, m: ThermalModel = MCB_THERMAL): number {
   const x = ratio * ratio;
-  return x + (h0 - x) * Math.exp(-dt / THERMAL_TAU_S);
+  return x + (h0 - x) * Math.exp(-dt / m.tau);
 }
 
 /** Tempo all'intervento termico a corrente costante [s]; Infinity se non interviene. */
-export function thermalTripTime(h0: number, ratio: number): number {
-  if (h0 >= H_TRIP) return 0;
+export function thermalTripTime(h0: number, ratio: number, m: ThermalModel = MCB_THERMAL): number {
+  if (h0 >= m.h) return 0;
   const x = ratio * ratio;
-  if (x <= H_TRIP) return Infinity;
-  return THERMAL_TAU_S * Math.log((x - h0) / (x - H_TRIP));
+  if (x <= m.h) return Infinity;
+  return m.tau * Math.log((x - h0) / (x - m.h));
 }
 
 // ------------------------------------------------------------------ sganciatore magnetico

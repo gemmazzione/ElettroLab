@@ -267,7 +267,15 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
           elements.push({ a: tid(k), b: innerNode(c.id, k), z: C(rc), tag: { t: 'cable', componentId: c.id, conductor: k } });
         }
         const powerW = opts.loadPower?.get(c.id) ?? pr.p.powerW;
-        if (pr.p.on && powerW > 0 && !opts.loadsOff) {
+        if (pr.p.kvar && pr.p.kvar > 0) {
+          // Rifasamento: condensatori a stella, reattanza capacitiva X = U² / Q per ramo.
+          if (pr.p.on && !opts.loadsOff) {
+            const ur = pr.p.ratedV ?? LOAD_RATED_VOLTAGE;
+            const z = C(0, -(ur * ur) / ((pr.p.kvar * 1000) / phaseKeys.length));
+            const star = hasN ? innerNode(c.id, 'N') : starNode(c.id);
+            for (const k of phaseKeys) elements.push({ a: innerNode(c.id, k), b: star, z, tag: { t: 'load', componentId: c.id, key: k } });
+          }
+        } else if (pr.p.on && powerW > 0 && !opts.loadsOff) {
           // Potenza di targa riferita alla tensione nominale degli apparecchi (230 V fase-neutro).
           // Trifase a stella: ogni ramo assorbe P/3 sotto 230 V.
           const z = loadBranchImpedance(powerW / phaseKeys.length, pr.p.cosPhi ?? 1, pr.p.ratedV ?? LOAD_RATED_VOLTAGE);

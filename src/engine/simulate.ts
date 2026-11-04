@@ -164,7 +164,7 @@ export function simulate(project: Project, opts: NetlistOptions = {}): SimResult
   if (!managed.length || opts.loadsOff || opts.noGeneration) return withEvse(simulateCore(project, opts), project, new Map());
   const supply = project.components.find((c) => c.params.kind === 'supply');
   const limitW = supply && supply.params.kind === 'supply' ? supply.params.p.contractKW * 1000 : Infinity;
-  const power = new Map<string, number>();
+  const power = new Map<string, number>(opts.loadPower ?? []);
   for (const c of managed) if (c.params.kind === 'load') power.set(c.id, c.params.p.powerW);
   let r = simulateCore(project, { ...opts, loadPower: power });
   for (let iter = 0; iter < 8 && r.ok; iter++) {

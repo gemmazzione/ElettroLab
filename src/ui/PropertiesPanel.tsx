@@ -1,6 +1,7 @@
 import { AlertOctagon, AlertTriangle, Info, Minus, Plus, Trash2 } from 'lucide-react';
 import { abs, sub } from '../engine/complex';
 import { loadBranchImpedance, wireResistance } from '../engine/netlist';
+import { motorInputW, motorRatedCurrent, motorStartCheck, startFactor } from '../engine/motor';
 import { deviceCurrent } from '../engine/simulate';
 import { issuesFor, type Issue } from '../graph/erc';
 import { analyzeCircuits } from '../graph/netGraph';
@@ -42,7 +43,7 @@ import { fmt, fmtCurrent, fmtPower } from './format';
 
 const CONDUCTORS: Conductor[] = ['L1', 'L2', 'L3', 'N', 'PE'];
 const COLORS: WireColor[] = ['marrone', 'nero', 'grigio', 'blu', 'giallo-verde'];
-const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'lavaggio', 'ricarica', 'refrigerazione', 'riscaldamento', 'generico'];
+const LOAD_CATS: LoadCategory[] = ['illuminazione', 'prese', 'cucina', 'scaldabagno', 'climatizzazione', 'lavaggio', 'ricarica', 'refrigerazione', 'riscaldamento', 'motore', 'rifasamento', 'generico'];
 
 export function SeverityIcon({ s, size = 14 }: { s: Issue['severity']; size?: number }) {
   if (s === 'errore') return <AlertOctagon size={size} className="shrink-0 text-red-400" />;
@@ -260,6 +261,14 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
               </Field>
               <Field label="Magnetico Im" hint={`Soglia istantanea: ${fmt(pr.p.im * pr.p.in, 0)} A ±20%`}>
                 <NumberInput value={pr.p.im} min={2} max={20} step={0.5} suffix="× In" onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, im: v } })} />
+              </Field>
+              <Field label="Termico per motori" hint="Classe 10 o 20 (CEI EN 60947-4-1): quanto tollera l'avviamento">
+                <Select
+                  value={pr.p.tripClass ?? 0}
+                  options={[0, 10, 20]}
+                  format={(v) => (v ? `Classe ${v}` : 'No (interruttore)')}
+                  onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, tripClass: v ? (v as 10 | 20) : undefined } })}
+                />
               </Field>
             </div>
           </>
@@ -555,9 +564,11 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
               <Field label="Tipologia">
                 <Select value={pr.p.category} options={LOAD_CATS} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, category: v } })} />
               </Field>
-              <Field label="Potenza nominale">
-                <NumberInput value={pr.p.powerW} min={0} max={20000} step={50} suffix="W" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, powerW: v } })} />
-              </Field>
+              {!pr.p.motor && !pr.p.kvar && (
+                <Field label="Potenza nominale">
+                  <NumberInput value={pr.p.powerW} min={0} max={2000000} step={50} suffix="W" onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, powerW: v } })} />
+                </Field>
+              )}
               {pr.p.phases !== 3 && (
                 <Field label="Tensione nominale" hint="12 e 24 V: apparecchi in bassissima tensione, da alimentare con un trasformatore">
                   <Select
@@ -578,9 +589,15 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
                 <Select value={pr.p.cableSection} options={WIRE_SECTIONS} format={(s) => `${fmt(s, s % 1 ? 1 : 0)} mm²`} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, cableSection: v } })} />
               </Field>
             </div>
+            {pr.p.motor && <MotorSection comp={comp} />}
+            {pr.p.kvar !== undefined && (
+              <Field label="Potenza reattiva dei condensatori" hint="Q = P · (tan φ1 − tan φ2): con 100 kW da cos φ 0,8 a 0,95 servono circa 42 kvar">
+                <Select value={pr.p.kvar} options={[5, 10, 20, 30, 50, 75, 100, 150, 200, 300]} format={(v) => `${v} kvar`} onChange={(v) => update(comp.id, { kind: 'load', p: { ...pr.p, kvar: v } })} />
+              </Field>
+            )}
             <label className="flex items-center gap-2 text-[0.75rem] text-slate-300">
               <input type="checkbox" checked={pr.p.on} onChange={(e) => update(comp.id, { kind: 'load', p: { ...pr.p, on: e.target.checked } })} />
-              Utilizzatore acceso
+              {pr.p.kvar !== undefined ? 'Batteria inserita' : 'Utilizzatore acceso'}
             </label>
             {pr.p.phases === 3 && (
               <label className="flex items-center gap-2 text-[0.75rem] text-slate-300" title="Aggiunge o toglie il morsetto N del carico">
@@ -773,6 +790,13 @@ function LiveValues({ comp }: { comp: ComponentInstance }) {
           <Row k="Corrente nel neutro" v={fmtCurrent(result.supply.iN)} />
           <Row k="Potenza attiva" v={fmtPower(result.supply.p)} />
           <Row k="Fattore di potenza" v={fmt(result.supply.pf, 3)} />
+          {pr.p.phases === 3 && result.supply.p > 16500 && (
+            <p className={`text-[0.6875rem] ${result.supply.pf >= 0.95 ? 'text-emerald-300/90' : 'text-amber-200'}`}>
+              {result.supply.pf >= 0.95
+                ? 'cos φ ≥ 0,95: energia reattiva entro il 33% di quella attiva, senza corrispettivi (F1 e F2).'
+                : `cos φ ${fmt(result.supply.pf, 2)} < 0,95: per le utenze oltre 16,5 kW la bolletta conteggia l'energia reattiva in F1 e F2 (corrispettivi più alti sotto 0,8). Aggiungi un rifasamento. Regole ARERA in revisione nel 2026.`}
+            </p>
+          )}
         </>
       )}
       <div className="pt-1 text-[0.6875rem] text-slate-500">Tensione dei morsetti verso terra</div>
@@ -995,5 +1019,55 @@ export function PropertiesPanel({ className = 'w-[20.625rem]' }: { className?: s
         {tab === 'exercise' && exerciseActive ? <ExercisePanel /> : tab === 'norm' ? <NormPanel /> : tab === 'info' ? <InfoTab /> : tab === 'checks' ? <ChecksTab /> : comp ? <ComponentProps key={comp.id} comp={comp} /> : wire ? <WireProps key={wire.id} wire={wire} /> : <ProjectProps />}
       </div>
     </aside>
+  );
+}
+
+/** Motore asincrono: dati di targa, avviamento e verifica con la protezione a monte. */
+function MotorSection({ comp }: { comp: ComponentInstance }) {
+  const update = useStore((s) => s.updateParams);
+  const project = useStore((s) => s.project);
+  if (comp.params.kind !== 'load' || !comp.params.p.motor) return null;
+  const p = comp.params.p;
+  const m = p.motor!;
+  const set = (patch: Partial<typeof m>) => {
+    const next = { ...m, ...patch };
+    update(comp.id, { kind: 'load', p: { ...p, motor: next, powerW: Math.round(motorInputW(next)) } });
+  };
+  const check = motorStartCheck(project, comp.id);
+  return (
+    <div className="space-y-2 rounded border border-slate-700/70 bg-slate-950/40 p-2">
+      <div className="text-[0.71875rem] font-semibold text-slate-200">Dati di targa del motore</div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Potenza resa Pn">
+          <NumberInput value={m.pnW / 1000} min={0.1} max={1000} step={0.5} suffix="kW" onChange={(v) => set({ pnW: v * 1000 })} />
+        </Field>
+        <Field label="Rendimento η">
+          <NumberInput value={m.efficiency} min={50} max={99} step={0.1} suffix="%" onChange={(v) => set({ efficiency: v })} />
+        </Field>
+        <Field label="Corrente di spunto Ia/In" hint="Avviamento diretto: tipicamente 6–8">
+          <NumberInput value={m.startRatio} min={1} max={12} step={0.1} onChange={(v) => set({ startRatio: v })} />
+        </Field>
+        <Field label="Durata dell'avviamento">
+          <NumberInput value={m.startS} min={0.1} max={60} step={0.5} suffix="s" onChange={(v) => set({ startS: v })} />
+        </Field>
+        <Field label="Avviamento">
+          <Select value={m.starting} options={['diretto', 'stella-triangolo', 'inverter'] as const} onChange={(v) => set({ starting: v })} />
+        </Field>
+      </div>
+      <Row k="Potenza assorbita" v={fmtPower(p.powerW)} />
+      <Row k="Corrente nominale In" v={fmtCurrent(motorRatedCurrent(p))} />
+      <Row k="Corrente di avviamento" v={`${fmtCurrent(motorRatedCurrent(p) * startFactor(m))} per ${fmt(m.startS, 1)} s`} />
+      {check && (
+        <div className="space-y-1">
+          <div className="text-[0.6875rem] text-slate-400">Avviamento e protezione{check.device ? ` (${check.device.label})` : ''}</div>
+          {check.checks.map((c, i) => (
+            <p key={i} className={`text-[0.6875rem] leading-snug ${c.ok === true ? 'text-emerald-300/90' : c.ok === false ? 'text-red-300' : 'text-amber-200'}`}>
+              {c.ok === true ? '✓ ' : c.ok === false ? '✗ ' : '! '}
+              {c.text}
+            </p>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

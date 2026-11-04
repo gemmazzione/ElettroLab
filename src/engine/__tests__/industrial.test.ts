@@ -8,6 +8,7 @@ import { advance } from '../../protection/stepper';
 import { ampacity } from '../../rules/ampacity';
 import { runRules } from '../../rules/engine';
 import { deviceShortCircuit, loadEndFaultCurrents } from '../measure';
+import { motorStartCheck } from '../motor';
 import { simulate } from '../simulate';
 
 /** Cabina 400 kVA → generale scatolato 4P → partenza scatolata 3P → carico trifase con PE dalla cabina. */
@@ -106,5 +107,71 @@ describe('interruttori scatolati regolabili', () => {
     expect(two.iz).toBe(352);
     expect(three.iz).toBe(298);
     expect(ampacity(240, 'C', 'PVC', 30, 1, 3)!.iz).toBe(403);
+  });
+});
+
+/** Cabina → protezione del motore → motore 15 kW (eventualmente con un rifasamento in parallelo). */
+function motorPlant(protection: 'mcb-b' | 'salvamotore', opts: { kvar?: number } = {}) {
+  const b = new ProjectBuilder('motore', 2, 24);
+  const cab = b.add('supply-cabina', { position: { x: 0, y: 0 } });
+  const q = b.add(protection === 'salvamotore' ? 'salvamotore-32' : 'mcb-3p', { rail: { row: 0, slot: 0 } }, (c) => {
+    c.closed = true;
+    c.label = 'QM1';
+    if (c.params.kind === 'mcb' && protection === 'mcb-b') c.params.p = { ...c.params.p, in: 32, curve: 'B', icn: 25 };
+    if (c.params.kind === 'mcb' && protection === 'salvamotore') c.params.p = { ...c.params.p, ir: 28 };
+  });
+  const xpe = b.add('bar-pe-8', { rail: { row: 1, slot: 0 } });
+  const m = b.add('motore-15kw', { position: { x: 200, y: 700 } }, (c) => {
+    if (c.params.kind === 'load') c.params.p = { ...c.params.p, on: true, install: { method: 'E', insulation: 'EPR', ambientC: 30, grouped: 1 } };
+  });
+  b.wire(t(cab, 'L1'), t(q, 'p0_in'), 16, 5)
+    .wire(t(cab, 'L2'), t(q, 'p1_in'), 16, 5)
+    .wire(t(cab, 'L3'), t(q, 'p2_in'), 16, 5)
+    .wire(t(cab, 'PE'), t(xpe, 't0'), 16, 5)
+    .wire(t(q, 'p0_out'), t(m, 'L1'), 6, 0.5)
+    .wire(t(q, 'p1_out'), t(m, 'L2'), 6, 0.5)
+    .wire(t(q, 'p2_out'), t(m, 'L3'), 6, 0.5)
+    .wire(t(xpe, 't1'), t(m, 'PE'), 6, 0.5);
+  if (opts.kvar) {
+    const cap = b.add('rifasamento-50kvar', { position: { x: 500, y: 700 } }, (c) => {
+      if (c.params.kind === 'load') c.params.p = { ...c.params.p, kvar: opts.kvar };
+    });
+    b.wire(t(cab, 'L1'), t(cap, 'L1'), 16, 5).wire(t(cab, 'L2'), t(cap, 'L2'), 16, 5).wire(t(cab, 'L3'), t(cap, 'L3'), 16, 5).wire(t(xpe, 't2'), t(cap, 'PE'), 16, 5);
+  }
+  return { project: b.project, q, m };
+}
+
+describe('motori e rifasamento', () => {
+  it("allo spunto il magnetotermico in curva B scatta, il salvamotore no", () => {
+    const b = motorPlant('mcb-b');
+    const outB = advance(b.project, {}, null, 10);
+    expect(outB.project.components.find((c) => c.id === b.q.id)!.closed).toBe(false);
+    expect(outB.events.some((e) => e.text.includes('si avvia'))).toBe(true);
+    const s = motorPlant('salvamotore');
+    const outS = advance(s.project, {}, null, 10);
+    expect(outS.project.components.find((c) => c.id === s.q.id)!.closed).toBe(true);
+    // Finito l'avviamento il motore assorbe la corrente nominale.
+    const i = outS.result.ok ? Math.max(...outS.result.supply.phases.map((p) => p.i)) : 0;
+    expect(i).toBeGreaterThan(24);
+    expect(i).toBeLessThan(34);
+  });
+
+  it('la verifica di avviamento distingue le protezioni', () => {
+    const b = motorPlant('mcb-b');
+    const cb = motorStartCheck(b.project, b.m.id)!;
+    expect(cb.iaA / cb.inA).toBeCloseTo(7.5, 6);
+    expect(cb.checks.some((c) => c.ok === false)).toBe(true);
+    const s = motorPlant('salvamotore');
+    expect(motorStartCheck(s.project, s.m.id)!.checks.every((c) => c.ok === true)).toBe(true);
+  });
+
+  it('il rifasamento porta il cos φ alla consegna oltre 0,95', () => {
+    const base = simulate(motorPlant('salvamotore').project);
+    // Il motore chiede circa 10,5 kvar: 10 kvar lo rifasano quasi del tutto (20 lo sovracompenserebbero).
+    const comp = simulate(motorPlant('salvamotore', { kvar: 10 }).project);
+    expect(base.ok && comp.ok).toBe(true);
+    if (!base.ok || !comp.ok) return;
+    expect(base.supply.pf).toBeLessThan(0.86);
+    expect(comp.supply.pf).toBeGreaterThan(0.95);
   });
 });

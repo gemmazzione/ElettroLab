@@ -116,7 +116,8 @@ export function buildNormContext(project: Project): NormCtx {
       p,
       name: `${load.label} (${p.name})`,
       info,
-      ib: p.powerW / (u0 * (p.phases === 3 ? 3 : 1) * (p.cosPhi ?? 1)),
+      // Condensatori: corrente dalla potenza reattiva.
+      ib: p.kvar ? (p.kvar * 1000) / (u0 * (p.phases === 3 ? 3 : 1)) : p.powerW / (u0 * (p.phases === 3 ? 3 : 1) * (p.cosPhi ?? 1)),
       ocp,
       rcds,
       install,
