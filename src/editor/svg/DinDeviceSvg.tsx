@@ -36,6 +36,8 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
   const pr = comp.params;
   switch (pr.kind) {
     case 'mcb':
+      // Interruttori industriali: taglia e regolazione del termico invece della curva.
+      if (pr.p.im) return { main: `${pr.p.in} A`, sub: `Ir ${pr.p.ir ?? pr.p.in} · ${pr.p.icn} kA`, lever: '#22272e' };
       return { main: `${pr.p.curve}${pr.p.in}`, sub: `${pr.p.icn} kA`, lever: '#22272e' };
     case 'rcd':
       return { main: `${pr.p.in}A`, sub: `${pr.p.idn}mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`, lever: '#1f4fb8' };

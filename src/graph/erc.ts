@@ -526,7 +526,8 @@ export function checkWiring(project: Project): Issue[] {
           componentIds: [load.id],
         });
       }
-      if (rl.length === 0) {
+      // Nel TN-S il guasto a massa lo interrompono le protezioni contro le sovracorrenti: il differenziale non è obbligatorio.
+      if (rl.length === 0 && !tnSupply) {
         push({
           code: 'NO_RCD',
           severity: 'attenzione',

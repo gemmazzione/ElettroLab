@@ -551,7 +551,12 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
       componentIds: [supply.id],
     });
   }
-  if (supplyResult.zExt !== null && supplyResult.zExt < SHORT_CIRCUIT_Z_THRESHOLD) {
+  // Soglia del cortocircuito: 2 Ω per le forniture domestiche; con potenze grandi (cabine MT/BT) un quarto
+  // dell'impedenza per fase che corrisponde alla potenza disponibile, così i carichi industriali non sembrano guasti.
+  const sup = supply.params.kind === 'supply' ? supply.params.p : null;
+  const zRated = sup ? (sup.voltage * sup.voltage) / ((Math.max(0.1, sup.contractKW) * 1000) / (sup.phases === 3 ? 3 : 1)) : Infinity;
+  const zShort = Math.min(SHORT_CIRCUIT_Z_THRESHOLD, 0.25 * zRated);
+  if (supplyResult.zExt !== null && supplyResult.zExt < zShort) {
     alerts.push({
       code: 'SHORT_CIRCUIT',
       severity: 'errore',

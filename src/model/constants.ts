@@ -57,7 +57,7 @@ export const MODEL_ASSUMPTIONS: { title: string; text: string }[] = [
   },
   {
     title: 'Cortocircuito',
-    text: `Un assorbimento con impedenza vista dalla fornitura inferiore a ${SHORT_CIRCUIT_Z_THRESHOLD} Ω viene classificato come cortocircuito: nessun utilizzatore domestico realistico ha un'impedenza così bassa. La Icc presunta è calcolata con un guasto franco (1 mΩ), utilizzatori spenti e resistività a 70 °C: per la Icc minima di progetto le norme considerano temperature più elevate dei conduttori, quindi il valore minimo reale può essere inferiore.`,
+    text: `Un assorbimento con impedenza vista dalla fornitura inferiore a ${SHORT_CIRCUIT_Z_THRESHOLD} Ω viene classificato come cortocircuito: nessun utilizzatore domestico realistico ha un'impedenza così bassa. Con le cabine MT/BT la soglia scende a un quarto dell'impedenza per fase corrispondente alla potenza disponibile. La Icc presunta è calcolata con un guasto franco (1 mΩ), utilizzatori spenti e resistività a 70 °C: per la Icc minima di progetto le norme considerano temperature più elevate dei conduttori, quindi il valore minimo reale può essere inferiore.`,
   },
 ];
 

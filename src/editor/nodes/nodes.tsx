@@ -149,7 +149,7 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
       <IssueDot level={issue} />
       <div className="flex items-center gap-1.5 border-b border-slate-700 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200">
         <Zap size={13} className={running ? 'text-amber-400' : 'text-slate-500'} />
-        {comp.label} · Contatore
+        {comp.label} · {p.earthing === 'TN-S' ? `Cabina ${p.transformerKVA ?? ''} kVA` : 'Contatore'}
         <span className={`ml-auto h-2 w-2 rounded-full ${running ? 'bg-emerald-400 shadow-[0_0_6px] shadow-emerald-400' : 'bg-slate-600'}`} />
       </div>
       <div className="mx-2.5 mt-1.5 rounded bg-[#0d1a12] px-2 py-1 font-mono text-[11px] leading-4 text-emerald-300">
@@ -176,9 +176,9 @@ export const SupplyNode = memo(function SupplyNode({ data, selected }: NodeProps
         ) : (
           <>
             <div className="text-emerald-700">
-              {p.phases === 3 ? `${Math.round(p.voltage * Math.sqrt(3))}/${p.voltage} V 3F+N` : `${p.voltage} V`} · {p.frequency} Hz · TT
+              {p.phases === 3 ? `${Math.round(p.voltage * Math.sqrt(3))}/${p.voltage} V 3F+N` : `${p.voltage} V`} · {p.frequency} Hz · {p.earthing ?? 'TT'}
             </div>
-            <div className="text-emerald-700">{p.contractKW} kW impegnati</div>
+            <div className="text-emerald-700">{p.earthing === 'TN-S' ? `MT/BT · ucc ${p.ukPct ?? 6}% · PE dal centro stella` : `${p.contractKW} kW impegnati`}</div>
           </>
         )}
       </div>

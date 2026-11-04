@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { checkWiring } from '../../graph/erc';
 import { cabinImpedance } from '../../model/cabin';
 import type { ComponentInstance } from '../../model/types';
-import { ProjectBuilder, t } from '../../projects/demos';
+import { capannone, ProjectBuilder, t } from '../../projects/demos';
+import { selectivity } from '../../protection/selectivity';
 import { magneticBand, thermalSetting } from '../../protection/curves';
 import { advance } from '../../protection/stepper';
 import { ampacity } from '../../rules/ampacity';
@@ -173,5 +174,37 @@ describe('motori e rifasamento', () => {
     if (!base.ok || !comp.ok) return;
     expect(base.supply.pf).toBeLessThan(0.86);
     expect(comp.supply.pf).toBeGreaterThan(0.95);
+  });
+});
+
+describe('progetto Capannone e selettività', () => {
+  it('il capannone supera le regole verificate e i collegamenti non hanno errori', () => {
+    const p = capannone();
+    expect(checkWiring(p).filter((i) => i.severity === 'errore')).toEqual([]);
+    expect(runRules(p).counts.errore).toBe(0);
+  });
+
+  it('chiuso il generale si avviano i motori senza scatti; il rifasamento porta il cos φ a 1', () => {
+    const p = capannone();
+    for (const c of p.components) if (c.label === 'QF0' || c.label === 'QR') c.closed = true;
+    const out = advance(p, {}, null, 20);
+    expect(out.events.filter((e) => e.text.includes('si avvia')).length).toBe(3);
+    expect(out.tripped).toBe(false);
+    expect(out.result.ok && out.result.supply.pf).toBeGreaterThan(0.98);
+  });
+
+  it('selettività: totale tra illuminazione e generale, parziale (amperometrica) tra le partenze e il generale', () => {
+    const p = capannone();
+    const by = (l: string) => p.components.find((c) => c.label === l)!;
+    const ql = selectivity(p, by('QL'))!;
+    expect(ql.up.label).toBe('QF0');
+    expect(ql.total).toBe(true);
+    const qf2 = selectivity(p, by('QF2'))!;
+    expect(qf2.total).toBe(false);
+    // Il limite è la soglia magnetica minima del generale: 0,8 × 10 × 630 A.
+    expect(qf2.limitA!).toBeGreaterThan(4900);
+    expect(qf2.limitA!).toBeLessThan(5200);
+    // Attraverso sezionatore e differenziale del sottoquadro si risale a QF1.
+    expect(selectivity(p, by('QS1'))!.up.label).toBe('QF1');
   });
 });

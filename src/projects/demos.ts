@@ -556,6 +556,127 @@ export function fotovoltaico(): Project {
   return b.project;
 }
 
+// ------------------------------------------------------------------ stabilimento industriale
+
+/** Interruttore industriale con Ir e Im regolati. */
+const setMccb = (c: ComponentInstance, inA: number, ir: number, im = 10, icu = 36) => {
+  if (c.params.kind === 'mcb') c.params.p = { ...c.params.p, in: inA, ir, im, icn: icu };
+};
+/** Posa delle linee industriali: cavo multipolare in EPR su passerella forata, 30 °C. */
+const PASSERELLA = { method: 'E' as const, insulation: 'EPR' as const, ambientC: 30, grouped: 1 };
+
+export function capannone(): Project {
+  const b = new ProjectBuilder('Capannone industriale', 2, 36);
+  b.project.norm = { residential: false, ul: 50 };
+  b.project.description =
+    'Stabilimento con cabina MT/BT da 400 kVA in sistema TN-S. Quadro generale con interruttore scatolato da 630 A, partenze per un motore da 45 kW con avviamento stella-triangolo, ' +
+    'due motori protetti da salvamotori, la batteria di rifasamento e l\'illuminazione; a 60 m un sottoquadro con le prese industriali CEE protette da un differenziale 30 mA. ' +
+    'Avvia la simulazione e chiudi il generale QF0: i motori si avviano e le protezioni vedono la corrente di spunto. Guarda il fattore di potenza sulla cabina, poi chiudi QR per inserire il rifasamento. ' +
+    'Seleziona un interruttore per vedere la sua curva sovrapposta a quella dell\'interruttore a monte (selettività).';
+
+  const cab = b.add('supply-cabina', { position: { x: -320, y: 20 } }, (c) => (c.label = 'TR1'));
+  const qf0 = b.add('mccb-4p-630', { rail: { row: 0, slot: 0 } }, (c) => {
+    c.label = 'QF0';
+    setMccb(c, 630, 580, 10, 50);
+  });
+  const qf1 = b.add('mccb-4p-250', { rail: { row: 0, slot: 9 } }, (c) => {
+    c.label = 'QF1';
+    c.closed = true;
+    setMccb(c, 160, 100, 10, 36);
+  });
+  const qf2 = b.add('mccb-3p-160', { rail: { row: 0, slot: 16 } }, (c) => {
+    c.label = 'QF2';
+    c.closed = true;
+    setMccb(c, 160, 90, 12, 36);
+  });
+  const qr = b.add('mccb-3p-160', { rail: { row: 0, slot: 22 } }, (c) => {
+    c.label = 'QR';
+    setMccb(c, 125, 100, 10, 36);
+  });
+  const qm1 = b.add('salvamotore-32', { rail: { row: 0, slot: 28 } }, (c) => {
+    c.label = 'QM1';
+    c.closed = true;
+    if (c.params.kind === 'mcb') c.params.p = { ...c.params.p, ir: 29 };
+  });
+  const qm2 = b.add('salvamotore-16', { rail: { row: 0, slot: 32 } }, (c) => {
+    c.label = 'QM2';
+    c.closed = true;
+    if (c.params.kind === 'mcb') c.params.p = { ...c.params.p, ir: 8.5 };
+  });
+  const ql = b.add('mcb-1pn', { rail: { row: 1, slot: 0 } }, (c) => {
+    c.label = 'QL';
+    c.closed = true;
+    setMcb(c, 16, 'C', 10);
+  });
+  const xn = b.add('bar-n-8', { rail: { row: 1, slot: 4 } });
+  const xpe = b.add('bar-pe-8', { rail: { row: 1, slot: 10 } });
+
+  // Sottoquadro prese del reparto
+  const p2 = b.addPanel('Quadro prese reparto', 18, 2);
+  const qs0 = b.add('switch-4p', { rail: { panelId: p2, row: 0, slot: 0 } }, (c) => ((c.closed = true), (c.label = 'QS0')));
+  const qd = b.add('rcd-4p', { rail: { panelId: p2, row: 0, slot: 5 } }, (c) => ((c.closed = true), (c.label = 'QD1')));
+  const qs1 = b.add('mcb-4p', { rail: { panelId: p2, row: 0, slot: 10 } }, (c) => ((c.closed = true), (c.label = 'QS1'), setMcb(c, 16, 'C', 10)));
+  const qs2 = b.add('mcb-4p', { rail: { panelId: p2, row: 0, slot: 14 } }, (c) => ((c.closed = true), (c.label = 'QS2'), setMcb(c, 32, 'C', 10)));
+  const xpe2 = b.add('bar-pe-8', { rail: { panelId: p2, row: 1, slot: 0 } });
+
+  const y = 760;
+  const ld = (catalogId: string, name: string, x: number, length: number, section: WireSection) =>
+    b.add(catalogId, { position: { x, y } }, (c) => {
+      if (c.params.kind === 'load') c.params.p = { ...c.params.p, name, cableLength: length, cableSection: section, install: { ...PASSERELLA } };
+    });
+  const m45 = ld('motore-45kw', 'Compressore 45 kW', -40, 40, 25);
+  const cap = ld('rifasamento-50kvar', 'Rifasamento 50 kvar', 200, 5, 25);
+  const m15 = ld('motore-15kw', 'Pompa 15 kW', 420, 30, 6);
+  const m4 = ld('motore-4kw', 'Nastro trasportatore 4 kW', 640, 25, 2.5);
+  const luci = b.add('load-luce', { position: { x: 860, y } }, (c) => {
+    if (c.params.kind === 'load') c.params.p = { ...c.params.p, name: 'Illuminazione capannone', powerW: 3000, cableLength: 50, cableSection: 4, install: { ...PASSERELLA } };
+  });
+  const cee16 = ld('presa-cee-16', 'Presa CEE 16 A', 1120, 20, 2.5);
+  const cee32 = ld('presa-cee-32', 'Presa CEE 32 A', 1360, 20, 6);
+
+  // Cabina → generale
+  ['L1', 'L2', 'L3', 'N'].forEach((k, i) => b.wire(t(cab, k), t(qf0, `p${i}_in`), 240, 10));
+  b.wire(t(cab, 'PE'), t(xpe, 't0'), 120, 10);
+  b.wire(t(qf0, 'p3_out'), t(xn, 't0'), 120, 0.5);
+  // Partenze trifase dal generale
+  for (const [dev, sec] of [
+    [qf1, 50],
+    [qf2, 35],
+    [qr, 25],
+    [qm1, 6],
+    [qm2, 4],
+  ] as const) {
+    for (let i = 0; i < 3; i++) b.wire(t(qf0, `p${i}_out`), t(dev, `p${i}_in`), sec, 0.6);
+  }
+  b.wire(t(xn, 't1'), t(qf1, 'p3_in'), 50, 0.6);
+  // Illuminazione su L1
+  b.wire(t(qf0, 'p0_out'), t(ql, 'p0_in'), 4, 0.6).wire(t(xn, 't2'), t(ql, 'p1_in'), 4, 0.6);
+  b.wire(t(ql, 'p0_out'), t(luci, 'L'), 4, 0.4).wire(t(ql, 'p1_out'), t(luci, 'N'), 4, 0.4).wire(t(xpe, 't1'), t(luci, 'PE'), 4, 0.5);
+  // Motori e rifasamento
+  for (const [dev, load, sec, way] of [
+    [qf2, m45, 25, 2],
+    [qr, cap, 25, 3],
+    [qm1, m15, 6, 4],
+    [qm2, m4, 2.5, 5],
+  ] as const) {
+    for (let i = 0; i < 3; i++) b.wire(t(dev, `p${i}_out`), t(load, `L${i + 1}`), sec, 0.4);
+    b.wire(t(xpe, `t${way}`), t(load, 'PE'), sec, 0.5);
+  }
+  // Linea verso il sottoquadro prese: 60 m in 50 mm²
+  for (let i = 0; i < 4; i++) b.wire(t(qf1, `p${i}_out`), t(qs0, `p${i}_in`), 50, 60);
+  b.wire(t(xpe, 't6'), t(xpe2, 't0'), 25, 60);
+  for (let i = 0; i < 4; i++) b.wire(t(qs0, `p${i}_out`), t(qd, `p${i}_in`), 16, 0.3);
+  for (const q of [qs1, qs2]) for (let i = 0; i < 4; i++) b.wire(t(qd, `p${i}_out`), t(q, `p${i}_in`), 10, 0.3);
+  for (const [q, presa, sec, way] of [
+    [qs1, cee16, 2.5, 1],
+    [qs2, cee32, 6, 2],
+  ] as const) {
+    ['L1', 'L2', 'L3', 'N'].forEach((k, i) => b.wire(t(q, `p${i}_out`), t(presa, k), sec, 0.4));
+    b.wire(t(xpe2, `t${way}`), t(presa, 'PE'), sec, 0.5);
+  }
+  return b.project;
+}
+
 export const DEMO_PROJECTS: DemoProject[] = [
   {
     id: 'demo-monolocale',
@@ -616,5 +737,11 @@ export const DEMO_PROJECTS: DemoProject[] = [
     name: 'Quadro trifase 400/230 V con carichi squilibrati',
     summary: '3P+N, differenziale 4P, carichi monofase su L1/L2/L3 e un carico trifase: neutro comune e spostamento del centro stella.',
     build: trifase,
+  },
+  {
+    id: 'demo-capannone',
+    name: 'Capannone industriale con cabina 400 kVA',
+    summary: 'Sistema TN-S, generale scatolato 630 A, motori da 45, 15 e 4 kW con spunto, salvamotori, rifasamento 50 kvar e sottoquadro prese CEE.',
+    build: capannone,
   },
 ];

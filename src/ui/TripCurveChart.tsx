@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { fuseConventional, fuseMeltTime, fuseTimeToMelt, MAGNETIC_BAND, MAGNETIC_TRIP_S, residualTripTime, thermalTripTime } from '../protection/curves';
+import { fuseConventional, fuseMeltTime, fuseTimeToMelt, MAGNETIC_BAND, MAGNETIC_TRIP_S, MCB_THERMAL, residualTripTime, thermalTripTime, type ThermalModel } from '../protection/curves';
 import type { TripCurve } from '../model/types';
 import { fmt } from './format';
 
@@ -70,11 +70,17 @@ export function OvercurrentChart({
   inA,
   curve,
   band,
+  model = MCB_THERMAL,
+  other,
   point,
   iccA,
   width = 290,
   height = 230,
 }: {
+  /** Modello termico (classe d'intervento dei salvamotori) */
+  model?: ThermalModel;
+  /** Protezione a monte da sovrapporre (selettività): riferimento termico [A], fascia magnetica in multipli del riferimento */
+  other?: { label: string; refA: number; band: [number, number]; model: ThermalModel };
   /** Corrente di riferimento del termico: In, oppure Ir negli interruttori regolabili */
   inA: number;
   curve: TripCurve;
@@ -101,7 +107,7 @@ export function OvercurrentChart({
     for (let i = 0; i <= n; i++) {
       // campionamento più fitto vicino alla soglia termica, dove la curva sale verso l'asintoto
       const r = 1.3 + (hi - 1.3) * (i / n) ** 3;
-      const t = thermalTripTime(0, r);
+      const t = thermalTripTime(0, r, model);
       if (!Number.isFinite(t)) continue;
       if (t > T_MAX) {
         if (!pts.length) pts.push(`M${x.to(r).toFixed(1)},${y.to(T_MAX).toFixed(1)}`);
@@ -109,16 +115,39 @@ export function OvercurrentChart({
       }
       pts.push(`${pts.length ? 'L' : 'M'}${x.to(r).toFixed(1)},${y.to(t).toFixed(1)}`);
     }
-    const tHi = thermalTripTime(0, hi);
+    const tHi = thermalTripTime(0, hi, model);
     pts.push(`L${x.to(hi).toFixed(1)},${y.to(Math.min(tHi, T_MAX)).toFixed(1)}`);
     pts.push(`L${x.to(hi).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
     pts.push(`L${x.to(X_MAX).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
     return pts.join(' ');
-  }, [hi, width, height]);
+  }, [hi, model, width, height]);
+
+  // Curva della protezione a monte, riportata sull'asse di questa (corrente / riferimento di questa).
+  const otherPath = useMemo(() => {
+    if (!other) return null;
+    const k = other.refA / inA;
+    const [, ohi] = other.band;
+    const pts: string[] = [];
+    for (let i = 0; i <= 160; i++) {
+      const r = 1.3 + (ohi - 1.3) * (i / 160) ** 3;
+      const t = thermalTripTime(0, r, other.model);
+      const xr = r * k;
+      if (!Number.isFinite(t) || xr < X_MIN || xr > X_MAX) continue;
+      if (t > T_MAX) continue;
+      pts.push(`${pts.length ? 'L' : 'M'}${x.to(xr).toFixed(1)},${y.to(t).toFixed(1)}`);
+    }
+    const xh = Math.min(X_MAX, ohi * k);
+    if (xh >= X_MIN) {
+      pts.push(`${pts.length ? 'L' : 'M'}${x.to(xh).toFixed(1)},${y.to(Math.min(T_MAX, thermalTripTime(0, ohi, other.model))).toFixed(1)}`);
+      pts.push(`L${x.to(xh).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
+      pts.push(`L${x.to(X_MAX).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
+    }
+    return pts.join(' ');
+  }, [other, inA, width, height]);
 
   const ratioNow = point ? point.current / inA : null;
-  const tNow = point && ratioNow !== null ? (ratioNow >= hi ? MAGNETIC_TRIP_S : thermalTripTime(point.heat, ratioNow)) : null;
-  const tHover = hover === null ? null : hover >= hi ? MAGNETIC_TRIP_S : thermalTripTime(0, hover);
+  const tNow = point && ratioNow !== null ? (ratioNow >= hi ? MAGNETIC_TRIP_S : thermalTripTime(point.heat, ratioNow, model)) : null;
+  const tHover = hover === null ? null : hover >= hi ? MAGNETIC_TRIP_S : thermalTripTime(0, hover, model);
 
   const xTicks = [1, 2, 5, 10, 20, 50, 100];
   const plotW = width - PAD.l - PAD.r;
@@ -130,7 +159,7 @@ export function OvercurrentChart({
         width={width}
         height={height}
         role="img"
-        aria-label={band ? `Curva d'intervento: termico regolato a ${inA} A, magnetico certo da ${hi.toFixed(1)} volte` : `Curva d'intervento ${curve}${inA}: termico da 1,3·In, magnetico certo da ${hi}·In`}
+        aria-label={band ? `Curva d'intervento: termico regolato a ${inA} A, magnetico certo da ${fmt(hi, 1)} volte` : `Curva d'intervento ${curve}${inA}: termico da 1,3·In, magnetico certo da ${hi}·In`}
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           const box = e.currentTarget.getBoundingClientRect();
@@ -151,10 +180,16 @@ export function OvercurrentChart({
         <rect x={x.to(lo)} y={PAD.t} width={x.to(hi) - x.to(lo)} height={plotH} fill={C.magnetic} opacity={0.16} />
         <line x1={x.to(lo)} x2={x.to(lo)} y1={PAD.t} y2={height - PAD.b} stroke={C.magnetic} strokeWidth={1} strokeDasharray="3 3" />
         <line x1={x.to(hi)} x2={x.to(hi)} y1={PAD.t} y2={height - PAD.b} stroke={C.magnetic} strokeWidth={1} strokeDasharray="3 3" />
-        {/* punti convenzionali CEI EN 60898-1 */}
-        <line x1={x.to(2.55)} x2={x.to(2.55)} y1={y.to(60)} y2={y.to(1)} stroke={C.muted} strokeWidth={4} strokeLinecap="round" opacity={0.6} />
-        <circle cx={x.to(1.45)} cy={y.to(3600)} r={4} fill="none" stroke={C.muted} strokeWidth={1.5} />
-        <path d={`M${x.to(1.13) - 4},${y.to(3600) - 4} l8,8 m0,-8 l-8,8`} stroke={C.muted} strokeWidth={1.5} />
+        {/* punti convenzionali CEI EN 60898-1 (solo magnetotermici modulari) */}
+        {!band && (
+          <>
+            <line x1={x.to(2.55)} x2={x.to(2.55)} y1={y.to(60)} y2={y.to(1)} stroke={C.muted} strokeWidth={4} strokeLinecap="round" opacity={0.6} />
+            <circle cx={x.to(1.45)} cy={y.to(3600)} r={4} fill="none" stroke={C.muted} strokeWidth={1.5} />
+            <path d={`M${x.to(1.13) - 4},${y.to(3600) - 4} l8,8 m0,-8 l-8,8`} stroke={C.muted} strokeWidth={1.5} />
+          </>
+        )}
+        {/* protezione a monte */}
+        {otherPath && <path d={otherPath} fill="none" stroke="#a78bfa" strokeWidth={1.8} strokeDasharray="5 3" strokeLinejoin="round" />}
         {/* curva del modello */}
         <path d={path} fill="none" stroke={C.thermal} strokeWidth={2} strokeLinejoin="round" />
         {/* Icc presunta */}
@@ -198,7 +233,7 @@ export function OvercurrentChart({
           </text>
         ))}
         <text x={PAD.l + plotW / 2} y={height - 6} textAnchor="middle" fontSize={9} fill={C.text}>
-          Corrente in multipli di In (In = {inA} A)
+          Corrente in multipli di {band ? 'Ir' : 'In'} ({band ? 'Ir' : 'In'} = {inA} A)
         </text>
       </svg>
       <div className="mt-1 min-h-[16px] font-mono text-[0.65625rem] text-slate-200">
@@ -218,11 +253,12 @@ export function OvercurrentChart({
         <LegendItem swatch={<span className="inline-block h-0.5 w-4" style={{ background: C.thermal }} />} label="Modello (da freddo)" />
         <LegendItem
           swatch={<span className="inline-block h-3 w-3 rounded-sm" style={{ background: C.magnetic, opacity: 0.35 }} />}
-          label={`Fascia magnetica ${curve} (${lo}–${hi}·In)`}
+          label={band ? `Fascia magnetica (${fmt(lo, 1)}–${fmt(hi, 1)}·Ir)` : `Fascia magnetica ${curve} (${lo}–${hi}·In)`}
         />
+        {other ? <LegendItem swatch={<span className="inline-block h-0.5 w-4 border-t-2 border-dashed" style={{ borderColor: '#a78bfa' }} />} label={`A monte: ${other.label}`} /> : null}
         {iccA ? <LegendItem swatch={<span className="inline-block h-3 w-0.5" style={{ background: C.icc }} />} label="Icc presunta" /> : null}
         {point ? <LegendItem swatch={<span className="inline-block h-2.5 w-2.5 rounded-full bg-slate-50" />} label="Punto di lavoro" /> : null}
-        <LegendItem swatch={<span className="text-slate-400">○ ×</span>} label="1,45·In <1 h · 1,13·In ≥1 h" />
+        {!band && <LegendItem swatch={<span className="text-slate-400">○ ×</span>} label="1,45·In <1 h · 1,13·In ≥1 h" />}
       </div>
     </div>
   );

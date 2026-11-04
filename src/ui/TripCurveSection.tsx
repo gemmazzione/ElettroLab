@@ -2,7 +2,8 @@ import { Maximize2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { deviceShortCircuit } from '../engine/measure';
 import type { ComponentInstance } from '../model/types';
-import { magneticBand, thermalSetting } from '../protection/curves';
+import { magneticBand, thermalModelOf, thermalSetting } from '../protection/curves';
+import { selectivity } from '../protection/selectivity';
 import { protectedCurrent } from '../protection/stepper';
 import { useStore } from '../store/projectStore';
 import { Section } from './fields';
@@ -19,6 +20,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
   const [table, setTable] = useState(false);
   const pr = comp.params;
   const icc = useMemo(() => deviceShortCircuit(project, comp), [project, comp]);
+  const sel = useMemo(() => (comp.params.kind === 'mcb' || comp.params.kind === 'rcbo' || comp.params.kind === 'fuse' ? selectivity(project, comp) : null), [project, comp]);
   if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'rcd' && pr.kind !== 'fuse') return null;
 
   const live = running && result && result.ok;
@@ -29,6 +31,20 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
   const ref = pr.kind === 'mcb' ? thermalSetting(pr.p) : pr.kind === 'rcbo' ? pr.p.in : 0;
   const band: [number, number] | undefined =
     pr.kind === 'mcb' && pr.p.im ? (magneticBand(pr.p).map((v) => (v * pr.p.in) / ref) as [number, number]) : undefined;
+  // Curva della protezione a monte (solo interruttori): per leggere la selettività sul grafico.
+  const upP = sel?.up.params;
+  const other =
+    upP && (upP.kind === 'mcb' || upP.kind === 'rcbo')
+      ? (() => {
+          const r = upP.kind === 'mcb' ? thermalSetting(upP.p) : upP.p.in;
+          return {
+            label: `${sel!.up.label} (${upP.kind === 'mcb' && upP.p.im ? `Ir ${r} A` : `${upP.p.curve}${upP.p.in}`})`,
+            refA: r,
+            band: magneticBand(upP.p).map((v) => (v * upP.p.in) / r) as [number, number],
+            model: upP.kind === 'mcb' ? thermalModelOf(upP.p) : thermalModelOf({}),
+          };
+        })()
+      : undefined;
 
   const charts = (w: number, h: number) => (
     <div className="space-y-4">
@@ -36,7 +52,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
       {(pr.kind === 'mcb' || pr.kind === 'rcbo') && (
         <div>
           {pr.kind === 'rcbo' && <div className="mb-1 text-[0.6875rem] font-semibold text-slate-300">Sganciatore magnetotermico</div>}
-          <OvercurrentChart inA={ref} curve={pr.p.curve} band={band} point={point} iccA={icc} width={w} height={h} />
+          <OvercurrentChart inA={ref} curve={pr.p.curve} band={band} model={pr.kind === 'mcb' ? thermalModelOf(pr.p) : undefined} other={other} point={point} iccA={icc} width={w} height={h} />
         </div>
       )}
       {(pr.kind === 'rcd' || pr.kind === 'rcbo') && (
@@ -63,6 +79,11 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
           </button>
           {table && <OvercurrentTable inA={ref} curve={pr.p.curve} band={band} />}
         </>
+      )}
+      {sel && (
+        <p className={`text-[0.71875rem] leading-snug ${sel.total ? 'text-emerald-300/90' : 'text-amber-200'}`}>
+          {sel.text}
+        </p>
       )}
       <p className="text-[0.65625rem] leading-snug text-slate-500">
         Curva del modello del simulatore, costruita sui punti convenzionali della norma di prodotto: non è la curva del costruttore. Il punto bianco mostra la corrente attuale e il tempo d'intervento previsto tenendo conto della memoria termica{pr.kind === 'fuse' ? ' (per il fusibile: del consumo già accumulato dalla cartuccia)' : ''}.
