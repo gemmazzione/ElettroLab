@@ -2,11 +2,13 @@ import type { InstallMethod } from '../rules/ampacity';
 import type { RoofSpec } from './roof';
 import type { Obstacle } from './shading';
 import type { Weather } from './weather';
-import { DEFAULT_PRICES, INVERTERS, LOAD_PROFILES, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
+import { DEFAULT_PRICES, defaultPrices, INVERTERS, LOAD_PROFILES, MODULES, SITES, type InverterSpec, type LoadProfileId, type ModuleSpec, type MountingId, type PriceItem } from './data';
 
 /** Dati di un progetto di impianto fotovoltaico (sezione «Progetta FV»). */
 export interface PvDesign {
   name: string;
+  /** Chi usa l'energia: un'abitazione o un'azienda (cambia profili, componenti, listino e fiscalità) */
+  kind: ProjectKind;
   /** Posizione della casa scelta sulla mappa */
   location: { lat: number | null; lon: number | null; address: string; zoom: number };
   /** Tetto disegnato sulla foto satellitare */
@@ -51,6 +53,8 @@ export interface PvDesign {
     evKm: number;
     /** Quando si ricarica l'auto */
     evCharge: 'giorno' | 'sera';
+    /** Azienda chiusa ad agosto (consumi ridotti nel mese) */
+    closedAugust: boolean;
   };
   module: ModuleSpec;
   modulesPerString: number;
@@ -60,6 +64,8 @@ export interface PvDesign {
   /** Ottimizzatori di potenza su ogni modulo */
   optimizers: boolean;
   inverter: InverterSpec;
+  /** Inverter uguali in parallelo, ciascuno con le sue stringhe (impianti grandi) */
+  inverterCount: number;
   batteryKWh: number;
   losses: {
     /** Riflessione con il sole obliquo, spettro e basso irraggiamento [%] */
@@ -115,7 +121,23 @@ export interface PvDesign {
     grantPct: number;
     /** Finanziamento */
     loan: { enabled: boolean; pct: number; tanPct: number; years: number };
+    /** Fiscalità d'impresa (solo per i progetti aziendali) */
+    business: BusinessTax;
   };
+}
+
+export type ProjectKind = 'casa' | 'azienda';
+
+export interface BusinessTax {
+  /** IVA detraibile: il costo dell'impianto si considera al netto dell'IVA */
+  vatRecoverable: boolean;
+  /** Aliquote IRES e IRAP [%] */
+  iresPct: number;
+  irapPct: number;
+  /** Coefficiente di ammortamento fiscale [% all'anno] */
+  depreciationPct: number;
+  /** Maggiorazione del costo per l'iperammortamento [%] (0 = non richiesto) */
+  hyperPct: number;
 }
 
 export interface Field2 {
@@ -137,6 +159,7 @@ export function defaultDesign(): PvDesign {
   const s = SITES[1]!;
   return {
     name: 'Impianto fotovoltaico domestico',
+    kind: 'casa',
     location: { lat: null, lon: null, address: '', zoom: 6 },
     obstacles: [],
     roof: { footprint: [], type: 'due-falde', pitch: 20, heightM: 6, slope: 0, setbackM: 0.4, orientation: 'verticale', excluded: [] },
@@ -151,6 +174,7 @@ export function defaultDesign(): PvDesign {
       heatPumpKWh: 0,
       evKm: 0,
       evCharge: 'sera',
+      closedAugust: false,
     },
     module: copy(MODULES[1]!),
     modulesPerString: 8,
@@ -158,6 +182,7 @@ export function defaultDesign(): PvDesign {
     field2: { enabled: false, slope: -1, modulesPerString: 6, strings: 1, tilt: 25, azimuth: 90, excluded: [] },
     optimizers: false,
     inverter: copy(INVERTERS[0]!),
+    inverterCount: 1,
     batteryKWh: 0,
     losses: { opticalPct: 3, soilingPct: 2, mismatchPct: 1.5, availabilityPct: 1, degradationPct: 0.5 },
     cables: { dcLengthM: 20, dcSection: null, dcAmbientC: 50, acLengthM: 10, acSection: null, acMethod: 'B1' },
@@ -184,9 +209,71 @@ export function defaultDesign(): PvDesign {
       taxPerYear: 0,
       grantPct: 0,
       loan: { enabled: false, pct: 100, tanPct: 7, years: 10 },
+      business: { vatRecoverable: true, iresPct: 24, irapPct: 3.9, depreciationPct: 9, hyperPct: 0 },
     },
   };
 }
+
+/**
+ * Passa il progetto a un'azienda o a un'abitazione: profilo dei consumi, componenti, listino e fiscalità di partenza.
+ * Restano posizione, tetto, clima e ombre.
+ */
+export function withKind(d: PvDesign, kind: ProjectKind): PvDesign {
+  if (d.kind === kind) return d;
+  const home = defaultDesign();
+  if (kind === 'casa') {
+    return {
+      ...d,
+      kind,
+      name: d.name === BUSINESS_NAME ? home.name : d.name,
+      consumption: { ...home.consumption, measured: null },
+      module: home.module,
+      modulesPerString: home.modulesPerString,
+      strings: home.strings,
+      inverter: home.inverter,
+      inverterCount: 1,
+      batteryKWh: 0,
+      field2: { ...d.field2, enabled: false },
+      cables: home.cables,
+      economics: { ...home.economics },
+    };
+  }
+  return {
+    ...d,
+    kind,
+    name: d.name === home.name ? BUSINESS_NAME : d.name,
+    consumption: {
+      ...home.consumption,
+      annualKWh: 80000,
+      profile: 'turno1',
+      customWeights: [...LOAD_PROFILES.turno1.weights],
+      contractKW: 60,
+      measured: null,
+    },
+    module: copy(MODULES.find((m) => m.id === 'm500')!),
+    modulesPerString: 18,
+    strings: 6,
+    inverter: copy(INVERTERS.find((i) => i.id === 't50')!),
+    inverterCount: 1,
+    batteryKWh: 0,
+    field2: { ...d.field2, enabled: false },
+    site: { ...d.site, mounting: d.roof.type === 'piano' ? 'ventilato' : d.site.mounting },
+    cables: { ...home.cables, dcLengthM: 40, acLengthM: 30 },
+    economics: {
+      ...home.economics,
+      prices: defaultPrices('azienda'),
+      vatPct: 22,
+      deductionPct: 0,
+      importPrice: 0.24,
+      exportPrice: 0.1,
+      bandPrices: [0.26, 0.24, 0.21],
+      omPerYear: 800,
+      business: { ...home.economics.business },
+    },
+  };
+}
+
+const BUSINESS_NAME = 'Impianto fotovoltaico aziendale';
 
 /** Completa un progetto salvato con i campi mancanti (versioni precedenti, dati incompleti). */
 /** Versione del listino attuale (ottobre 2026). */
@@ -198,7 +285,8 @@ export function normalizeDesign(x: unknown): PvDesign {
   const d = defaultDesign();
   if (!x || typeof x !== 'object') return d;
   const o = x as Partial<PvDesign>;
-  let prices = DEFAULT_PRICES.map((p) => ({ ...p, price: o.economics?.prices?.find((q) => q.id === p.id)?.price ?? p.price }));
+  const kind: ProjectKind = o.kind === 'azienda' ? 'azienda' : 'casa';
+  let prices = defaultPrices(kind).map((p) => ({ ...p, price: o.economics?.prices?.find((q) => q.id === p.id)?.price ?? p.price }));
   let econ = { ...d.economics, ...o.economics };
   // Progetti salvati con il listino precedente: si aggiornano solo i valori rimasti uguali ai vecchi predefiniti
   // (quelli cambiati dall'utente restano com'erano).
@@ -210,6 +298,8 @@ export function normalizeDesign(x: unknown): PvDesign {
   return {
     ...d,
     ...o,
+    kind,
+    inverterCount: Math.max(1, Math.round(Number(o.inverterCount) || 1)),
     location: { ...d.location, ...o.location },
     roof: { ...d.roof, ...o.roof },
     obstacles: Array.isArray(o.obstacles) ? o.obstacles.map((ob) => ({ ...ob, z0: ob.z0 ?? 0 })) : [],
@@ -220,7 +310,7 @@ export function normalizeDesign(x: unknown): PvDesign {
     inverter: { ...d.inverter, ...o.inverter },
     losses: { ...d.losses, ...o.losses },
     cables: { ...d.cables, ...o.cables },
-    economics: { ...econ, prices, loan: { ...d.economics.loan, ...o.economics?.loan } },
+    economics: { ...econ, prices, loan: { ...d.economics.loan, ...o.economics?.loan }, business: { ...d.economics.business, ...o.economics?.business } },
   };
 }
 
@@ -234,3 +324,10 @@ export const DEDUCTION_RATES: Record<TaxYear, { label: string; main: number; oth
 export const deductionRate = (y: TaxYear, main: boolean) => DEDUCTION_RATES[y][main ? 'main' : 'other'];
 
 export const isHybrid = (d: PvDesign) => d.inverter.hybrid;
+/** Progetto per un'azienda. */
+export const isBusiness = (d: Pick<PvDesign, 'kind'>) => d.kind === 'azienda';
+/**
+ * La batteria lavora: con un inverter ibrido, oppure in un'azienda con un sistema di accumulo collegato in alternata
+ * (con il suo convertitore).
+ */
+export const batteryActive = (d: PvDesign) => d.batteryKWh > 0 && (isHybrid(d) || isBusiness(d));

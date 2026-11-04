@@ -1,7 +1,9 @@
-import { Landmark, PiggyBank, Receipt, Users } from 'lucide-react';
+import { ClipboardList, Landmark, PiggyBank, Receipt, TrendingUp, Users } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { f, type DesignResults } from '../../pvdesign/calc';
-import { INCENTIVE_SOURCES } from '../../pvdesign/data';
+import { connectionInfo } from '../../pvdesign/connection';
+import { BUSINESS_SOURCES, INCENTIVE_SOURCES } from '../../pvdesign/data';
+import { isBusiness } from '../../pvdesign/design';
 import { usePvDesign } from '../../pvdesign/store';
 import { Sources } from './BatteryStep';
 import { More } from './kit';
@@ -12,18 +14,31 @@ const eur = (v: number) => `${f(v)} €`;
 export function SavingsBreakdown({ r }: { r: DesignResults }) {
   const e = usePvDesign((s) => s.design.economics);
   const deg = usePvDesign((s) => s.design.losses.degradationPct);
+  const biz = usePvDesign((s) => isBusiness(s.design));
   const ec = r.economics;
   const y = r.yield;
+  const where = biz ? 'in azienda' : 'in casa';
   const selfPrice = y.selfKWh > 0 ? ec.firstYearSaving / y.selfKWh : 0;
   const rate = e.deductionYears > 0 ? ec.deductionTotal / e.deductionYears : 0;
   const dedYear = e.taxPerYear > 0 ? Math.min(rate, e.taxPerYear) : rate;
   const rows: { label: string; how: string; value: number; color: string }[] = [
-    { label: 'Energia che non compri più', how: `${f(y.selfKWh)} kWh usati in casa × ${f(selfPrice, 3)} €/kWh`, value: ec.firstYearSaving, color: '#34d399' },
+    { label: 'Energia che non compri più', how: `${f(y.selfKWh)} kWh usati ${where} × ${f(selfPrice, 3)} €/kWh`, value: ec.firstYearSaving, color: '#34d399' },
     { label: 'Energia venduta in rete', how: `${f(y.exportKWh)} kWh immessi × ${f(e.exportPrice, 3)} €/kWh (ritiro dedicato)`, value: ec.firstYearExport, color: '#38bdf8' },
     ...(ec.firstYearCer > 0
       ? [{ label: 'Incentivo della comunità energetica', how: `${f(y.exportKWh * (e.cerSharedPct / 100))} kWh condivisi × ${f(e.cerIncentive, 3)} €/kWh, per 20 anni`, value: ec.firstYearCer, color: '#a78bfa' }]
       : []),
     ...(dedYear > 0 ? [{ label: 'Quota della detrazione fiscale', how: `${eur(ec.deductionTotal)} in ${e.deductionYears} rate annuali${dedYear < rate ? `, limitate dall'IRPEF (${eur(rate)} la rata piena)` : ''}`, value: dedYear, color: '#fbbf24' }] : []),
+    ...(biz
+      ? [
+          { label: 'Imposte sul risparmio (IRES e IRAP)', how: `il risparmio e i ricavi aumentano l'utile: ${f(e.business.iresPct + e.business.irapPct, 1)}%`, value: -ec.firstYearTax, color: '#fb923c' },
+          {
+            label: "Imposte risparmiate con l'ammortamento",
+            how: `quota del primo anno (metà del ${f(e.business.depreciationPct, 1)}%)${e.business.hyperPct > 0 ? `, con l'iperammortamento +${f(e.business.hyperPct)}%` : ''}`,
+            value: ec.firstYearShield,
+            color: '#fbbf24',
+          },
+        ]
+      : []),
     ...(e.omPerYear > 0 ? [{ label: 'Manutenzione e assicurazione', how: 'spesa annua stimata', value: -e.omPerYear, color: '#f87171' }] : []),
   ];
   const net = rows.reduce((a, x) => a + x.value, 0);
@@ -31,13 +46,18 @@ export function SavingsBreakdown({ r }: { r: DesignResults }) {
   const ratio = e.exportPrice > 0 ? selfPrice / e.exportPrice : 0;
 
   // Gli anni in cui qualcosa cambia: fine della detrazione, cambio dell'inverter, fine dell'incentivo CER.
-  const D = e.deductionYears;
+  const D = biz ? 0 : e.deductionYears;
   const marks = new Map<number, string>();
   const add = (k: number, why: string) => k >= 1 && k <= e.years && marks.set(k, marks.has(k) ? `${marks.get(k)}; ${why}` : why);
   add(1, 'primo anno');
   if (D > 0) {
     add(D, 'ultima rata della detrazione');
     add(D + 1, 'senza più la detrazione');
+  }
+  if (biz && e.business.depreciationPct > 0) {
+    // Ultimo anno con una quota di ammortamento: metà quota il primo anno, poi quote intere.
+    const q = e.business.depreciationPct / 100;
+    add(1 + Math.ceil((1 - q / 2) / q - 1e-9), 'ultima quota di ammortamento');
   }
   if (e.inverterReplaceYear > 0) add(e.inverterReplaceYear, "sostituzione dell'inverter");
   if (e.cer) add(21, "finito l'incentivo CER");
@@ -77,16 +97,17 @@ export function SavingsBreakdown({ r }: { r: DesignResults }) {
         <p className="rounded-lg bg-emerald-500/[0.07] px-3 py-2 text-emerald-100/90">
           {ratio > 1 ? (
             <>
-              Ogni kWh usato in casa vale <b>{f(ratio, 1)} volte</b> un kWh venduto: per questo conviene usare l'energia mentre il sole c'è (lavatrice, lavastoviglie, auto elettrica di giorno) o accumularla
-              in una batteria.
+              Ogni kWh usato {where} vale <b>{f(ratio, 1)} volte</b> un kWh venduto: per questo conviene usare l'energia mentre il sole c'è{' '}
+              {biz ? '(lavorazioni energivore, compressori, ricarica dei mezzi elettrici nelle ore centrali)' : '(lavatrice, lavastoviglie, auto elettrica di giorno)'} o accumularla in una batteria.
             </>
           ) : (
             "Il kWh usato in casa vale quanto il prezzo che paghi in bolletta, quello venduto quanto ti paga il ritiro dedicato."
           )}
         </p>
         <p className="rounded-lg bg-slate-900/80 px-3 py-2">
-          L'energia autoconsumata non paga nessuna voce a consumo: energia, trasporto, oneri, accise e IVA. Restano invece le quote fisse della bolletta (per punto e per potenza impegnata), che
-          l'impianto non riduce.
+          {biz
+            ? "L'energia autoconsumata non paga energia, trasporto, oneri e accise. Restano le quote fisse e quelle per la potenza impegnata, che l'impianto non riduce."
+            : "L'energia autoconsumata non paga nessuna voce a consumo: energia, trasporto, oneri, accise e IVA. Restano invece le quote fisse della bolletta (per punto e per potenza impegnata), che l'impianto non riduce."}
         </p>
       </div>
       <More label="Come cambia negli anni">
@@ -151,6 +172,115 @@ const Steps = ({ items }: { items: ReactNode[] }) => (
 
 /** Come funzionano detrazione, vendita dell'energia, comunità energetiche e gli altri bonus. */
 export function IncentivesGuide({ r }: { r: DesignResults }) {
+  const biz = usePvDesign((s) => isBusiness(s.design));
+  return biz ? <BusinessGuide r={r} /> : <HomeGuide r={r} />;
+}
+
+/** Incentivi, imposte e obblighi per un impianto aziendale. */
+function BusinessGuide({ r }: { r: DesignResults }) {
+  const d = usePvDesign((s) => s.design);
+  const e = d.economics;
+  const ec = r.economics;
+  const over = r.yield.consumptionKWh > 0 ? r.yield.productionKWh / r.yield.consumptionKWh : 0;
+  const items = connectionInfo(d);
+  return (
+    <section className="space-y-3" aria-labelledby="pv-incentives-title">
+      <div>
+        <h3 id="pv-incentives-title" className="text-[0.9375rem] font-semibold text-white">
+          Incentivi, imposte e obblighi per un'azienda
+        </h3>
+        <p className="text-[0.75rem] text-slate-400">Regole in vigore a novembre 2026, spiegate in breve. Cambiano spesso: prima di decidere verificale con l'installatore e il commercialista.</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card
+          icon={<TrendingUp size={16} className="text-amber-300" />}
+          title="Iperammortamento 2026"
+          value={
+            e.business.hyperPct > 0 ? (
+              <>
+                Nel tuo progetto: +{f(e.business.hyperPct)}% sul costo, <b>{eur(ec.hyperTotal)}</b> di IRES in meno oltre all'ammortamento ordinario.
+              </>
+            ) : (
+              "Nel tuo progetto non è attivo: puoi provarlo qui sopra, in «Fiscalità dell'azienda»."
+            )
+          }
+          sources={BUSINESS_SOURCES.hyper}
+          more={
+            <Steps
+              items={[
+                "Scegli moduli iscritti al registro ENEA nella categoria B (celle prodotte nell'UE, efficienza almeno 23,5%) o C (celle bifacciali a eterogiunzione o tandem, almeno 24%).",
+                "Fai calcolare il fabbisogno dell'azienda sui consumi dell'esercizio precedente: la produzione attesa non deve superarne il 105%.",
+                'Raccogli la perizia tecnica asseverata (ingegnere, perito industriale o ente accreditato) e la certificazione contabile di un revisore.',
+                "Invia le comunicazioni previste dal decreto attuativo e completa l'investimento entro il 30 settembre 2028.",
+              ]}
+            />
+          }
+        >
+          <p>Il costo dell'impianto si deduce dal reddito come se fosse più alto: con il +180% ogni 100 € spesi se ne deducono 280, quindi si pagano meno imposte negli anni dell'ammortamento.</p>
+          <ul className="list-disc space-y-1 pl-4 marker:text-slate-500">
+            <li>Legge 199/2025 (bilancio 2026), commi 427-436: +180% fino a 2,5 milioni di euro di investimento, +100% fino a 10 milioni, +50% fino a 20 milioni.</li>
+            <li>Investimenti dal 1° gennaio 2026 al 30 settembre 2028. Prende il posto dei crediti d'imposta Transizione 4.0 e 5.0.</li>
+            <li>Solo impianti per l'autoconsumo dell'azienda; gli accumuli sono compresi. Vale per tutte le imprese, di ogni dimensione e forma.</li>
+            {over > 1.05 && <li className="text-amber-200">Il tuo impianto produce il {f(over * 100)}% dei consumi: oltre il 105% l'iperammortamento non spetta.</li>}
+          </ul>
+        </Card>
+
+        <Card icon={<Receipt size={16} className="text-sky-300" />} title="IVA, ammortamento e imposte" sources={BUSINESS_SOURCES.depreciation}>
+          <ul className="list-disc space-y-1 pl-4 marker:text-slate-500">
+            <li>
+              <b>IVA al 22%</b> in fattura, ma l'azienda che la detrae la recupera: il costo dell'impianto è l'imponibile{e.business.vatRecoverable ? ' (come nel tuo progetto)' : ''}.
+            </li>
+            <li>
+              <b>Ammortamento</b>: l'impianto sul tetto, se non è accatastato con il fabbricato, si ammortizza al 9% all'anno (metà quota il primo esercizio). La detrazione del 50% per le case non vale per
+              le imprese.
+            </li>
+            <li>
+              <b>Imposte</b>: l'energia non comprata riduce i costi e quella venduta è un ricavo, quindi l'utile sale e con lui IRES e IRAP. Nel calcolo i flussi sono al netto delle imposte.
+            </li>
+          </ul>
+        </Card>
+
+        <Card
+          icon={<Users size={16} className="text-violet-300" />}
+          title="Energia venduta e comunità energetiche"
+          value={
+            <>
+              Nel tuo progetto: {f(r.yield.exportKWh)} kWh all'anno in rete, circa <b>{eur(ec.firstYearExport)}</b>
+              {ec.firstYearCer > 0 && <> più {eur(ec.firstYearCer)} di incentivo CER</>}.
+            </>
+          }
+          sources={[...INCENTIVE_SOURCES.rid, ...INCENTIVE_SOURCES.cer]}
+        >
+          <ul className="list-disc space-y-1 pl-4 marker:text-slate-500">
+            <li>L'energia in più si vende con il ritiro dedicato del GSE (prezzo zonale orario con un minimo garantito) o a un operatore di mercato.</li>
+            <li>
+              Le piccole e medie imprese possono entrare in una comunità energetica, purché non sia la loro attività principale: per l'energia condivisa la tariffa dura 20 anni. Nei fine settimana un'azienda
+              chiusa immette molta energia, che gli altri membri possono usare.
+            </li>
+            <li>Nei Comuni fino a 50.000 abitanti c'era anche il contributo PNRR del 40% per gli impianti in CER: verifica se lo sportello è aperto e la cumulabilità con l'iperammortamento.</li>
+          </ul>
+        </Card>
+
+        <Card icon={<ClipboardList size={16} className="text-emerald-300" />} title="Connessione e pratiche" sources={[...BUSINESS_SOURCES.connection, ...BUSINESS_SOURCES.adm, ...BUSINESS_SOURCES.fire]}>
+          <ul className="list-disc space-y-1 pl-4 marker:text-slate-500">
+            {items.map((x) => (
+              <li key={x.id}>
+                <b>{x.title}</b>: {x.summary}.
+              </li>
+            ))}
+          </ul>
+          <p className="text-[0.71875rem] text-slate-400">I dettagli sono nel passo «Cavi e protezioni», sezione «Connessione alla rete e pratiche».</p>
+        </Card>
+      </div>
+      <p className="text-[0.71875rem] leading-snug text-slate-500">
+        Informazioni divulgative, non sono una consulenza fiscale: aliquote, scadenze e requisiti dipendono dall'azienda e dalle norme in vigore quando investi.
+      </p>
+    </section>
+  );
+}
+
+/** Incentivi e bonus per un'abitazione. */
+function HomeGuide({ r }: { r: DesignResults }) {
   const e = usePvDesign((s) => s.design.economics);
   const ec = r.economics;
   const dedYear = e.deductionYears > 0 ? ec.deductionTotal / e.deductionYears : 0;

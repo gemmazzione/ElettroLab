@@ -2,7 +2,7 @@
 // bolletta mese per mese e potenza del contatore con i nuovi carichi.
 
 import { computeEconomics, EV_KWH_PER_KM, type Bands, type Economics, type YieldResult } from './calc';
-import { deductionRate, type PvDesign } from './design';
+import { deductionRate, isBusiness, type PvDesign } from './design';
 
 const withEcon = (d: PvDesign, patch: Partial<PvDesign['economics']>): PvDesign => ({ ...d, economics: { ...d.economics, ...patch } });
 
@@ -16,7 +16,7 @@ export interface IncentiveOption {
   current: boolean;
   /** Spesa iniziale al netto del contributo [€] */
   upfront: number;
-  /** Detrazione recuperata [€] */
+  /** Detrazione recuperata; per un'azienda, imposte risparmiate con ammortamento e iperammortamento [€] */
   deduction: number;
   /** Incentivo CER nei 20 anni [€] */
   cer20: number;
@@ -24,8 +24,36 @@ export interface IncentiveOption {
   npv: number;
 }
 
+/** Azienda: ammortamento ordinario, iperammortamento 2026, comunità energetica, contributo PNRR. */
+function businessOptions(d: PvDesign, y: YieldResult): IncentiveOption[] {
+  const e = d.economics;
+  const tax = (hyperPct: number) => ({ ...e.business, hyperPct });
+  const variants: { id: string; label: string; note: string; patch: Partial<PvDesign['economics']> }[] = [
+    { id: 'amm', label: 'Ammortamento ordinario', note: `Coefficiente ${e.business.depreciationPct}%, nessun incentivo`, patch: { business: tax(0), cer: false, grantPct: 0 } },
+    { id: 'iper', label: 'Iperammortamento +180%', note: 'Moduli ENEA di categoria B o C, produzione fino al 105% del fabbisogno, perizia asseverata', patch: { business: tax(180), cer: false, grantPct: 0 } },
+    { id: 'ipercer', label: 'Iperammortamento + CER', note: "Tariffa sull'energia condivisa per 20 anni: verifica la cumulabilità", patch: { business: tax(180), cer: true, grantPct: 0 } },
+    { id: 'pnrr', label: 'CER + contributo PNRR 40%', note: 'Comuni fino a 50.000 abitanti, se lo sportello è aperto: tariffa CER dimezzata, niente iperammortamento', patch: { business: tax(0), cer: true, grantPct: 40 } },
+  ];
+  return variants.map((v) => {
+    const ec = computeEconomics(withEcon(d, v.patch), y);
+    const p = { ...e, ...v.patch };
+    return {
+      id: v.id,
+      label: v.label,
+      note: v.note,
+      current: p.business.hyperPct === e.business.hyperPct && p.cer === e.cer && p.grantPct === e.grantPct,
+      upfront: ec.total - ec.grant,
+      deduction: ec.shieldTotal,
+      cer20: ec.firstYearCer * Math.min(20, e.years),
+      paybackYears: ec.paybackYears,
+      npv: ec.npv,
+    };
+  });
+}
+
 /** Le strade possibili per lo stesso impianto: detrazione con le varie aliquote, comunità energetica, contributo PNRR. */
 export function incentiveOptions(d: PvDesign, y: YieldResult): IncentiveOption[] {
+  if (isBusiness(d)) return businessOptions(d, y);
   const e = d.economics;
   const main = deductionRate('2026', e.mainHome);
   const later = deductionRate('2027', e.mainHome);

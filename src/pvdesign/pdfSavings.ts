@@ -3,7 +3,7 @@
 
 import { f, type DesignResults } from './calc';
 import { MONTHS } from './data';
-import { DEDUCTION_RATES, type PvDesign } from './design';
+import { DEDUCTION_RATES, isBusiness, type PvDesign } from './design';
 import { incentiveOptions, loanPlan, monthlyBills, powerAdvice, scenarios } from './money';
 
 const eur = (v: number) => `${f(v)} EUR`;
@@ -22,10 +22,13 @@ export function savingsSection(d: PvDesign, r: DesignResults, { heading, table, 
   const rate = e.deductionYears > 0 ? ec.deductionTotal / e.deductionYears : 0;
   const ded = e.taxPerYear > 0 ? Math.min(rate, e.taxPerYear) : rate;
   const self = y.selfKWh > 0 ? ec.firstYearSaving / y.selfKWh : 0;
+  const biz = isBusiness(d);
 
   heading(
     '7. Il risparmio nel dettaglio',
-    `Regole fiscali considerate: ${DEDUCTION_RATES[e.taxYear].label.toLowerCase()}, ${e.mainHome ? 'abitazione principale' : 'altro immobile'}. L'energia usata in casa non paga nessuna voce a consumo; le quote fisse della bolletta restano.`,
+    biz
+      ? `Azienda: costi ${ec.vatIncluded ? 'con IVA' : 'senza IVA (detraibile)'}, flussi al netto di IRES e IRAP, ammortamento al ${f(e.business.depreciationPct, 1)}%${e.business.hyperPct > 0 ? ` con iperammortamento +${f(e.business.hyperPct)}%` : ''}. L'energia usata in azienda non paga energia, trasporto, oneri e accise; le quote fisse restano.`
+      : `Regole fiscali considerate: ${DEDUCTION_RATES[e.taxYear].label.toLowerCase()}, ${e.mainHome ? 'abitazione principale' : 'altro immobile'}. L'energia usata in casa non paga nessuna voce a consumo; le quote fisse della bolletta restano.`,
   );
   table(
     [],
@@ -34,8 +37,9 @@ export function savingsSection(d: PvDesign, r: DesignResults, { heading, table, 
       ['Energia venduta (ritiro dedicato)', `${f(y.exportKWh)} kWh x ${f(e.exportPrice, 3)} EUR/kWh = ${eur(ec.firstYearExport)}`],
       ...(ec.firstYearCer > 0 ? [['Incentivo CER', eur(ec.firstYearCer)]] : []),
       ...(ded > 0 ? [['Rata della detrazione', `${eur(ded)}${ded < rate ? ` (rata piena ${eur(rate)}, limitata dall'IRPEF)` : ''}`]] : []),
+      ...(biz ? [['Imposte sul risparmio (IRES e IRAP)', `-${eur(ec.firstYearTax)}`], ["Imposte risparmiate con l'ammortamento", eur(ec.firstYearShield)]] : []),
       ...(e.omPerYear > 0 ? [['Manutenzione e assicurazione', `-${eur(e.omPerYear)}`]] : []),
-      ['Guadagno netto del primo anno', eur(ec.firstYearSaving + ec.firstYearExport + ec.firstYearCer + ded - e.omPerYear)],
+      ['Guadagno netto del primo anno', eur(ec.cashflow[1]?.flow ?? 0)],
     ],
     undefined,
     true,
@@ -46,9 +50,14 @@ export function savingsSection(d: PvDesign, r: DesignResults, { heading, table, 
     [1, 2, 2],
   );
 
-  heading('Quale agevolazione conviene', 'Lo stesso impianto con le strade possibili. Il Conto Termico per le case vale solo insieme a una pompa di calore e non si somma alla detrazione.');
+  heading(
+    'Quale agevolazione conviene',
+    biz
+      ? "Lo stesso impianto con le strade possibili per un'azienda, al netto delle imposte."
+      : 'Lo stesso impianto con le strade possibili. Il Conto Termico per le case vale solo insieme a una pompa di calore e non si somma alla detrazione.',
+  );
   table(
-    ['Strada', 'Spesa iniziale', 'Detrazione', 'CER in 20 anni', 'Rientro', 'VAN'],
+    ['Strada', 'Spesa iniziale', biz ? 'Imposte risparmiate' : 'Detrazione', 'CER in 20 anni', 'Rientro', 'VAN'],
     incentiveOptions(d, y).map((o) => [
       `${o.label}${o.current ? ' (progetto)' : ''}: ${o.note}`,
       eur(o.upfront),
@@ -83,7 +92,7 @@ export function savingsSection(d: PvDesign, r: DesignResults, { heading, table, 
     );
   }
 
-  const pw = powerAdvice(d.consumption);
+  const pw = biz ? null : powerAdvice(d.consumption);
   if (pw) {
     heading('Potenza del contatore', 'Stima indicativa del picco con i carichi indicati; il contatore tollera il 10% in più della potenza impegnata.');
     table(
@@ -103,6 +112,16 @@ export function savingsSection(d: PvDesign, r: DesignResults, { heading, table, 
     );
   }
 
+  if (biz) {
+    heading("Incentivi, imposte e obblighi per un'azienda", 'Regole in vigore a novembre 2026, in breve: vanno verificate al momento dell\'investimento. Informazioni divulgative, non una consulenza fiscale.');
+    bullets([
+      "Iperammortamento 2026 (L. 199/2025, commi 427-436): costo deducibile maggiorato del 180% fino a 2,5 milioni di euro (100% fino a 10, 50% fino a 20); investimenti dal 1/1/2026 al 30/9/2028; solo impianti per l'autoconsumo, accumuli compresi; moduli del registro ENEA di categoria B o C; produzione attesa fino al 105% del fabbisogno; perizia asseverata e certificazione contabile. Sostituisce i crediti Transizione 4.0 e 5.0.",
+      "IVA al 22%, detraibile per l'azienda; ammortamento al 9% per l'impianto sul tetto non accatastato con il fabbricato. La detrazione del 50% per le abitazioni non vale per le imprese. Risparmio e ricavi aumentano l'utile e quindi IRES e IRAP.",
+      "Energia venduta con il ritiro dedicato del GSE o a un operatore di mercato. Le PMI possono entrare in una comunità energetica se non è la loro attività principale; contributo PNRR del 40% nei Comuni fino a 50.000 abitanti, se lo sportello è aperto.",
+      "Connessione in bassa tensione fino a 100 kW (CEI 0-21), in media tensione oltre (CEI 0-16); protezione di interfaccia esterna oltre 11,08 kW; officina elettrica presso l'Agenzia delle Dogane oltre 20 kW con autoconsumo; prevenzione incendi secondo la linea guida dei Vigili del Fuoco del 2025.",
+    ]);
+    return;
+  }
   heading(
     "Come funzionano detrazione, vendita dell'energia e incentivi",
     'Regole in vigore a novembre 2026, in breve: vanno verificate al momento della spesa. Informazioni divulgative, non una consulenza fiscale.',

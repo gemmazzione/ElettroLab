@@ -1,9 +1,10 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
-import { batteryAdvice, EV_KWH_PER_KM, f, fieldDesign, fields, moduleCount, peakW, stringsPerMppt, type DesignResults } from './calc';
-import { DEFAULT_PRICES, ECONOMIC_SOURCES, INCENTIVE_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
-import { isHybrid, type PvDesign } from './design';
+import { acPowerW, batteryAdvice, EV_KWH_PER_KM, f, fieldDesign, fields, inverterUnits, moduleCount, mpptInputs, peakW, stringsPerMppt, threePhase, type DesignResults } from './calc';
+import { connectionInfo } from './connection';
+import { BUSINESS_SOURCES, BUSINESS_TURNKEY_SOURCES, DEFAULT_PRICES, ECONOMIC_SOURCES, INCENTIVE_SOURCES, LOAD_PROFILES, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type PriceSource } from './data';
+import { batteryActive, isBusiness, type PvDesign } from './design';
 import { powerAdvice } from './money';
 import { lossRgb, planImage, type PlanImage } from './pdfPlan';
 import { savingsSection } from './pdfSavings';
@@ -79,7 +80,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   /** Schema unifilare semplificato disegnato con linee e riquadri. */
   const singleLine = () => {
     const fv = fields(d);
-    const bat = isHybrid(d) && d.batteryKWh > 0;
+    const bat = batteryActive(d);
     const hgt = 30 + fv.length * 20 + (bat ? 6 : 0);
     if (y + hgt + 14 > 285) {
       doc.addPage();
@@ -120,7 +121,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
       doc.setFont('helvetica', 'normal').setFontSize(6.3).setTextColor(...MUTED);
       doc.text(T(`${r.dc.section} mm²`), MARGIN + 46, yy + 6.6);
     });
-    box(invX, invY, 30, invH, 'Inverter', `${d.inverter.label}`);
+    box(invX, invY, 30, invH, inverterUnits(d) > 1 ? `${inverterUnits(d)} inverter` : 'Inverter', `${d.inverter.label}`);
     const midY = invY + invH / 2;
     box(150, midY - 7, 22, 14, 'Magnetoterm. differenziale', `${r.ac.inA} A`);
     line(invX + 30, midY, 150, midY);
@@ -159,11 +160,13 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
         fields(d).length > 1 ? `Configurazione falda ${fv.index + 1}` : 'Configurazione',
         `${fv.strings} ${fv.strings > 1 ? 'stringhe' : 'stringa'} da ${fv.modulesPerString} moduli, ${stringsPerMppt(fieldDesign(d, fv))} per ingresso MPPT${fields(d).length > 1 ? `, ${f(fv.tilt)}° / ${f(fv.azimuth)}°` : ''}${d.optimizers ? ', con ottimizzatori' : ''}`,
       ]),
-      ['Inverter', `${d.inverter.label} (${f(d.inverter.pacW)} W)${isHybrid(d) && d.batteryKWh > 0 ? `, batteria ${f(d.batteryKWh, 1)} kWh` : ''}`],
+      ...(isBusiness(d) ? [['Utenza', `Azienda (${LOAD_PROFILES[d.consumption.profile].label.toLowerCase()})`]] : []),
+      ['Inverter', `${inverterUnits(d) > 1 ? `${inverterUnits(d)} × ` : ''}${d.inverter.label} (${f(acPowerW(d))} W${threePhase(d) ? ', trifase' : ''})${batteryActive(d) ? `, batteria ${f(d.batteryKWh, 1)} kWh` : ''}`],
       ['Produzione annua stimata', `${f(r.yield.productionKWh)} kWh (${f(r.yield.specificYield)} kWh/kWp, PR ${f(r.yield.pr * 100, 1)}%)`],
       ['Consumi annui', `${f(d.consumption.annualKWh)} kWh${r.yield.extrasKWh > 0 ? ` + ${f(r.yield.extrasKWh)} kWh di pompa di calore e auto elettrica` : ''}`],
       ['Autoconsumo / autosufficienza', `${f(r.yield.selfConsumptionPct)}% / ${f(r.yield.selfSufficiencyPct)}%`],
-      ['Costo totale stimato (IVA inclusa)', eur(r.economics.total)],
+      [`Costo totale stimato (${r.economics.vatIncluded ? 'IVA inclusa' : 'IVA esclusa, detraibile'})`, eur(r.economics.total)],
+      ...(isBusiness(d) ? [['Connessione', connectionInfo(d)[0]!.summary]] : []),
       ['Rientro semplice', r.economics.paybackYears === null ? 'oltre la durata dell\'analisi' : `${f(r.economics.paybackYears, 1)} anni`],
     ],
     undefined,
@@ -194,6 +197,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
       ...(d.consumption.heatPumpKWh > 0 ? [['Pompa di calore', `${f(d.consumption.heatPumpKWh)} kWh all'anno, nei mesi freddi`]] : []),
       ...(d.consumption.evKm > 0 ? [['Auto elettrica', `${f(d.consumption.evKm)} km all'anno (circa ${f(d.consumption.evKm * EV_KWH_PER_KM)} kWh), ricarica ${d.consumption.evCharge === 'giorno' ? 'di giorno (10-16)' : 'di sera (19-23)'}`]] : []),
       ['Potenza della fornitura', `${f(d.consumption.contractKW, 1)} kW`],
+      ...(isBusiness(d) && d.consumption.closedAugust ? [['Chiusura estiva', 'agosto, consumi a circa un terzo']] : []),
     ],
     undefined,
     true,
@@ -297,7 +301,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   );
   table(
     ['Inverter', 'Pac', 'Rend. europeo', 'MPPT', 'Vdc max', 'Finestra MPPT', 'Idc per MPPT'],
-    [[d.inverter.label, `${f(d.inverter.pacW)} W`, `${f(d.inverter.euroEff, 1)}%`, String(d.inverter.mppt), `${f(d.inverter.maxDcV)} V`, `${f(d.inverter.mpptMinV)}-${f(d.inverter.mpptMaxV)} V`, `${f(d.inverter.maxDcA)} A`]],
+    [[`${inverterUnits(d) > 1 ? `${inverterUnits(d)} × ` : ''}${d.inverter.label}`, `${f(d.inverter.pacW)} W`, `${f(d.inverter.euroEff, 1)}%`, inverterUnits(d) > 1 ? `${d.inverter.mppt} (${mpptInputs(d)} in tutto)` : String(d.inverter.mppt), `${f(d.inverter.maxDcV)} V`, `${f(d.inverter.mpptMinV)}-${f(d.inverter.mpptMaxV)} V`, `${f(d.inverter.maxDcA)} A`]],
     [4, 1.2, 1.5, 1, 1.3, 1.8, 1.5],
   );
   heading('Verifiche di dimensionamento', 'Verifiche tecniche sui dati di targa e sulle temperature di progetto: non sono prescrizioni normative.');
@@ -309,12 +313,14 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     ['Tratto', 'Sezione', 'Lunghezza', 'Corrente di progetto', 'Portata', 'Caduta di tensione', 'Esito'],
     [
       ['Stringhe -> inverter (DC)', `${r.dc.section} mm²`, `${f(d.cables.dcLengthM)} m`, `${f(r.dc.ib, 1)} A`, `${r.dc.iz === null ? '-' : f(r.dc.iz, 1)} A`, `${f(r.dc.dropPct, 2)}%`, r.dc.ok ? 'OK' : 'NON SUPERATA'],
-      ['Inverter -> quadro (AC)', `${r.ac.section} mm²`, `${f(d.cables.acLengthM)} m`, `${f(r.ac.ib, 1)} A (In ${r.ac.inA} A)`, `${r.ac.iz === null ? '-' : f(r.ac.iz, 1)} A`, `${f(r.ac.dropPct, 2)}%`, r.ac.ok ? 'OK' : 'NON SUPERATA'],
+      [threePhase(d) ? 'Inverter -> quadro (AC trifase)' : 'Inverter -> quadro (AC)', `${r.ac.section} mm²`, `${f(d.cables.acLengthM)} m`, `${f(r.ac.ib, 1)} A (In ${r.ac.inA} A)`, `${r.ac.iz === null ? '-' : f(r.ac.iz, 1)} A`, `${f(r.ac.dropPct, 2)}%`, r.ac.ok ? 'OK' : 'NON SUPERATA'],
     ],
     [3, 1.2, 1.2, 2, 1.2, 1.5, 1.4],
   );
   bullets([...r.dc.notes, ...r.ac.notes, ...r.protection.notes]);
   singleLine();
+  heading('Connessione alla rete e pratiche', 'Indicazioni di massima: livello di tensione, protezioni e opere le stabilisce il distributore nel preventivo di connessione.');
+  table(['Tema', 'In breve', 'Cosa comporta'], connectionInfo(d).map((x) => [x.title, x.summary, x.detail]), [2, 2.6, 5.4]);
 
   // ---------------------------------------------------------------- 4. produzione
   heading(
@@ -350,7 +356,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     [
       ...ec.lines.map((l) => [l.label, l.id === 'misc' ? `${f(l.qty, 1)}%` : f(l.qty, l.qty % 1 ? 2 : 0), l.id === 'misc' ? '' : `${f(l.price, 2)} ${l.unit.replace('€', 'EUR')}`, eur(l.total)]),
       ['Imponibile', '', '', eur(ec.subtotal)],
-      [`IVA ${f(d.economics.vatPct)}%`, '', '', eur(ec.vat)],
+      [`IVA ${f(d.economics.vatPct)}%${ec.vatIncluded ? '' : ' (detraibile, non compresa nel costo)'}`, '', '', eur(ec.vat)],
       ['Totale', '', '', eur(ec.total)],
     ],
     [5, 1.3, 2, 1.6],
@@ -361,7 +367,7 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   table(
     ['Batteria', 'Autosufficienza', 'Autoconsumo', 'Spesa in più', 'Rientro'],
     adv.options.map((o) => [
-      `${o.kWh === 0 ? 'nessuna' : `${f(o.kWh, 1)} kWh`}${o.kWh === adv.recommended ? ' (consigliata)' : ''}${o.kWh === (isHybrid(d) ? d.batteryKWh : 0) ? ' - scelta' : ''}`,
+      `${o.kWh === 0 ? 'nessuna' : `${f(o.kWh, 1)} kWh`}${o.kWh === adv.recommended ? ' (consigliata)' : ''}${o.kWh === (batteryActive(d) ? d.batteryKWh : 0) ? ' - scelta' : ''}`,
       `${f(o.selfSufficiencyPct)}%`,
       `${f(o.selfConsumptionPct)}%`,
       eur(o.extraCost),
@@ -379,7 +385,13 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
         ? ['Prezzo energia prelevata F1 / F2 / F3', `${e.bandPrices.map((v) => f(v, 3)).join(' / ')} EUR/kWh; energia immessa ${f(e.exportPrice, 3)} EUR/kWh`]
         : ['Prezzo energia prelevata / valore energia immessa', `${f(e.importPrice, 3)} / ${f(e.exportPrice, 3)} EUR/kWh`],
       ...(e.cer ? [['Comunità energetica', `${f(e.cerSharedPct)}% dell'energia immessa condivisa, incentivo ${f(e.cerIncentive, 3)} EUR/kWh per 20 anni = ${eur(ec.firstYearCer)} il primo anno`]] : []),
-      ['Detrazione fiscale', `${f(e.deductionPct)}% in ${e.deductionYears} anni = ${eur(ec.deductionTotal)}${ec.deductionLost > 1 ? `, di cui ${eur(ec.deductionLost)} persi per IRPEF insufficiente (${eur(e.taxPerYear)} all'anno)` : ''}`],
+      ...(isBusiness(d)
+        ? [
+            ['Imposte sul reddito', `IRES ${f(e.business.iresPct, 1)}% + IRAP ${f(e.business.irapPct, 1)}%: flussi al netto delle imposte`],
+            ['Ammortamento', `${f(e.business.depreciationPct, 1)}% all'anno (metà il primo anno): ${eur(ec.shieldTotal)} di imposte risparmiate in ${e.years} anni`],
+            ...(e.business.hyperPct > 0 ? [['Iperammortamento 2026', `maggiorazione ${f(e.business.hyperPct)}%: ${eur(ec.hyperTotal)} di IRES in meno, compresi sopra`]] : []),
+          ]
+        : [['Detrazione fiscale', `${f(e.deductionPct)}% in ${e.deductionYears} anni = ${eur(ec.deductionTotal)}${ec.deductionLost > 1 ? `, di cui ${eur(ec.deductionLost)} persi per IRPEF insufficiente (${eur(e.taxPerYear)} all'anno)` : ''}`]]),
       ...(ec.grant > 0 ? [['Contributo a fondo perduto', `${f(e.grantPct)}% = ${eur(ec.grant)}`]] : []),
       ['Aumento annuo energia / degrado moduli', `${f(e.energyInflationPct, 1)}% / ${f(d.losses.degradationPct, 1)}%`],
       ['Manutenzione / sostituzione inverter', `${eur(e.omPerYear)} all'anno / anno ${e.inverterReplaceYear || '-'}`],
@@ -411,14 +423,24 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
   for (const item of DEFAULT_PRICES) addSrc(item.label, PRICE_SOURCES[item.id]?.sources);
   addSrc('Prezzo dell\'energia prelevata', ECONOMIC_SOURCES.importPrice.sources);
   addSrc('Valore dell\'energia immessa', ECONOMIC_SOURCES.exportPrice.sources);
-  addSrc('Detrazione fiscale', ECONOMIC_SOURCES.deduction.sources);
-  addSrc('IVA', ECONOMIC_SOURCES.vat.sources);
+  if (isBusiness(d)) {
+    addSrc('Prezzo dell\'energia per le imprese', BUSINESS_SOURCES.energyPrice);
+    addSrc('Costo chiavi in mano (aziende)', BUSINESS_TURNKEY_SOURCES);
+    addSrc('Iperammortamento 2026', BUSINESS_SOURCES.hyper);
+    addSrc('Ammortamento', BUSINESS_SOURCES.depreciation);
+    addSrc('Connessione e protezione di interfaccia', [...BUSINESS_SOURCES.connection, ...BUSINESS_SOURCES.spi]);
+    addSrc('Officina elettrica', BUSINESS_SOURCES.adm);
+    addSrc('Prevenzione incendi', BUSINESS_SOURCES.fire);
+  } else {
+    addSrc('Detrazione fiscale', ECONOMIC_SOURCES.deduction.sources);
+    addSrc('IVA', ECONOMIC_SOURCES.vat.sources);
+    addSrc('Detrazione: regole 2026 e 2027', INCENTIVE_SOURCES.deduction);
+  }
   if (e.cer) addSrc('Incentivo CER', ECONOMIC_SOURCES.cer.sources);
-  addSrc('Detrazione: regole 2026 e 2027', INCENTIVE_SOURCES.deduction);
   addSrc('Ritiro dedicato', INCENTIVE_SOURCES.rid);
   addSrc('Comunità energetiche e PNRR', [...INCENTIVE_SOURCES.cer, ...INCENTIVE_SOURCES.pnrr]);
-  addSrc('Altri aiuti', INCENTIVE_SOURCES.other);
-  if (powerAdvice(d.consumption)) addSrc('Aumento di potenza', INCENTIVE_SOURCES.power);
+  if (!isBusiness(d)) addSrc('Altri aiuti', INCENTIVE_SOURCES.other);
+  if (!isBusiness(d) && powerAdvice(d.consumption)) addSrc('Aumento di potenza', INCENTIVE_SOURCES.power);
   if (w) srcRows.push(['Dati climatici', `PVGIS, Commissione europea JRC: anno tipo, banca dati ${w.source}`, 'https://re.jrc.ec.europa.eu/pvg_tools/it/']);
   table(['Voce', 'Fonte e dato', 'Indirizzo'], srcRows, [2, 4, 3.6]);
 
@@ -437,7 +459,9 @@ export function buildPvDesignPdf(d: PvDesign, r: DesignResults, view3d: string |
     `Batteria: capacità utilizzabile ${f(90)}%, rendimento di andata e ritorno 90%, potenza circa 0,5 C (valori indicativi).`,
     d.consumption.measured
       ? 'Consumi: curva di carico misurata dal distributore, media per mese e ora del giorno; i mesi mancanti sono ricavati dai presenti.'
-      : 'Consumi: ripartizione mensile e profilo orario tipici, scalati sul consumo annuo indicato.',
+      : isBusiness(d)
+        ? "Consumi: profilo orario tipico dell'attività nei giorni feriali, con sabato e domenica ridotti nel calcolo ora per ora; consumi uguali nei mesi, salvo la chiusura di agosto se indicata."
+        : 'Consumi: ripartizione mensile e profilo orario tipici, scalati sul consumo annuo indicato.',
     "Costi: listino indicativo; IVA, detrazioni e valore dell\'energia sono parametri da verificare secondo la normativa fiscale e il mercato del momento. Non sono considerate le quote fisse della bolletta e i costi di connessione; il finanziamento è calcolato solo se indicato. Gli scenari variano prezzi dell'energia, rincari e produzione attorno alle ipotesi del progetto.",
     'Criteri per cavi e fusibili di stringa ripresi dalla pratica di progetto (IEC 62548) e riferimenti CEI 0-21 indicati come non verificati sul testo.',
   ]);

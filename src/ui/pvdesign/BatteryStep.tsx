@@ -1,8 +1,8 @@
 import { BatteryCharging, Check, ExternalLink, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
-import { batteryAdvice, batteryPowerW, f, withBattery } from '../../pvdesign/calc';
+import { acPowerW, batteryAdvice, batteryPowerW, f, withBattery } from '../../pvdesign/calc';
 import type { PriceSource } from '../../pvdesign/data';
-import { isHybrid } from '../../pvdesign/design';
+import { batteryActive, isBusiness, isHybrid } from '../../pvdesign/design';
 import { usePvDesign } from '../../pvdesign/store';
 import { Animated, Kpi, More, Num, Step, Term } from './kit';
 
@@ -14,7 +14,8 @@ export function BatteryStep({ n }: { n: number }) {
   const up = usePvDesign((x) => x.update);
   const advice = useMemo(() => batteryAdvice(d), [d]);
   const choose = (kWh: number) => up((x) => withBattery(x, kWh));
-  const current = isHybrid(d) ? d.batteryKWh : 0;
+  const current = batteryActive(d) ? d.batteryKWh : 0;
+  const biz = isBusiness(d);
   const rec = advice.options.find((o) => o.kWh === advice.recommended)!;
   const base = advice.options[0]!;
   const custom = current > 0 && !advice.options.some((o) => o.kWh === current);
@@ -24,10 +25,11 @@ export function BatteryStep({ n }: { n: number }) {
       title="Accumulo"
       intro={
         <>
-          Una batteria conserva l'energia prodotta di giorno e non usata, per restituirla la sera e la notte. Serve un <Term k="ibrido">inverter ibrido</Term>.
+          Una batteria conserva l'energia prodotta di giorno e non usata, per restituirla la sera e la notte.{' '}
+          {biz ? "In un'azienda di solito è un sistema di accumulo collegato in alternata, con il suo convertitore." : <>Serve un <Term k="ibrido">inverter ibrido</Term>.</>}
         </>
       }
-      help="Ti consiglio la capacità oltre la quale ogni kWh in più resterebbe quasi sempre inutilizzato. La batteria aumenta l'energia che usi in casa, ma di solito allunga un po' il rientro: scegli tu."
+      help={`Ti consiglio la capacità oltre la quale ogni kWh in più resterebbe quasi sempre inutilizzato. La batteria aumenta l'energia che usi ${biz ? 'in azienda' : 'in casa'}, ma di solito allunga un po' il rientro: scegli tu.`}
     >
       <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/[0.07] px-4 py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -91,19 +93,21 @@ export function BatteryStep({ n }: { n: number }) {
         <Kpi label="Batteria scelta" value={current > 0 ? `${f(current, 1)} kWh` : 'nessuna'} sub={current > 0 ? `potenza ${f(batteryPowerW(d) / 1000, 1)} kW` : undefined} />
         <Kpi label={<Term k="autosufficienza">Autosufficienza</Term>} value={<Animated value={(advice.options.find((o) => o.kWh === current) ?? rec).selfSufficiencyPct} format={(v) => `${f(v)}%`} />} sub={`senza batteria ${f(base.selfSufficiencyPct)}%`} />
         <Kpi label={<Term k="autoconsumo">Autoconsumo</Term>} value={`${f((advice.options.find((o) => o.kWh === current) ?? rec).selfConsumptionPct)}%`} sub={`senza batteria ${f(base.selfConsumptionPct)}%`} />
-        <Kpi label={<Term k="inverter">Inverter</Term>} value={`${f(d.inverter.pacW / 1000, 1)} kW`} sub={isHybrid(d) ? 'ibrido, gestisce la batteria' : 'senza batteria'} />
+        <Kpi label={<Term k="inverter">Inverter</Term>} value={`${f(acPowerW(d) / 1000, 1)} kW`} sub={isHybrid(d) ? 'ibrido, gestisce la batteria' : biz ? 'accumulo collegato in alternata' : 'senza batteria'} />
       </div>
 
       {current > 0 && (
         <p className="flex items-start gap-2 text-[0.75rem] leading-snug text-slate-400">
           <BatteryCharging size={15} className="mt-0.5 shrink-0 text-emerald-300" />
-          Con la batteria uso l'inverter ibrido «{d.inverter.label}». Le verifiche di stringa del passo «Moduli e inverter» tengono conto di questo inverter.
+          {biz
+            ? `Accumulo collegato in alternata con il suo convertitore, potenza circa ${f(batteryPowerW(d) / 1000, 1)} kW. Il listino usa il prezzo per kWh delle batterie per aziende.`
+            : `Con la batteria uso l'inverter ibrido «${d.inverter.label}». Le verifiche di stringa del passo «Moduli e inverter» tengono conto di questo inverter.`}
         </p>
       )}
 
       <More label="Capacità diversa da quelle proposte">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Num label="Capacità della batteria" value={current} onChange={(v) => choose(v)} suffix="kWh" min={0} max={40} step={0.5} hint="0 = senza accumulo. Capacità nominale: ne uso il 90% per non scaricarla del tutto." />
+          <Num label="Capacità della batteria" value={current} onChange={(v) => choose(v)} suffix="kWh" min={0} max={biz ? 5000 : 40} step={biz ? 5 : 0.5} hint="0 = senza accumulo. Capacità nominale: ne uso il 90% per non scaricarla del tutto." />
         </div>
         {custom && <p className="text-[0.75rem] text-slate-400">Capacità personalizzata: {f(current, 1)} kWh.</p>}
       </More>

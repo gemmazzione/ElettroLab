@@ -1,11 +1,11 @@
-import { AlertTriangle, Gauge } from 'lucide-react';
+import { AlertTriangle, Gauge, Landmark } from 'lucide-react';
 import { f, type DesignResults } from '../../pvdesign/calc';
-import { INCENTIVE_SOURCES, MONTHS } from '../../pvdesign/data';
-import { DEDUCTION_RATES, deductionRate, type PvDesign, type TaxYear } from '../../pvdesign/design';
+import { BUSINESS_SOURCES, INCENTIVE_SOURCES, MONTHS } from '../../pvdesign/data';
+import { DEDUCTION_RATES, deductionRate, isBusiness, type BusinessTax, type PvDesign, type TaxYear } from '../../pvdesign/design';
 import { incentiveOptions, loanPlan, monthlyBills, powerAdvice, POWER_COSTS, scenarios } from '../../pvdesign/money';
 import { usePvDesign } from '../../pvdesign/store';
 import { Sources } from './BatteryStep';
-import { Grid, More, Num } from './kit';
+import { Grid, More, Num, Term } from './kit';
 
 const eur = (v: number) => `${f(v)} €`;
 const payback = (y: number | null) => (y === null ? 'oltre la durata' : `${f(y, 1)} anni`);
@@ -79,18 +79,84 @@ export function DeductionSettings({ r, set }: { r: DesignResults; set: SetEcon }
   );
 }
 
+/** Azienda: IVA, imposte sul reddito, ammortamento e iperammortamento. */
+export function BusinessTaxSettings({ r, set }: { r: DesignResults; set: SetEcon }) {
+  const e = usePvDesign((s) => s.design.economics);
+  const bt = e.business;
+  const ec = r.economics;
+  const setTax = (patch: Partial<BusinessTax>) => set({ business: { ...bt, ...patch } });
+  // L'iperammortamento non spetta se la produzione attesa supera il 105% del fabbisogno dell'azienda.
+  const over = r.yield.consumptionKWh > 0 ? r.yield.productionKWh / r.yield.consumptionKWh : 0;
+  return (
+    <div className="space-y-2.5 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
+      <div className="flex items-center gap-2 text-[0.8125rem] font-semibold text-white">
+        <Landmark size={15} className="text-sky-300" /> Fiscalità dell'azienda
+      </div>
+      <label className="flex cursor-pointer items-start gap-2.5 text-[0.78125rem] text-slate-200">
+        <input type="checkbox" className="mt-0.5 accent-amber-500" checked={bt.vatRecoverable} onChange={(ev) => setTax({ vatRecoverable: ev.target.checked })} />
+        <span>
+          L'azienda detrae l'IVA
+          <span className="block text-[0.71875rem] text-slate-400">Il costo dell'impianto si conta senza IVA, perché l'IVA pagata si recupera. Togli la spunta se l'attività non la detrae (per esempio alcune attività esenti).</span>
+        </span>
+      </label>
+      <Grid>
+        <Num label="IRES" value={bt.iresPct} onChange={(v) => setTax({ iresPct: v })} suffix="%" min={0} max={50} step={0.5} hint="Imposta sul reddito delle società: 24%. Per una ditta individuale usa l'aliquota IRPEF marginale" />
+        <Num label="IRAP" value={bt.irapPct} onChange={(v) => setTax({ irapPct: v })} suffix="%" min={0} max={10} step={0.1} hint="Aliquota ordinaria 3,9%; alcune regioni la cambiano" />
+        <Num label={<Term k="ammortamento">Ammortamento</Term>} value={bt.depreciationPct} onChange={(v) => setTax({ depreciationPct: v })} suffix="% all'anno" min={1} max={100} step={0.5} hint="9% per un impianto sul tetto non accatastato con il fabbricato; metà quota il primo anno" />
+      </Grid>
+      <label className="flex cursor-pointer items-start gap-2.5 text-[0.78125rem] text-slate-200">
+        <input type="checkbox" className="mt-0.5 accent-amber-500" checked={bt.hyperPct > 0} onChange={(ev) => setTax({ hyperPct: ev.target.checked ? 180 : 0 })} />
+        <span>
+          Chiedo l'<Term k="iperammortamento">iperammortamento</Term> 2026
+          <span className="block text-[0.71875rem] text-slate-400">
+            Il costo si deduce maggiorato del 180% (investimenti fino a 2,5 milioni di euro). Servono moduli del registro ENEA di categoria B o C (celle prodotte nell'UE), una perizia asseverata e una
+            certificazione contabile.
+          </span>
+        </span>
+      </label>
+      {bt.hyperPct > 0 && (
+        <div className="pv-pop-in space-y-2">
+          <Grid>
+            <Num label="Maggiorazione" value={bt.hyperPct} onChange={(v) => setTax({ hyperPct: Math.max(0, v) })} suffix="%" min={0} max={180} step={10} hint="180% fino a 2,5 milioni, 100% fino a 10 milioni, 50% fino a 20 milioni" />
+          </Grid>
+          {over > 1.05 && (
+            <p className="flex gap-2 rounded-lg bg-amber-500/[0.08] px-3 py-2 text-[0.75rem] text-amber-100">
+              <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-300" />
+              <span>
+                L'impianto produce il {f(over * 100)}% dei consumi: per l'iperammortamento la produzione attesa non deve superare il 105% del fabbisogno dell'azienda. Riduci i moduli o verifica il
+                fabbisogno con il perito.
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+      <p className="text-[0.75rem] text-slate-300">
+        Imposte risparmiate con l'ammortamento in {e.years} anni: <b className="text-white">{eur(ec.shieldTotal)}</b>
+        {ec.hyperTotal > 0 && <>, di cui {eur(ec.hyperTotal)} grazie all'iperammortamento</>}. Il risparmio in bolletta e l'energia venduta aumentano l'utile: nel calcolo sono già al netto di IRES e
+        IRAP ({f(bt.iresPct + bt.irapPct, 1)}%).
+      </p>
+      <Sources sources={[...BUSINESS_SOURCES.hyper, ...BUSINESS_SOURCES.depreciation]} />
+    </div>
+  );
+}
+
 /** Le agevolazioni possibili, una accanto all'altra. */
 export function IncentiveCompare({ r }: { r: DesignResults }) {
   const d = usePvDesign((s) => s.design);
   const opts = incentiveOptions(d, r.yield);
   const best = opts.reduce((a, x) => (x.npv > a.npv ? x : a));
+  const biz = isBusiness(d);
   return (
     <section className="space-y-2" aria-labelledby="pv-compare-incentives">
       <div>
         <h3 id="pv-compare-incentives" className="text-[0.9375rem] font-semibold text-white">
           Quale agevolazione conviene
         </h3>
-        <p className="text-[0.75rem] text-slate-400">Lo stesso impianto con le strade possibili. Il Conto Termico non c'è: per le case vale solo insieme a una pompa di calore.</p>
+        <p className="text-[0.75rem] text-slate-400">
+          {biz
+            ? "Lo stesso impianto con le strade possibili per un'azienda: tutti i valori sono al netto delle imposte."
+            : "Lo stesso impianto con le strade possibili. Il Conto Termico non c'è: per le case vale solo insieme a una pompa di calore."}
+        </p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[36rem] text-[0.75rem]">
@@ -98,7 +164,7 @@ export function IncentiveCompare({ r }: { r: DesignResults }) {
             <tr className="border-b border-slate-700 text-left text-slate-500">
               <th className="py-1 font-medium">Strada</th>
               <th className="whitespace-nowrap py-1 text-right font-medium">Spendi subito</th>
-              <th className="whitespace-nowrap py-1 text-right font-medium">Detrazione</th>
+              <th className="whitespace-nowrap py-1 text-right font-medium">{biz ? 'Imposte risparmiate' : 'Detrazione'}</th>
               <th className="whitespace-nowrap py-1 text-right font-medium">CER in 20 anni</th>
               <th className="whitespace-nowrap py-1 text-right font-medium">Si ripaga in</th>
               <th className="whitespace-nowrap py-1 text-right font-medium">Guadagno attualizzato</th>
@@ -126,8 +192,9 @@ export function IncentiveCompare({ r }: { r: DesignResults }) {
         </table>
       </div>
       <p className="text-[0.6875rem] text-slate-500">
-        «Guadagno attualizzato» è il valore attuale netto in {d.economics.years} anni. La detrazione tiene conto dell'IRPEF indicata; la CER usa la quota condivisa e la tariffa impostate nella sezione
-        della comunità energetica.
+        «Guadagno attualizzato» è il valore attuale netto in {d.economics.years} anni.{' '}
+        {biz ? "«Imposte risparmiate» è l'effetto dell'ammortamento (e dell'eventuale iperammortamento) su IRES e IRAP." : "La detrazione tiene conto dell'IRPEF indicata."} La CER usa la quota condivisa e la
+        tariffa impostate nella sezione della comunità energetica.
       </p>
     </section>
   );

@@ -35,6 +35,8 @@ export type InverterSpec = InverterParams & {
   euroEff: number;
   /** Inverter ibrido: accetta una batteria di accumulo */
   hybrid: boolean;
+  /** Fasi della connessione in alternata (assente = monofase) */
+  phases?: 1 | 3;
 };
 
 const inv = (id: string, label: string, pacW: number, mppt: number, maxDcA: number, hybrid = false): InverterSpec => ({
@@ -53,6 +55,24 @@ const inv = (id: string, label: string, pacW: number, mppt: number, maxDcA: numb
   hybrid,
 });
 
+/** Inverter trifase «tipo» per impianti aziendali: 400 V, ingressi fino a 1100 V, più stringhe per ingresso MPPT. */
+const tri = (id: string, label: string, pacW: number, mppt: number, maxDcA: number, hybrid = false): InverterSpec => ({
+  id,
+  label,
+  pacW,
+  mppt,
+  efficiency: 98.6,
+  euroEff: 98.2,
+  maxDcV: 1100,
+  mpptMinV: 200,
+  mpptMaxV: 1000,
+  maxDcA,
+  batteryKWh: 0,
+  batteryW: 0,
+  hybrid,
+  phases: 3,
+});
+
 export const INVERTERS: InverterSpec[] = [
   inv('i3', 'Monofase 3 kW, 2 MPPT', 3000, 2, 16),
   inv('i36', 'Monofase 3,6 kW, 2 MPPT', 3600, 2, 16),
@@ -60,7 +80,18 @@ export const INVERTERS: InverterSpec[] = [
   inv('i6', 'Monofase 6 kW, 2 MPPT', 6000, 2, 16),
   inv('h36', 'Ibrido monofase 3,6 kW, 2 MPPT', 3600, 2, 16, true),
   inv('h6', 'Ibrido monofase 6 kW, 2 MPPT', 6000, 2, 16, true),
+  tri('t10', 'Trifase 10 kW, 2 MPPT', 10000, 2, 26),
+  tri('t15', 'Trifase 15 kW, 2 MPPT', 15000, 2, 26),
+  tri('t20', 'Trifase 20 kW, 2 MPPT', 20000, 2, 32),
+  tri('t30', 'Trifase 30 kW, 3 MPPT', 30000, 3, 32),
+  tri('t50', 'Trifase 50 kW, 4 MPPT', 50000, 4, 40),
+  tri('t100', 'Trifase 100 kW, 10 MPPT', 100000, 10, 32),
+  tri('ht10', 'Ibrido trifase 10 kW, 2 MPPT', 10000, 2, 26, true),
+  tri('ht20', 'Ibrido trifase 20 kW, 2 MPPT', 20000, 2, 32, true),
 ];
+
+/** Inverter trifase (connessione a 400 V). */
+export const isThreePhaseInverter = (i: Pick<InverterSpec, 'phases'>) => i.phases === 3;
 
 export interface SitePreset {
   id: string;
@@ -98,8 +129,19 @@ export const MONTH_DAYS = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 export const MONTH_REP_DAY = [17, 47, 75, 105, 135, 162, 198, 228, 258, 288, 318, 344];
 
 /** Profilo dei consumi di casa nelle 24 ore: peso relativo di ogni ora (si normalizza). */
-export type LoadProfileId = 'sera' | 'uniforme' | 'giorno' | 'manuale';
-export const LOAD_PROFILES: Record<LoadProfileId, { label: string; weights: number[] }> = {
+export type LoadProfileId = 'sera' | 'uniforme' | 'giorno' | 'manuale' | 'ufficio' | 'turno1' | 'turno2' | 'continuo' | 'negozio';
+/** Profili delle abitazioni e delle aziende, nell'ordine dei menu. */
+export const HOME_PROFILES: LoadProfileId[] = ['sera', 'uniforme', 'giorno', 'manuale'];
+export const BUSINESS_PROFILES: LoadProfileId[] = ['ufficio', 'turno1', 'turno2', 'continuo', 'negozio', 'manuale'];
+export const LOAD_PROFILES: Record<
+  LoadProfileId,
+  {
+    label: string;
+    weights: number[];
+    /** Consumo di un sabato e di una domenica rispetto a un giorno feriale (assente = tutti i giorni uguali) */
+    week?: [number, number];
+  }
+> = {
   sera: {
     label: 'Fuori casa di giorno (consumi la sera)',
     weights: [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.9, 1.4, 1.1, 0.6, 0.5, 0.5, 0.8, 0.8, 0.5, 0.5, 0.6, 0.9, 1.6, 2.2, 2.4, 2.0, 1.4, 0.8],
@@ -116,6 +158,31 @@ export const LOAD_PROFILES: Record<LoadProfileId, { label: string; weights: numb
   giorno: {
     label: 'In casa di giorno (smart working, pensionati)',
     weights: [0.5, 0.4, 0.4, 0.4, 0.4, 0.5, 0.8, 1.2, 1.3, 1.4, 1.5, 1.6, 1.8, 1.6, 1.4, 1.3, 1.3, 1.4, 1.6, 1.8, 1.8, 1.5, 1.1, 0.7],
+  },
+  // Profili aziendali indicativi: un giorno feriale tipo, con i consumi di fondo (server, frigoriferi, illuminazione di sicurezza).
+  ufficio: {
+    label: 'Uffici e studi (8–18, dal lunedì al venerdì)',
+    weights: [0.25, 0.25, 0.25, 0.25, 0.25, 0.3, 0.45, 0.8, 1.6, 1.9, 2, 2, 1.7, 1.8, 2, 1.9, 1.8, 1.5, 0.8, 0.45, 0.35, 0.3, 0.25, 0.25],
+    week: [0.35, 0.25],
+  },
+  turno1: {
+    label: 'Produzione su un turno (7–17, dal lunedì al venerdì)',
+    weights: [0.2, 0.2, 0.2, 0.2, 0.2, 0.3, 0.9, 2, 2.2, 2.2, 2.2, 2.1, 1.6, 2, 2.2, 2.1, 1.8, 0.8, 0.35, 0.25, 0.2, 0.2, 0.2, 0.2],
+    week: [0.3, 0.15],
+  },
+  turno2: {
+    label: 'Produzione su due turni (6–22, dal lunedì al venerdì)',
+    weights: [0.25, 0.25, 0.25, 0.25, 0.3, 0.8, 1.6, 1.7, 1.7, 1.7, 1.7, 1.6, 1.5, 1.6, 1.7, 1.7, 1.7, 1.6, 1.6, 1.6, 1.5, 1.4, 0.6, 0.3],
+    week: [0.45, 0.15],
+  },
+  continuo: {
+    label: 'Ciclo continuo (24 ore su 24, tutti i giorni)',
+    weights: [0.9, 0.9, 0.9, 0.9, 0.9, 0.95, 1, 1.05, 1.1, 1.1, 1.1, 1.1, 1.05, 1.1, 1.1, 1.1, 1.05, 1, 1, 0.95, 0.95, 0.9, 0.9, 0.9],
+  },
+  negozio: {
+    label: 'Negozio o supermercato (9–20, anche il sabato)',
+    weights: [0.35, 0.35, 0.35, 0.35, 0.35, 0.35, 0.45, 0.8, 1.5, 1.8, 1.8, 1.8, 1.8, 1.7, 1.7, 1.8, 1.8, 1.8, 1.8, 1.7, 1, 0.5, 0.4, 0.35],
+    week: [1.05, 0.45],
   },
 };
 
@@ -159,6 +226,8 @@ export type PriceId =
   | 'labour'
   | 'design'
   | 'optimizer'
+  | 'spi'
+  | 'mtWorks'
   | 'misc';
 
 /** Data dell'ultimo controllo dei prezzi e delle fonti. */
@@ -178,7 +247,39 @@ export const DEFAULT_PRICES: PriceItem[] = [
   { id: 'labour', label: 'Manodopera e installazione', unit: '€/kWp', price: 750 },
   { id: 'design', label: 'Progetto, pratiche di connessione e dichiarazioni', unit: '€', price: 500 },
   { id: 'optimizer', label: 'Ottimizzatori di potenza', unit: '€/modulo', price: 40 },
+  { id: 'spi', label: 'Protezione di interfaccia esterna (SPI e dispositivo di interfaccia)', unit: '€', price: 1500 },
+  { id: 'mtWorks', label: 'Adeguamento cabina di media tensione e protezione generale', unit: '€', price: 15000 },
   { id: 'misc', label: 'Varie e imprevisti', unit: '% sul totale', price: 5 },
+];
+
+/**
+ * Listino per impianti aziendali (€, IVA esclusa): prezzi per unità più bassi grazie alla taglia. I valori sono tarati
+ * perché il costo chiavi in mano cada nelle fasce di mercato riportate in BUSINESS_TURNKEY_SOURCES.
+ */
+export const BUSINESS_PRICES: Partial<Record<PriceId, number>> = {
+  module: 0.18,
+  inverter: 80,
+  battery: 550,
+  mounting: 30,
+  dcCable: 1.4,
+  acCable: 4,
+  dcBox: 350,
+  stringFuse: 25,
+  acBox: 900,
+  labour: 300,
+  design: 2500,
+};
+
+/** Listino di partenza per un'abitazione o per un'azienda. */
+export function defaultPrices(kind: 'casa' | 'azienda'): PriceItem[] {
+  return DEFAULT_PRICES.map((p) => ({ ...p, price: kind === 'azienda' ? (BUSINESS_PRICES[p.id] ?? p.price) : p.price }));
+}
+
+/** Costo chiavi in mano di impianti aziendali: serve a controllare il listino per aziende. */
+export const BUSINESS_TURNKEY_SOURCES: PriceSource[] = [
+  { label: 'Solare Industriale – Impianto da 25 kW', url: 'https://www.solareindustriale.it/progetti/impianto-fotovoltaico-25-kw', date: '2026', note: '21.000–23.000 € IVA esclusa, circa 840–920 €/kWp' },
+  { label: 'Solare Industriale – Impianto da 100 kW', url: 'https://www.solareindustriale.it/progetti/impianto-fotovoltaico-100-kw', date: '2026', note: '72.000–79.000 € chiavi in mano, circa 720–790 €/kWp' },
+  { label: 'Solare Industriale – Impianto da 250 kW', url: 'https://www.solareindustriale.it/progetti/impianto-fotovoltaico-250-kw', date: '2026', note: '165.000–180.000 € più IVA, circa 660–720 €/kWp' },
 ];
 
 /**
@@ -357,6 +458,79 @@ export const INCENTIVE_SOURCES: Record<'deduction' | 'rid' | 'cer' | 'pnrr' | 'o
       url: 'https://luce-gas.it/guida/contatore/potenza/aumento',
       date: 'ottobre 2026',
       note: "delibera ARERA 575/2025: 62,30 €/kW (fino a 6 kW finali) o 78,81 €/kW, 23 € di pratica; quota potenza 23,72 €/kW all'anno, IVA esclusa",
+    },
+  ],
+};
+
+/** Fonti delle regole e degli incentivi per gli impianti aziendali (verificate a novembre 2026). */
+export const BUSINESS_SOURCES: Record<'connection' | 'spi' | 'adm' | 'fire' | 'hyper' | 'depreciation' | 'energyPrice', PriceSource[]> = {
+  connection: [
+    {
+      label: 'ARERA – Delibera 99/08 (TICA), allegato A',
+      url: 'https://arera.it/allegati/docs/08/099-08argall.pdf',
+      date: 'testo integrato, versione originale',
+      note: 'connessione ordinaria in bassa tensione fino a 100 kW, in media tensione fino a 6.000 kW',
+    },
+    {
+      label: 'Solare Industriale – Bassa o media tensione per le aziende',
+      url: 'https://www.solareindustriale.it/blog-fotovoltaico/differenza-impianti-bassa-o-media-tensione-per-aziende',
+      date: '27 marzo 2026',
+      note: 'BT fino a 100 kW, MT da 100 kW a 6 MW; il distributore può indicare soluzioni diverse',
+    },
+  ],
+  spi: [
+    {
+      label: 'FIMER – Regolamento di esercizio CEI 0-21',
+      url: 'https://fimer.com/sites/default/files/Compilazione%20Reg%20Esercizio_CEI0-21_%20PowerUNO%20e%20PowerX%20rev.15-10-24.pdf',
+      date: 'ottobre 2024',
+      note: "SPI e dispositivo di interfaccia integrati nell'inverter fino a 11,08 kW; oltre, esterni",
+    },
+  ],
+  adm: [
+    {
+      label: 'Informa Impresa – Dichiarazioni per impianti oltre 20 kW',
+      url: 'https://www.informaimpresa.it/obbligo-di-dichiarazione-semestrale-entro-il-30-09-2026-per-chi-detiene-impianti-elettrici-a-fonte-rinnovabile-con-potenza-superiore-a-20-kw/',
+      date: '2026',
+      note: "officina elettrica: denuncia all'Agenzia delle Dogane, licenza, diritto annuale e dichiarazioni periodiche",
+    },
+    { label: 'Certifico – Officina elettrica, TU accise e note', url: 'https://www.certifico.com/id/18197', date: '2026', note: 'testo unico accise e chiarimenti; regole 2026 (DM MEF 10 marzo 2026) da verificare sul sito ADM' },
+  ],
+  fire: [
+    {
+      label: 'Lavori Pubblici – Aggiornata la linea guida di prevenzione incendi',
+      url: 'https://www.lavoripubblici.it/news/impianti-fotovoltaici-aggiornata-linea-guida-prevenzione-incendi-36270',
+      date: 'settembre 2025',
+      note: 'nota DCPREV 14030 del 1° settembre 2025: sostituisce la guida del 2012',
+    },
+  ],
+  hyper: [
+    {
+      label: 'MyEnergy – Iperammortamento fotovoltaico 2026',
+      url: 'https://www.myenergy.it/blog/incentivi-e-agevolazioni/iperammortamento-fotovoltaico-2026-guida-al-nuovo-piano-transizione-5-0/',
+      date: '6 ottobre 2026',
+      note: 'L. 199/2025, commi 427-436: +180% fino a 2,5 milioni; investimenti fino al 30/9/2028; moduli ENEA categoria B o C; produzione fino al 105% del fabbisogno',
+    },
+    {
+      label: 'Iperammortamenti.it – Fotovoltaico e iperammortamento 2026',
+      url: 'https://www.iperammortamenti.it/articoli/fotovoltaico-e-iperammortamento-2026-un-solo-fornitore',
+      date: '2026',
+      note: 'solo impianti per autoconsumo; accumuli compresi',
+    },
+  ],
+  depreciation: [
+    {
+      label: 'Euroconference – Ammortamento degli impianti sul tetto',
+      url: 'https://www.ecnews.it/fiscale/fisco-e-patrimonio/reddito-impresa-e-irap/ammortamento-degli-impianti-fotovoltaici-installati-sul-tetto/',
+      date: 'dopo la circolare 4/E/2017',
+      note: 'impianto non accatastato con il fabbricato: coefficiente 9%',
+    },
+  ],
+  energyPrice: [
+    {
+      label: 'Luce-gas.it – Costo del kWh per le aziende (Eurostat)',
+      url: 'https://luce-gas.it/business/offerte/costo-kwh-aziende',
+      date: 'II semestre 2025',
+      note: 'imprese italiane 500–2.000 MWh/anno: 25,44 c€/kWh lordo, 16,8 c€/kWh netto; media ARERA 2025 dei clienti non domestici 26,25 c€/kWh',
     },
   ],
 };

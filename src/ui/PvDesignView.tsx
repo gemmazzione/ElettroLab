@@ -1,8 +1,8 @@
-import { Check, ChevronLeft, ChevronRight, FileDown, Home, Map as MapIcon, PencilRuler, RotateCcw, Sun, Wallet, Wand2, Zap } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Factory, FileDown, Home, Map as MapIcon, PencilRuler, RotateCcw, Sun, Wallet, Wand2, Zap } from 'lucide-react';
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { computeDesign, f, fieldDesign, fields, moduleCount, peakW, proposeSizing, stringsPerMppt, type DesignResults, type MonthResult } from '../pvdesign/calc';
-import { DEFAULT_PRICES, ECONOMIC_SOURCES, INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
-import { isHybrid, type PvDesign } from '../pvdesign/design';
+import { AC_TRI_SECTIONS, acPowerW, computeDesign, f, fieldDesign, fields, inverterUnits, moduleCount, mpptInputs, peakW, proposeSizing, stringsPerMppt, threePhase, type DesignResults, type MonthResult } from '../pvdesign/calc';
+import { BUSINESS_PROFILES, BUSINESS_SOURCES, BUSINESS_TURNKEY_SOURCES, defaultPrices, ECONOMIC_SOURCES, HOME_PROFILES, INVERTERS, LOAD_PROFILES, MODULES, MONTH_DAYS, MONTHS, MOUNTINGS, PRICE_SOURCES, PRICES_CHECKED, SITES, type LoadProfileId, type MountingId } from '../pvdesign/data';
+import { batteryActive, isBusiness, withKind, type ProjectKind, type PvDesign } from '../pvdesign/design';
 import { compassName, roofCapacity, roofLayout, ROOF_TYPES, type RoofType } from '../pvdesign/roof';
 import { usePvDesign } from '../pvdesign/store';
 import { designToProject } from '../pvdesign/toProject';
@@ -14,7 +14,8 @@ import { FutureLoads, MeasuredImport } from './pvdesign/ConsumptionExtras';
 import { LoadProfileEditor } from './pvdesign/LoadProfileEditor';
 import { ProjectBar } from './pvdesign/ProjectLibrary';
 import { IncentivesGuide, SavingsBreakdown } from './pvdesign/SavingsGuide';
-import { DeductionSettings, IncentiveCompare, LoanPanel, MonthlyBills, PowerCheck, ScenarioRange } from './pvdesign/MoneyTools';
+import { BusinessTaxSettings, DeductionSettings, IncentiveCompare, LoanPanel, MonthlyBills, PowerCheck, ScenarioRange } from './pvdesign/MoneyTools';
+import { ConnectionPanel } from './pvdesign/ConnectionPanel';
 import { WeatherPanel } from './pvdesign/WeatherPanel';
 import { BatteryStep, Sources } from './pvdesign/BatteryStep';
 
@@ -23,6 +24,9 @@ const RoofMap = lazy(() => import('./pvdesign/RoofMap').then((m) => ({ default: 
 const Roof3D = lazy(() => import('./pvdesign/Roof3D').then((m) => ({ default: m.Roof3D })));
 
 const STEPS = ['La casa', 'Il tetto', 'Clima e ombre', 'Consumi', 'Moduli e inverter', 'Accumulo', 'Cavi e protezioni', 'Vista 3D', 'Produzione', 'Costi', 'Riepilogo'] as const;
+
+/** Nome di un passo: il primo cambia tra casa e azienda. */
+const stepName = (i: number, kind: ProjectKind) => (i === 0 && kind === 'azienda' ? "L'edificio" : STEPS[i] ?? '');
 
 const eur = (v: number) => `${f(v)} €`;
 const payback = (y: number | null) => (y === null ? 'oltre la durata' : `${f(y, 1)} anni`);
@@ -56,7 +60,7 @@ export function PvDesignView() {
   return (
     <div id="pv-scroll" className="pv-scope min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto grid max-w-[85rem] gap-5 px-4 pb-24 pt-5 lg:grid-cols-[minmax(0,1fr)_18rem] lg:pb-8 xl:grid-cols-[12.5rem_minmax(0,1fr)_18rem]">
-        <StepNav step={step} done={done} bad={bad} progress={progress} go={go} />
+        <StepNav step={step} done={done} bad={bad} progress={progress} go={go} kind={d.kind} />
         <div className="min-w-0 space-y-4">
           <ProjectBar />
           <div key={step} className={direction > 0 ? 'pv-step-fwd' : 'pv-step-back'}>
@@ -78,14 +82,14 @@ export function PvDesignView() {
               disabled={step === 0}
               className="flex min-w-0 items-center gap-1 rounded-md px-3 py-2 text-[0.78125rem] text-slate-300 transition-colors hover:bg-slate-800 disabled:invisible"
             >
-              <ChevronLeft size={15} className="shrink-0" /> <span className="truncate">{STEPS[step - 1] ?? ''}</span>
+              <ChevronLeft size={15} className="shrink-0" /> <span className="truncate">{step > 0 ? stepName(step - 1, d.kind) : ''}</span>
             </button>
             {step < STEPS.length - 1 && (
               <button
                 onClick={() => go(step + 1)}
                 className="group flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2.5 text-[0.8125rem] font-semibold text-slate-950 shadow-[0_6px_18px_-6px_rgba(245,158,11,0.6)] transition-[background-color,transform] hover:bg-amber-400 active:scale-[0.98]"
               >
-                Avanti: {STEPS[step + 1]} <ChevronRight size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+                Avanti: {stepName(step + 1, d.kind)} <ChevronRight size={16} className="transition-transform duration-200 group-hover:translate-x-0.5" />
               </button>
             )}
           </div>
@@ -115,7 +119,7 @@ function stepStatus(d: PvDesign, r: DesignResults): boolean[] {
   ];
 }
 
-function StepNav({ step, done, bad, progress, go }: { step: number; done: boolean[]; bad: boolean[]; progress: number; go: (n: number) => void }) {
+function StepNav({ step, done, bad, progress, go, kind }: { step: number; done: boolean[]; bad: boolean[]; progress: number; go: (n: number) => void; kind: ProjectKind }) {
   const expert = usePvDesign((s) => s.expert);
   const setExpert = usePvDesign((s) => s.setExpert);
   const list = useRef<HTMLOListElement>(null);
@@ -155,7 +159,7 @@ function StepNav({ step, done, bad, progress, go }: { step: number; done: boolea
               >
                 {bad[i] ? '!' : done[i] ? <Check size={11} strokeWidth={3} /> : i + 1}
               </span>
-              <span className="whitespace-nowrap">{t}</span>
+              <span className="whitespace-nowrap">{stepName(i, kind)}</span>
             </button>
           </li>
         ))}
@@ -176,7 +180,9 @@ function Welcome() {
   const setWelcomed = usePvDesign((s) => s.setWelcomed);
   const setStep = usePvDesign((s) => s.setStep);
   const setExpert = usePvDesign((s) => s.setExpert);
-  const start = (step: number, expert = false) => {
+  const up = useUpdate();
+  const start = (step: number, expert = false, kind?: ProjectKind) => {
+    if (kind) up((d) => withKind(d, kind));
     setExpert(expert);
     setStep(step);
     setWelcomed(true);
@@ -212,10 +218,16 @@ function Welcome() {
             >
               <Home size={17} /> Inizia dalla mia casa <ChevronRight size={17} className="transition-transform duration-200 group-hover:translate-x-0.5" />
             </button>
-            <button onClick={() => start(2)} className="rounded-lg px-4 py-3 text-[0.8125rem] text-slate-300 transition-colors hover:bg-slate-800 hover:text-white">
-              Salto la mappa, inserisco i dati a mano
+            <button
+              onClick={() => start(0, false, 'azienda')}
+              className="flex items-center gap-2 rounded-lg border border-slate-600 px-4 py-3 text-[0.8125rem] font-semibold text-slate-100 transition-colors hover:border-amber-400 hover:text-white"
+            >
+              <Factory size={16} /> Progetto per un'azienda
             </button>
           </div>
+          <button onClick={() => start(2)} className="mt-2 rounded-lg px-1 py-2 text-[0.8125rem] text-slate-300 underline decoration-slate-600 underline-offset-2 transition-colors hover:text-white">
+            Salto la mappa, inserisco i dati a mano
+          </button>
           <p className="mt-4 text-[0.75rem] text-slate-500">
             Ci vogliono circa 10 minuti.{' '}
             <button onClick={() => start(0, true)} className="text-slate-400 underline decoration-slate-600 underline-offset-2 hover:text-slate-200">
@@ -275,12 +287,18 @@ function WelcomeArt() {
 function HouseStep({ n }: { n: number }) {
   const name = usePvDesign((x) => x.design.name);
   const loc = usePvDesign((x) => x.design.location);
+  const kind = usePvDesign((x) => x.design.kind);
   const up = useUpdate();
+  const biz = kind === 'azienda';
   return (
     <Step
       n={n}
-      title="La casa"
-      intro="Trova la casa sulla foto satellitare e disegna il contorno del tetto: da qui ricavo latitudine, clima, superficie, falde e orientamento."
+      title={biz ? "L'edificio" : 'La casa'}
+      intro={
+        biz
+          ? "Trova l'edificio dell'azienda (capannone, negozio, uffici) sulla foto satellitare e disegna il contorno del tetto: da qui ricavo latitudine, clima, superficie, falde e orientamento."
+          : 'Trova la casa sulla foto satellitare e disegna il contorno del tetto: da qui ricavo latitudine, clima, superficie, falde e orientamento.'
+      }
       help={
         <>
           Scrivi l'indirizzo e premi <b>Cerca</b>, scegli il risultato giusto, poi premi <b>Disegna la pianta del tetto</b> e clicca gli angoli del tetto uno dopo l'altro. Per una casa
@@ -288,6 +306,32 @@ function HouseStep({ n }: { n: number }) {
         </>
       }
     >
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tipo di utenza">
+        {(
+          [
+            ['casa', <Home key="h" size={16} />, 'Abitazione', 'Monofase, detrazione fiscale, consumi di una famiglia'],
+            ['azienda', <Factory key="f" size={16} />, 'Azienda', 'Trifase, più inverter, ammortamento e incentivi per le imprese'],
+          ] as const
+        ).map(([k, icon, title, sub]) => (
+          <button
+            key={k}
+            role="radio"
+            aria-checked={kind === k}
+            onClick={() => {
+              if (kind === k) return;
+              if (!window.confirm(k === 'azienda' ? "Passo a un progetto aziendale: consumi, moduli, inverter, listino e fiscalità tornano ai valori di partenza per un'azienda. Posizione e tetto restano. Continuare?" : "Passo a un progetto per un'abitazione: consumi, componenti, listino e fiscalità tornano ai valori di partenza. Posizione e tetto restano. Continuare?")) return;
+              up((d) => withKind(d, k));
+            }}
+            className={`flex min-w-[14rem] flex-1 items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition-colors ${kind === k ? 'border-amber-400 bg-amber-500/10' : 'border-slate-700 hover:border-slate-500'}`}
+          >
+            <span className={`mt-0.5 ${kind === k ? 'text-amber-300' : 'text-slate-400'}`}>{icon}</span>
+            <span>
+              <span className="block text-[0.8125rem] font-semibold text-white">{title}</span>
+              <span className="block text-[0.71875rem] text-slate-400">{sub}</span>
+            </span>
+          </button>
+        ))}
+      </div>
       <Grid>
         <div className="col-span-2">
           <FieldLabel label="Nome del progetto">
@@ -594,12 +638,17 @@ function ConsumptionStep({ n }: { n: number }) {
   const c = usePvDesign((x) => x.design.consumption);
   const up = useUpdate();
   const set = (patch: Partial<PvDesign['consumption']>) => up((d) => ({ ...d, consumption: { ...d.consumption, ...patch } }));
+  const biz = usePvDesign((x) => isBusiness(x.design));
   return (
     <Step
       n={n}
-      title="Consumi della casa"
+      title={biz ? "Consumi dell'azienda" : 'Consumi della casa'}
       intro="Quanta energia usi in un anno e in quali ore: conta molto, perché l'energia più conveniente è quella che usi mentre i moduli producono."
-      help="Somma i kWh delle bollette degli ultimi 12 mesi (la voce «consumi» o «energia prelevata»). Se non li hai sotto mano, un valore di riferimento per una famiglia tipo è 2.700 kWh all'anno."
+      help={
+        biz
+          ? "Somma i kWh delle bollette degli ultimi 12 mesi (in bolletta ci sono anche i consumi per fascia F1, F2, F3). Ancora meglio: scarica la curva di carico quartoraria dal portale del distributore e importala qui sotto."
+          : "Somma i kWh delle bollette degli ultimi 12 mesi (la voce «consumi» o «energia prelevata»). Se non li hai sotto mano, un valore di riferimento per una famiglia tipo è 2.700 kWh all'anno."
+      }
     >
       <Grid>
         <Num
@@ -608,17 +657,26 @@ function ConsumptionStep({ n }: { n: number }) {
           onChange={(v) => set(c.measured ? { annualKWh: v, measured: scaleMeasured(c.measured, v) } : { annualKWh: v })}
           suffix="kWh"
           min={100}
-          max={50000}
-          step={100}
+          max={biz ? 20000000 : 50000}
+          step={biz ? 1000 : 100}
           hint={c.measured ? 'Calcolato dal file; se lo cambi, i consumi ora per ora si scalano in proporzione' : 'La somma dei consumi delle bollette di un anno'}
         />
-        <Num label="Potenza della fornitura" value={c.contractKW} onChange={(v) => set({ contractKW: v })} suffix="kW" min={1} max={30} step={0.5} hint="Si legge in bolletta: «potenza impegnata», di solito 3 kW" />
+        <Num
+          label="Potenza della fornitura"
+          value={c.contractKW}
+          onChange={(v) => set({ contractKW: v })}
+          suffix="kW"
+          min={1}
+          max={biz ? 10000 : 30}
+          step={biz ? 5 : 0.5}
+          hint={biz ? 'In bolletta: «potenza impegnata» o «disponibile»' : 'Si legge in bolletta: «potenza impegnata», di solito 3 kW'}
+        />
         {!c.measured && (
         <div className="col-span-2">
           <FieldLabel label="Quando si consuma">
             <Select
               value={c.profile}
-              options={['sera', 'uniforme', 'giorno', 'manuale'] as LoadProfileId[]}
+              options={(biz ? BUSINESS_PROFILES : HOME_PROFILES) as LoadProfileId[]}
               format={(p) => LOAD_PROFILES[p].label}
               onChange={(p) => set({ profile: p, ...(p === 'manuale' && c.profile !== 'manuale' ? { customWeights: [...LOAD_PROFILES[c.profile].weights] } : {}) })}
             />
@@ -639,8 +697,28 @@ function ConsumptionStep({ n }: { n: number }) {
           </button>
         </p>
       )}
-      <FutureLoads c={c} set={set} />
-      <PowerCheck c={c} />
+      {biz ? (
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-lg bg-slate-950/60 px-3 py-2.5 text-[0.78125rem] text-slate-200">
+          <input type="checkbox" className="mt-0.5 accent-amber-500" checked={c.closedAugust} onChange={(e) => set({ closedAugust: e.target.checked })} />
+          <span>
+            Chiusura estiva ad agosto
+            <span className="block text-[0.71875rem] text-slate-400">
+              Ad agosto i consumi scendono a circa un terzo, proprio quando i moduli producono di più: l'energia in più va in rete (o nella comunità energetica).
+            </span>
+          </span>
+        </label>
+      ) : (
+        <>
+          <FutureLoads c={c} set={set} />
+          <PowerCheck c={c} />
+        </>
+      )}
+      {biz && !c.measured && LOAD_PROFILES[c.profile].week && (
+        <p className="text-[0.71875rem] text-slate-500">
+          Profilo dei giorni feriali; il sabato i consumi sono il {f((LOAD_PROFILES[c.profile].week![0]) * 100)}% e la domenica il {f(LOAD_PROFILES[c.profile].week![1] * 100)}% di un giorno feriale (con i
+          dati PVGIS ora per ora).
+        </p>
+      )}
     </Step>
   );
 }
@@ -666,9 +744,9 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
       return;
     }
     const inv = INVERTERS.find((i) => i.id === p.inverterId)!;
-    up((x) => ({ ...x, modulesPerString: p.modulesPerString, strings: p.strings, inverter: { ...inv } }));
+    up((x) => ({ ...x, modulesPerString: p.modulesPerString, strings: p.strings, inverter: { ...inv }, inverterCount: p.inverterCount }));
     setNote(
-      `${p.note} Ho scelto ${p.strings} ${p.strings > 1 ? 'stringhe' : 'stringa'} da ${p.modulesPerString} moduli con l'inverter «${inv.label}».${p.modulesPerString * p.strings !== p.targetModules ? ' È la configurazione più vicina che supera tutte le verifiche.' : ''}`,
+      `${p.note} Ho scelto ${p.strings} ${p.strings > 1 ? 'stringhe' : 'stringa'} da ${p.modulesPerString} moduli con ${p.inverterCount > 1 ? `${p.inverterCount} inverter «${inv.label}»` : `l'inverter «${inv.label}»`}.${p.modulesPerString * p.strings !== p.targetModules ? ' È la configurazione più vicina che supera tutte le verifiche.' : ''}`,
     );
   };
   return (
@@ -709,19 +787,29 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
           </FieldLabel>
         </div>
         <Num label="Moduli per stringa" value={d.modulesPerString} onChange={(v) => up((x) => ({ ...x, modulesPerString: Math.round(v) }))} min={1} max={40} hint="Quanti moduli sono collegati in fila" />
-        <Num label="Stringhe" value={d.strings} onChange={(v) => up((x) => ({ ...x, strings: Math.round(v) }))} min={1} max={12} hint="Quante file di moduli entrano nell'inverter" />
+        <Num label="Stringhe" value={d.strings} onChange={(v) => up((x) => ({ ...x, strings: Math.round(v) }))} min={1} max={isBusiness(d) ? 400 : 12} hint={inverterUnits(d) > 1 ? 'In tutto, ripartite tra gli inverter' : "Quante file di moduli entrano nell'inverter"} />
         <div className="col-span-2">
           <FieldLabel label={<Term k="inverter">Inverter</Term>}>
             <Select
               value={d.inverter.id}
               options={INVERTERS.map((i) => i.id)}
               format={(id) => INVERTERS.find((i) => i.id === id)?.label ?? id}
-              onChange={(id) => up((x) => ({ ...x, inverter: { ...INVERTERS.find((i) => i.id === id)! }, batteryKWh: INVERTERS.find((i) => i.id === id)!.hybrid ? x.batteryKWh : 0 }))}
+              onChange={(id) => up((x) => ({ ...x, inverter: { ...INVERTERS.find((i) => i.id === id)! }, batteryKWh: INVERTERS.find((i) => i.id === id)!.hybrid || isBusiness(x) ? x.batteryKWh : 0 }))}
             />
           </FieldLabel>
         </div>
+        {(isBusiness(d) || inverterUnits(d) > 1) && (
+          <Num
+            label="Inverter uguali"
+            value={inverterUnits(d)}
+            onChange={(v) => up((x) => ({ ...x, inverterCount: Math.max(1, Math.round(v)) }))}
+            min={1}
+            max={50}
+            hint={`In tutto ${f(acPowerW(d) / 1000, 1)} kW e ${mpptInputs(d)} ingressi MPPT`}
+          />
+        )}
         <div className="col-span-2 self-end text-[0.75rem] leading-snug text-slate-400">
-          {isHybrid(d) && d.batteryKWh > 0 ? `Con batteria da ${f(d.batteryKWh, 1)} kWh.` : 'Senza batteria.'} L'accumulo si sceglie nel prossimo passo.
+          {batteryActive(d) ? `Con batteria da ${f(d.batteryKWh, 1)} kWh.` : 'Senza batteria.'} L'accumulo si sceglie nel prossimo passo.
         </div>
       </Grid>
       <SecondField />
@@ -740,7 +828,7 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
         <Kpi label={<Term k="kwp">Potenza di picco</Term>} value={<Animated value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />} sub={`${moduleCount(d)} moduli`} />
         <Kpi label="Superficie dei moduli" value={`${f(moduleCount(d) * d.module.areaM2, 1)} m²`} />
         <Kpi label="Tensione della stringa" value={`${f(d.modulesPerString * d.module.vmp)} V`} sub="in funzionamento, a 25 °C" />
-        <Kpi label={<Term k="mppt">Stringhe per MPPT</Term>} value={`${stringsPerMppt(d)}`} sub={`${d.inverter.mppt} ingressi`} />
+        <Kpi label={<Term k="mppt">Stringhe per MPPT</Term>} value={`${stringsPerMppt(d)}`} sub={`${mpptInputs(d)} ingressi`} />
       </div>
       <CheckSummary checks={r.checks} onFix={propose} />
       <More label="Dati di targa di modulo e inverter">
@@ -757,9 +845,9 @@ function GeneratorStep({ n, r }: { n: number; r: DesignResults }) {
           <Num label="Fusibile massimo in serie" value={d.module.maxSeriesFuseA} onChange={(v) => setMod({ maxSeriesFuseA: v })} suffix="A" min={5} max={40} />
         </Grid>
         <Grid>
-          <Num label="Potenza AC inverter" value={d.inverter.pacW} onChange={(v) => setInv({ pacW: v })} suffix="W" min={500} max={20000} step={100} />
+          <Num label="Potenza AC inverter" value={d.inverter.pacW} onChange={(v) => setInv({ pacW: v })} suffix="W" min={500} max={250000} step={100} hint={inverterUnits(d) > 1 ? 'Di un solo inverter' : undefined} />
           <Num label="Rendimento europeo" value={d.inverter.euroEff} onChange={(v) => setInv({ euroEff: v })} suffix="%" min={80} max={99.5} step={0.1} />
-          <Num label="Ingressi MPPT" value={d.inverter.mppt} onChange={(v) => setInv({ mppt: Math.round(v) })} min={1} max={6} />
+          <Num label="Ingressi MPPT" value={d.inverter.mppt} onChange={(v) => setInv({ mppt: Math.round(v) })} min={1} max={12} />
           <Num label="Tensione DC massima" value={d.inverter.maxDcV} onChange={(v) => setInv({ maxDcV: v })} suffix="V" min={100} max={1500} />
           <Num label="MPPT minima" value={d.inverter.mpptMinV} onChange={(v) => setInv({ mpptMinV: v })} suffix="V" min={20} max={1000} />
           <Num label="MPPT massima" value={d.inverter.mpptMaxV} onChange={(v) => setInv({ mpptMaxV: v })} suffix="V" min={50} max={1500} />
@@ -822,9 +910,12 @@ function CablesStep({ n, r }: { n: number; r: DesignResults }) {
   const set = (patch: Partial<PvDesign['cables']>) => up((d) => ({ ...d, cables: { ...d.cables, ...patch } }));
   const sec = (v: number | null) => (v === null ? 'auto' : v);
   const p = r.protection;
+  const d = usePvDesign((x) => x.design);
+  const tri = threePhase(d);
+  const many = inverterUnits(d) > 1;
   const results: [boolean | null, string, string][] = [
-    [r.dc.ok, `Cavi dal tetto all'inverter: ${r.dc.section} mm²`, `perdita ${f(r.dc.dropPct, 2)}%`],
-    [r.ac.ok, `Linea dall'inverter al quadro: ${r.ac.section} mm²`, `perdita ${f(r.ac.dropPct, 2)}%, interruttore da ${r.ac.inA} A`],
+    [r.dc.ok, `Cavi dal tetto ${many ? 'agli inverter' : "all'inverter"}: ${r.dc.section} mm²`, `perdita ${f(r.dc.dropPct, 2)}%`],
+    [r.ac.ok, `Linea ${many ? 'dagli inverter' : "dall'inverter"} al quadro${tri ? ' (trifase, 400 V)' : ''}: ${r.ac.section} mm²`, `perdita ${f(r.ac.dropPct, 2)}%, interruttore da ${r.ac.inA} A`],
     [null, `Sezionatore e scaricatore lato moduli: almeno ${p.switchV} V`, p.fusesNeeded ? `servono fusibili di stringa${p.fuseA ? ` da ${p.fuseA} A` : ''}` : 'fusibili di stringa non necessari'],
   ];
   return (
@@ -865,15 +956,25 @@ function CablesStep({ n, r }: { n: number; r: DesignResults }) {
           </FieldLabel>
           <Num label="Temperatura attorno ai cavi DC" value={c.dcAmbientC} onChange={(v) => set({ dcAmbientC: v })} suffix="°C" min={10} max={60} step={5} hint="Sul tetto, sotto i moduli, si superano facilmente i 50 °C" />
           <FieldLabel label="Sezione linea AC">
-            <Select value={sec(c.acSection)} options={SECTION_OPTS} format={(s) => (s === 'auto' ? `Automatica (${r.ac.section} mm²)` : `${s} mm²`)} onChange={(s) => set({ acSection: s === 'auto' ? null : s })} />
+            <Select
+              value={tri && c.acSection !== null && !AC_TRI_SECTIONS.includes(c.acSection) ? 'auto' : sec(c.acSection)}
+              options={(tri ? ['auto', ...AC_TRI_SECTIONS] : SECTION_OPTS) as readonly ('auto' | number)[]}
+              format={(s) => (s === 'auto' ? `Automatica (${r.ac.section} mm²)` : `${s} mm²`)}
+              onChange={(s) => set({ acSection: s === 'auto' ? null : (s as number) })}
+            />
           </FieldLabel>
-          <div className="col-span-2 sm:col-span-3 xl:col-span-4">
-            <FieldLabel label="Posa della linea AC">
-              <Select value={c.acMethod} options={INSTALL_METHODS.map((m) => m.id)} format={(id: InstallMethod) => INSTALL_METHODS.find((m) => m.id === id)!.label} onChange={(m) => set({ acMethod: m })} />
-            </FieldLabel>
-          </div>
+          {tri ? (
+            <p className="col-span-2 self-end text-[0.71875rem] text-slate-400 sm:col-span-3 xl:col-span-4">Linea trifase: cavo multipolare in rame (tipo FG16OR16) in aria o su passerella forata.</p>
+          ) : (
+            <div className="col-span-2 sm:col-span-3 xl:col-span-4">
+              <FieldLabel label="Posa della linea AC">
+                <Select value={c.acMethod} options={INSTALL_METHODS.map((m) => m.id)} format={(id: InstallMethod) => INSTALL_METHODS.find((m) => m.id === id)!.label} onChange={(m) => set({ acMethod: m })} />
+              </FieldLabel>
+            </div>
+          )}
         </Grid>
       </More>
+      <ConnectionPanel />
       <More label="Calcoli dei cavi e protezioni da installare">
         <div className="grid gap-2 xl:grid-cols-2">
           <Notes title={`Cavi DC: ${r.dc.section} mm², caduta ${f(r.dc.dropPct, 2)}%`} notes={r.dc.notes} ok={r.dc.ok} />
@@ -882,8 +983,10 @@ function CablesStep({ n, r }: { n: number; r: DesignResults }) {
           <Notes
             title="Protezioni lato AC"
             notes={[
-              `Magnetotermico differenziale dedicato da ${r.ac.inA} A all'arrivo della linea dell'inverter. Il tipo di differenziale (A o B) dipende da cosa dichiara il costruttore sulla possibile componente continua di guasto.`,
-              "Protezione di interfaccia (SPI): negli impianti piccoli è spesso integrata nell'inverter. Limiti di potenza e prescrizioni sono quelli della CEI 0-21 e del distributore (riferimento non verificato su testo).",
+              `${tri ? 'Interruttore automatico (con differenziale, se previsto)' : 'Magnetotermico differenziale'} dedicato da ${r.ac.inA} A all'arrivo della linea ${many ? 'degli inverter, più un interruttore per ogni inverter nel quadro di parallelo' : "dell'inverter"}. Il tipo di differenziale (A o B) dipende da cosa dichiara il costruttore sulla possibile componente continua di guasto.`,
+              acPowerW(d) > 11080
+                ? 'Protezione di interfaccia (SPI) esterna con il suo dispositivo di interfaccia: vedi «Connessione alla rete e pratiche».'
+                : "Protezione di interfaccia (SPI): fino a 11,08 kW può essere quella integrata nell'inverter (CEI 0-21).",
               'Contatore di produzione e contatore bidirezionale di scambio sono installati dal distributore secondo la pratica di connessione.',
               "Masse (cornici dei moduli, strutture metalliche, inverter) collegate all'impianto di terra con conduttori di protezione adeguati.",
             ]}
@@ -951,7 +1054,7 @@ function YieldStep({ n, r }: { n: number; r: DesignResults }) {
               ))}
             </select>
           </div>
-          <DayChart m={y.months[month] ?? y.months[0]!} battery={isHybrid(d) && d.batteryKWh > 0} />
+          <DayChart m={y.months[month] ?? y.months[0]!} battery={batteryActive(d)} />
         </div>
         <div className="grid content-start grid-cols-2 gap-x-4 gap-y-1.5 self-start rounded-lg bg-slate-950/60 px-3 py-3 text-[0.78125rem]">
           <span className="text-slate-400">Energia usata subito</span>
@@ -1111,6 +1214,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
   const up = useUpdate();
   const set = (patch: Partial<PvDesign['economics']>) => up((d) => ({ ...d, economics: { ...d.economics, ...patch } }));
   const ec = r.economics;
+  const biz = usePvDesign((x) => isBusiness(x.design));
   return (
     <Step
       n={n}
@@ -1122,8 +1226,9 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
       }
       help="I prezzi sono indicativi. Se hai già un preventivo, inserisci i suoi importi nel listino qui sotto: il rientro si aggiorna subito."
     >
+      {biz && <p className="text-[0.75rem] text-slate-400">Progetto aziendale: costi senza IVA se l'azienda la detrae, flussi di cassa al netto di IRES e IRAP, con l'ammortamento dell'impianto.</p>}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Kpi label="Costo totale" value={<Animated value={ec.total} format={eur} />} sub={`IVA inclusa, ${eur(ec.perKWp)} per kWp`} />
+        <Kpi label="Costo totale" value={<Animated value={ec.total} format={eur} />} sub={`${ec.vatIncluded ? 'IVA inclusa' : 'IVA esclusa (detraibile)'}, ${eur(ec.perKWp)} per kWp`} />
         <Kpi label={<Term k="rientro">Si ripaga in</Term>} value={ec.paybackYears === null ? 'oltre la durata' : <Animated value={ec.paybackYears} format={(v) => `${f(v, 1)} anni`} />} />
         <Kpi
           label="Risparmio del primo anno"
@@ -1139,10 +1244,18 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
       <Grid>
         <Num label="Prezzo dell'energia" value={e.importPrice} onChange={(v) => set({ importPrice: v })} suffix="€/kWh" min={0} max={2} step={0.01} hint="Quanto paghi in tutto per ogni kWh in bolletta (energia, rete, oneri, imposte): dividi la spesa variabile per i kWh consumati" />
         <Num label="Energia venduta" value={e.exportPrice} onChange={(v) => set({ exportPrice: v })} suffix="€/kWh" min={0} max={1} step={0.01} hint="Quanto ti pagano l'energia mandata in rete (per esempio ritiro dedicato): varia con il mercato" />
-        <Num label={<Term k="detrazione">Detrazione</Term>} value={e.deductionPct} onChange={(v) => set({ deductionPct: v })} suffix="%" min={0} max={110} hint="Dipende dalle regole fiscali dell'anno e dal tipo di immobile: verificale" />
-        <Num label="IVA" value={e.vatPct} onChange={(v) => set({ vatPct: v })} suffix="%" min={0} max={30} hint="Aliquota agevolata comune per gli impianti sulle abitazioni: verifica il caso specifico" />
+        {!biz && <Num label={<Term k="detrazione">Detrazione</Term>} value={e.deductionPct} onChange={(v) => set({ deductionPct: v })} suffix="%" min={0} max={110} hint="Dipende dalle regole fiscali dell'anno e dal tipo di immobile: verificale" />}
+        <Num
+          label="IVA"
+          value={e.vatPct}
+          onChange={(v) => set({ vatPct: v })}
+          suffix="%"
+          min={0}
+          max={30}
+          hint={biz ? "Aliquota ordinaria 22%; se l'azienda la detrae non pesa sul costo" : 'Aliquota agevolata comune per gli impianti sulle abitazioni: verifica il caso specifico'}
+        />
       </Grid>
-      <DeductionSettings r={r} set={set} />
+      {biz ? <BusinessTaxSettings r={r} set={set} /> : <DeductionSettings r={r} set={set} />}
       <More label={`Tariffa a fasce orarie${e.tariff === 'fasce' ? ' · attiva' : ''}`} defaultOpen={e.tariff === 'fasce' || undefined}>
         <div className="flex flex-wrap items-center gap-2 text-[0.75rem] text-slate-300" role="radiogroup" aria-label="Tipo di tariffa">
           La mia bolletta è:
@@ -1222,12 +1335,20 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
               ['Detrazione', 'deduction'],
               ['IVA', 'vat'],
             ] as const
-          ).map(([title, key]) => (
-            <div key={key} className="rounded-lg bg-slate-950/60 px-3 py-2.5">
-              <div className="mb-1 text-[0.75rem] font-semibold text-slate-200">{title}</div>
-              <Sources {...ECONOMIC_SOURCES[key]} />
+          )
+            .filter(([, key]) => !biz || key !== 'deduction')
+            .map(([title, key]) => (
+              <div key={key} className="rounded-lg bg-slate-950/60 px-3 py-2.5">
+                <div className="mb-1 text-[0.75rem] font-semibold text-slate-200">{title}</div>
+                {biz && key === 'importPrice' ? <Sources why="Per le imprese: prezzo IVA esclusa, indicativo; usa quello delle tue bollette." sources={BUSINESS_SOURCES.energyPrice} /> : <Sources {...ECONOMIC_SOURCES[key]} />}
+              </div>
+            ))}
+          {biz && (
+            <div className="rounded-lg bg-slate-950/60 px-3 py-2.5">
+              <div className="mb-1 text-[0.75rem] font-semibold text-slate-200">Costo chiavi in mano degli impianti aziendali</div>
+              <Sources why="Il listino per aziende è tarato su queste fasce: il costo per kWp scende con la taglia." sources={BUSINESS_TURNKEY_SOURCES} />
             </div>
-          ))}
+          )}
         </div>
       </More>
       <More label="Voci di spesa e listino prezzi">
@@ -1275,9 +1396,9 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
           <span>
             Prezzi IVA esclusa, aggiornati a <b>{PRICES_CHECKED}</b>. Le voci senza fonte sono stime.
           </span>
-          {e.prices.some((p) => p.price !== DEFAULT_PRICES.find((q) => q.id === p.id)?.price) && (
+          {e.prices.some((p) => p.price !== defaultPrices(biz ? 'azienda' : 'casa').find((q) => q.id === p.id)?.price) && (
             <button
-              onClick={() => set({ prices: DEFAULT_PRICES.map((q) => ({ ...q })) })}
+              onClick={() => set({ prices: defaultPrices(biz ? 'azienda' : 'casa') })}
               className="rounded-md bg-sky-400/15 px-2.5 py-1 font-semibold text-sky-100 transition-colors hover:bg-sky-400/25"
             >
               Ripristina i prezzi di {PRICES_CHECKED}
@@ -1298,7 +1419,7 @@ function CostStep({ n, r }: { n: number; r: DesignResults }) {
       </More>
       <More label="Altre ipotesi: durata, manutenzione, rincari">
         <Grid>
-          <Num label="Anni della detrazione" value={e.deductionYears} onChange={(v) => set({ deductionYears: Math.round(v) })} min={0} max={20} />
+          {!biz && <Num label="Anni della detrazione" value={e.deductionYears} onChange={(v) => set({ deductionYears: Math.round(v) })} min={0} max={20} />}
           <Num label="Aumento annuo dell'energia" value={e.energyInflationPct} onChange={(v) => set({ energyInflationPct: v })} suffix="%" min={-10} max={20} step={0.5} />
           <Num label="Manutenzione e assicurazione" value={e.omPerYear} onChange={(v) => set({ omPerYear: v })} suffix="€/anno" min={0} max={2000} step={10} />
           <Num label="Sostituzione inverter all'anno" value={e.inverterReplaceYear} onChange={(v) => set({ inverterReplaceYear: Math.round(v) })} min={0} max={40} hint="0 = nessuna sostituzione" />
@@ -1436,17 +1557,21 @@ function SummaryActions({ r }: { r: DesignResults }) {
       >
         <FileDown size={15} /> {busy ? 'Preparo la relazione…' : 'Scarica la relazione PDF'}
       </button>
-      <button
-        onClick={() => {
-          if (!window.confirm('Il progetto aperto nel laboratorio sarà sostituito da quello generato. Se ti serve, salvalo prima nella libreria. Continuare?')) return;
-          openProject(designToProject(d));
-          setMode('lab');
-        }}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2.5 text-[0.78125rem] font-semibold text-white transition-colors hover:bg-slate-600"
-        title="Crea nel laboratorio lo schema con generatore, inverter, cavi e protezioni di questo progetto"
-      >
-        <Zap size={15} /> Apri lo schema nel laboratorio
-      </button>
+      {threePhase(d) || inverterUnits(d) > 1 ? (
+        <p className="px-1 text-center text-[0.6875rem] leading-snug text-slate-500">Lo schema del laboratorio è per impianti monofase con un inverter: per questo progetto non è disponibile.</p>
+      ) : (
+        <button
+          onClick={() => {
+            if (!window.confirm('Il progetto aperto nel laboratorio sarà sostituito da quello generato. Se ti serve, salvalo prima nella libreria. Continuare?')) return;
+            openProject(designToProject(d));
+            setMode('lab');
+          }}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-slate-700 px-3 py-2.5 text-[0.78125rem] font-semibold text-white transition-colors hover:bg-slate-600"
+          title="Crea nel laboratorio lo schema con generatore, inverter, cavi e protezioni di questo progetto"
+        >
+          <Zap size={15} /> Apri lo schema nel laboratorio
+        </button>
+        )}
       <button
         onClick={() => window.confirm('Ricominciare da capo? Tutti i dati del progetto fotovoltaico torneranno ai valori iniziali.') && reset()}
         className="flex w-full items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-[0.75rem] text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
@@ -1473,7 +1598,7 @@ function Summary({ r }: { r: DesignResults }) {
         <dl className="text-[0.78125rem]">
           <FlashRow label={<Term k="kwp">Potenza</Term>} value={peakW(d) / 1000} format={(v) => `${f(v, 2)} kWp`} />
           <FlashRow label="Moduli" text={`${moduleCount(d)} da ${d.module.moduleWp} Wp`} />
-          <FlashRow label={<Term k="inverter">Inverter</Term>} text={`${f(d.inverter.pacW / 1000, 1)} kW${isHybrid(d) && d.batteryKWh > 0 ? ` + ${f(d.batteryKWh, 1)} kWh` : ''}`} />
+          <FlashRow label={<Term k="inverter">Inverter</Term>} text={`${inverterUnits(d) > 1 ? `${inverterUnits(d)} × ` : ''}${f(d.inverter.pacW / 1000, 1)} kW${batteryActive(d) ? ` + ${f(d.batteryKWh, 1)} kWh` : ''}`} />
           <div className="my-2 h-px bg-slate-800" />
           <FlashRow label="Produzione" value={r.yield.productionKWh} format={(v) => `${f(v)} kWh/anno`} />
           <FlashRow label="Copre i consumi al" value={(r.yield.productionKWh / Math.max(1, r.yield.consumptionKWh)) * 100} format={(v) => `${f(v)}%`} />

@@ -34,6 +34,10 @@ export const GLOSSARY = {
   fasce: ['Fasce orarie', 'F1: giorni feriali 8–19. F2: feriali 7–8 e 19–23, sabato 7–23. F3: notte, domenica e festivi.'],
   cer: ['Comunità energetica rinnovabile (CER)', "Gruppo di utenti vicini che condividono l'energia prodotta: per l'energia immessa da un impianto e consumata nello stesso momento da altri membri il GSE riconosce un incentivo per 20 anni."],
   detrazione: ['Detrazione fiscale', 'Parte della spesa che recuperi dalle tasse in rate annuali. Percentuale e durata dipendono dalle regole fiscali in vigore: verificale.'],
+  ammortamento: ['Ammortamento', "Per un'azienda il costo dell'impianto si deduce dal reddito un po' ogni anno (di solito il 9%): si pagano meno imposte."],
+  iperammortamento: ['Iperammortamento', "Agevolazione 2026 per le imprese: il costo dell'impianto si deduce maggiorato (fino al +180%), quindi le imposte risparmiate sono più alte."],
+  spi: ['Protezione di interfaccia (SPI)', "Dispositivo che stacca l'impianto dalla rete quando la rete manca o è fuori tolleranza, per sicurezza di chi lavora sulla linea."],
+  officina: ['Officina elettrica', "Impianto che produce energia elettrica soggetto alle regole delle accise: oltre 20 kW con autoconsumo va denunciato all'Agenzia delle Dogane."],
 } as const;
 
 export type TermKey = keyof typeof GLOSSARY;
