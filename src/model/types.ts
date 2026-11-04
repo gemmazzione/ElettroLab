@@ -14,7 +14,8 @@ export type Conductor = 'L1' | 'L2' | 'L3' | 'N' | 'PE' | 'DC+' | 'DC-';
 
 export type WireColor = 'marrone' | 'nero' | 'grigio' | 'blu' | 'giallo-verde' | 'rosso';
 
-export const WIRE_SECTIONS = [1.5, 2.5, 4, 6, 10, 16, 25] as const;
+/** Sezioni dei conduttori [mm²]: fino a 25 negli impianti domestici, fino a 240 nella distribuzione industriale. */
+export const WIRE_SECTIONS = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240] as const;
 export type WireSection = (typeof WIRE_SECTIONS)[number];
 
 export type ComponentKind =
@@ -77,6 +78,15 @@ export interface SupplyParams {
   rb: number;
   /** 1 = monofase L-N, 3 = trifase L1-L2-L3-N (default 1) */
   phases?: 1 | 3;
+  /**
+   * Sistema di distribuzione (default TT). TN-S: cabina MT/BT dell'utente, il conduttore di protezione PE parte dal
+   * centro stella del trasformatore e arriva con la linea.
+   */
+  earthing?: 'TT' | 'TN-S';
+  /** Cabina MT/BT: potenza del trasformatore [kVA], tensione di cortocircuito [%], potenza di cortocircuito della rete MT [MVA] */
+  transformerKVA?: number;
+  ukPct?: number;
+  mvSccMVA?: number;
 }
 
 export interface EarthParams {
@@ -107,8 +117,14 @@ export interface McbParams {
   poles: PoleConfig;
   in: number;
   curve: TripCurve;
-  /** Potere di interruzione nominale Icn [kA] */
+  /** Potere di interruzione nominale Icn [kA] (per gli interruttori industriali: Icu) */
   icn: number;
+  /**
+   * Interruttori industriali (CEI EN 60947-2: scatolati, salvamotori): regolazione dello sganciatore termico Ir [A]
+   * e soglia dello sganciatore magnetico Im [multipli di In]. Assenti = magnetotermico modulare con curva B/C/D.
+   */
+  ir?: number;
+  im?: number;
 }
 
 /** Sezionatore portafusibili modulare con cartucce cilindriche gG. */

@@ -117,4 +117,12 @@ export const WIRE_STROKE_FOR_SECTION: Record<WireSection, number> = {
   10: 4.6,
   16: 5.4,
   25: 6.2,
+  35: 6.8,
+  50: 7.4,
+  70: 8,
+  95: 8.6,
+  120: 9.2,
+  150: 9.8,
+  185: 10.4,
+  240: 11,
 };

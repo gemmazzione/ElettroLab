@@ -60,7 +60,8 @@ export function checkWiring(project: Project): Issue[] {
       explanation: 'Aggiungi "Fornitura monofase 230 V" dalla categoria Alimentazione e collegane i morsetti L e N all\'interruttore generale.',
     });
   }
-  if (loads.some((c) => !isElvLoad(c)) && !project.components.some((c) => c.params.kind === 'earth')) {
+  const tnSupply = project.components.some((c) => c.params.kind === 'supply' && c.params.p.earthing === 'TN-S');
+  if (loads.some((c) => !isElvLoad(c)) && !tnSupply && !project.components.some((c) => c.params.kind === 'earth')) {
     push({
       code: 'NO_EARTH',
       severity: 'errore',

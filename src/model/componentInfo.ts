@@ -66,7 +66,39 @@ const RCD_COMMON: InfoSection[] = [
   ),
 ];
 
+const MCCB_COMMON: InfoSection[] = [
+  S(
+    'A cosa serve',
+    'Interruttore automatico per la distribuzione industriale (CEI EN 60947-2): protegge le linee e i quadri a valle del trasformatore, dove le correnti di impiego arrivano a centinaia di ampere e quelle di cortocircuito a decine di kA.',
+  ),
+  S(
+    'Regolazioni',
+    "Lo sganciatore termico si regola con Ir (di solito da 0,4 a 1 volta In): così lo stesso interruttore si adatta alla corrente d'impiego e alla portata del cavo (IB ≤ Ir ≤ Iz). Lo sganciatore magnetico si regola con Im, multiplo di In: la norma di prodotto ammette una tolleranza del ±20% sulla soglia. Con Im più bassa il guasto a fondo linea viene interrotto più facilmente; con Im più alta si evitano gli interventi allo spunto dei motori e si ottiene selettività con gli interruttori a valle.",
+  ),
+  S(
+    'Potere di interruzione Icu',
+    "È la massima corrente di cortocircuito che l'interruttore interrompe (CEI EN 60947-2). Vicino al trasformatore va confrontato con l'Icc trifase ai morsetti BT, che per un trasformatore da 400 kVA è dell'ordine di 10 kA.",
+  ),
+  S(
+    'Nel simulatore',
+    "Stesso modello termico dei magnetotermici, riferito a Ir; corrente convenzionale di intervento 1,3·Ir. Intervento magnetico certo oltre 1,2·Im·In, incerto tra 0,8 e 1,2·Im·In. Non sono modellati il ritardo breve (selettività cronometrica) e la limitazione della corrente.",
+  ),
+];
+
 export const COMPONENT_INFO: Record<string, ComponentInfo> = {
+  'supply-cabina': {
+    title: 'Cabina di trasformazione MT/BT (sistema TN-S)',
+    summary: "Il trasformatore dell'azienda riceve la media tensione dal distributore e fornisce 400/230 V allo stabilimento.",
+    sections: [
+      S('A cosa serve', "Oltre circa 100 kW la connessione è in media tensione: l'utente ha una sua cabina con il trasformatore MT/BT. Dai morsetti BT partono le tre fasi, il neutro e il conduttore di protezione verso il quadro generale."),
+      S('Sistema TN-S', "Il centro stella del trasformatore è collegato all'impianto di terra della cabina. Neutro (N) e conduttore di protezione (PE) partono separati da quel punto e non si ricongiungono più. Un guasto fase-massa si richiude sul PE: la corrente è molto alta, simile a un cortocircuito, e la interrompono gli interruttori automatici (Zs × Ia ≤ U0)."),
+      S('Icc ai morsetti BT', "L'impedenza del trasformatore, Zt = ucc × U² / Sn, limita la corrente di cortocircuito; si aggiunge quella della rete MT, Zq = 1,1 × U² / Scc. Con 400 kVA e ucc 6% l'Icc trifase è di circa 9,6 kA: gli interruttori del quadro generale devono avere un potere di interruzione adeguato."),
+      S('Nel simulatore', "Generatore trifase da 230 V con l'impedenza per fase calcolata dalla taglia del trasformatore, dalla tensione di cortocircuito e dalla potenza di cortocircuito della rete MT (perdite nel rame tipiche per la taglia). Il PE è collegato al centro stella con la stessa impedenza del neutro; la terra di cabina RB collega il centro stella a terra."),
+    ],
+  },
+  'mccb-3p-160': { title: 'Interruttore scatolato 3P', summary: 'Protezione regolabile delle linee trifase industriali e dei motori.', sections: MCCB_COMMON },
+  'mccb-4p-250': { title: 'Interruttore scatolato 4P', summary: 'Partenze del quadro generale con neutro protetto, sganciatori regolabili.', sections: MCCB_COMMON },
+  'mccb-4p-630': { title: 'Interruttore generale scatolato 4P 630 A', summary: 'Generale del quadro BT a valle del trasformatore.', sections: MCCB_COMMON },
   'supply-mono': {
     title: 'Fornitura monofase 230 V (contatore)',
     summary: 'Il punto di consegna dell\'energia: qui finisce la rete del distributore e inizia l\'impianto dell\'utente.',

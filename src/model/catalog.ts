@@ -1,3 +1,4 @@
+import { cabinImpedance } from './cabin';
 import type { CombType, ComponentKind, ComponentParams, LoadCategory, MountType } from './types';
 
 export type CatalogCategory =
@@ -5,6 +6,7 @@ export type CatalogCategory =
   | 'Impianto di terra'
   | 'Manovra e sezionamento'
   | 'Magnetotermici'
+  | 'Interruttori industriali'
   | 'Portafusibili'
   | 'Differenziali'
   | 'Magnetotermici differenziali'
@@ -95,6 +97,25 @@ export const CATALOG: CatalogItem[] = [
       kind: 'supply',
       p: { voltage: 230, frequency: 50, contractKW: 10, rNetwork: 0.2, xNetwork: 0.08, rb: 2, phases: 3 },
     },
+  },
+  {
+    id: 'supply-cabina',
+    kind: 'supply',
+    name: 'Cabina MT/BT 400 kVA (sistema TN-S)',
+    category: 'Alimentazione',
+    description:
+      "Cabina di trasformazione dell'utente: la rete del distributore arriva in media tensione e il trasformatore MT/BT dell'azienda fornisce 400/230 V. Il centro stella è collegato all'impianto di terra di cabina e da lì partono neutro e conduttore di protezione separati (sistema TN-S): un guasto a massa è quasi un cortocircuito e lo interrompono le protezioni contro le sovracorrenti.",
+    mount: 'free',
+    modules: 0,
+    labelPrefix: 'TR',
+    singleton: true,
+    defaults: (() => {
+      const z = cabinImpedance(400, 6, 500);
+      return {
+        kind: 'supply',
+        p: { voltage: 230, frequency: 50, contractKW: 400, rNetwork: z.rNetwork, xNetwork: z.xNetwork, rb: 1, phases: 3, earthing: 'TN-S', transformerKVA: 400, ukPct: 6, mvSccMVA: 500 },
+      } as const;
+    })(),
   },
   {
     id: 'earth',
@@ -198,6 +219,40 @@ export const CATALOG: CatalogItem[] = [
     modules: 4,
     labelPrefix: 'Q',
     defaults: { kind: 'mcb', p: { poles: '4P', in: 32, curve: 'C', icn: 10 } },
+  },
+  {
+    id: 'mccb-3p-160',
+    kind: 'mcb',
+    name: 'Interruttore scatolato 3P 160 A',
+    category: 'Interruttori industriali',
+    description:
+      "Interruttore automatico scatolato (CEI EN 60947-2) per le linee di distribuzione e i motori: sganciatore termico regolabile Ir (0,4–1 In) e magnetico regolabile Im. Il potere di interruzione Icu arriva a decine di kA, adatto vicino al trasformatore.",
+    mount: 'din',
+    modules: 5,
+    labelPrefix: 'QF',
+    defaults: { kind: 'mcb', p: { poles: '3P', in: 160, curve: 'C', icn: 36, ir: 160, im: 10 } },
+  },
+  {
+    id: 'mccb-4p-250',
+    kind: 'mcb',
+    name: 'Interruttore scatolato 4P 250 A',
+    category: 'Interruttori industriali',
+    description: 'Scatolato tetrapolare per le partenze del quadro generale con neutro protetto: Ir e Im regolabili, Icu 36 kA.',
+    mount: 'din',
+    modules: 6,
+    labelPrefix: 'QF',
+    defaults: { kind: 'mcb', p: { poles: '4P', in: 250, curve: 'C', icn: 36, ir: 250, im: 10 } },
+  },
+  {
+    id: 'mccb-4p-630',
+    kind: 'mcb',
+    name: 'Interruttore generale scatolato 4P 630 A',
+    category: 'Interruttori industriali',
+    description: 'Interruttore generale del quadro BT a valle del trasformatore: Ir regolato sulla corrente nominale del trasformatore, Icu 50 kA.',
+    mount: 'din',
+    modules: 8,
+    labelPrefix: 'QF',
+    defaults: { kind: 'mcb', p: { poles: '4P', in: 630, curve: 'C', icn: 50, ir: 630, im: 10 } },
   },
   {
     id: 'fuse-1p',
@@ -747,6 +802,9 @@ export const IN_VALUES_RCD = [25, 40, 63];
 export const IN_VALUES_RCBO = [6, 10, 16, 20, 25, 32];
 export const IN_VALUES_SWITCH = [32, 40, 63, 80, 100];
 export const ICN_VALUES = [3, 4.5, 6, 10, 15, 25];
+/** Interruttori industriali: correnti nominali [A] e poteri di interruzione Icu [kA]. */
+export const IN_VALUES_MCCB = [16, 25, 32, 40, 63, 100, 125, 160, 200, 250, 320, 400, 500, 630, 800, 1000, 1250, 1600];
+export const ICU_VALUES = [10, 16, 25, 36, 50, 70, 100];
 export const IDN_VALUES = [10, 30, 100, 300];
 export const RCD_TYPES = ['AC', 'A', 'F', 'B'] as const;
 export const CURVES = ['B', 'C', 'D'] as const;

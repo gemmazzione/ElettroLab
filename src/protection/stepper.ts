@@ -6,9 +6,10 @@ import {
   fuseMeltAfter,
   fuseTimeToMelt,
   heatAfter,
-  MAGNETIC_BAND,
+  magneticBand,
   MAGNETIC_TRIP_S,
   magneticZone,
+  thermalSetting,
   residualTripTime,
   residualZone,
   thermalTripTime,
@@ -126,20 +127,23 @@ export function advance(
       if (pr.kind === 'mcb' || pr.kind === 'rcbo') {
         const i = closed ? protectedCurrent(res, c) : 0;
         const ratio = i / pr.p.in;
-        ratios.set(c.id, ratio);
+        // Lo sganciatore termico lavora sulla regolazione Ir (uguale a In nei modulari).
+        const thermalRatio = i / thermalSetting(pr.p);
+        ratios.set(c.id, thermalRatio);
         if (closed) {
-          const zone = magneticZone(ratio, pr.p.curve);
+          const band = magneticBand(pr.p);
+          const zone = magneticZone(ratio, band);
           // Il modello termico vale per i sovraccarichi: oltre la soglia magnetica certa prevale lo sganciatore magnetico.
-          const tt = zone === 'certa' ? Infinity : thermalTripTime(s.heat, ratio);
+          const tt = zone === 'certa' ? Infinity : thermalTripTime(s.heat, thermalRatio);
           if (Number.isFinite(tt)) cands.push({ id: c.id, time: tt, cause: 'termico', current: i });
           if (zone === 'certa') cands.push({ id: c.id, time: MAGNETIC_TRIP_S, cause: 'magnetico', current: i });
           if (zone === 'incerta' && !s.warnedMagnetic) {
             s.warnedMagnetic = true;
-            const [lo, hi] = MAGNETIC_BAND[pr.p.curve];
+            const [lo, hi] = band;
             events.push({
               at: t,
               level: 'attenzione',
-              text: `${c.label}: ${fA(i)} = ${f1(ratio, 1)}·In è nella fascia magnetica incerta della curva ${pr.p.curve} (${lo}–${hi}·In). L'intervento istantaneo dipende dall'esemplare (dati del costruttore): il simulatore considera solo lo sganciatore termico.`,
+              text: `${c.label}: ${fA(i)} = ${f1(ratio, 1)}·In è nella fascia magnetica incerta ${pr.kind === 'mcb' && pr.p.im ? `della soglia regolata Im = ${f1(pr.p.im, 1)}·In` : `della curva ${pr.p.curve}`} (${f1(lo, 1)}–${f1(hi, 1)}·In). L'intervento istantaneo dipende dall'esemplare (dati del costruttore): il simulatore considera solo lo sganciatore termico.`,
               componentIds: [c.id],
             });
           }
@@ -229,7 +233,7 @@ export function advance(
         events.push({
           at: t,
           level: 'errore',
-          text: `${dev.label} interviene per sovraccarico (sganciatore termico): ${fA(cand.current)} = ${f1(cand.current / pr.p.in, 2)}·In.`,
+          text: `${dev.label} interviene per sovraccarico (sganciatore termico): ${fA(cand.current)} = ${f1(cand.current / thermalSetting(pr.p), 2)}·${pr.kind === 'mcb' && pr.p.ir ? 'Ir' : 'In'}.`,
           componentIds: [dev.id],
         });
       } else if (cand.cause === 'magnetico' && (pr.kind === 'mcb' || pr.kind === 'rcbo')) {

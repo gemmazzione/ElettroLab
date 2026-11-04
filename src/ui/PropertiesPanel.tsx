@@ -9,6 +9,8 @@ import {
   CONTRACT_KW,
   CURVES,
   ICN_VALUES,
+  ICU_VALUES,
+  IN_VALUES_MCCB,
   IDN_VALUES,
   IN_VALUES_FUSE,
   IN_VALUES_MCB,
@@ -18,6 +20,7 @@ import {
   KIND_LABEL,
   RCD_TYPES,
 } from '../model/catalog';
+import { cabinImpedance, TRANSFORMER_SIZES } from '../model/cabin';
 import { CONDUCTOR_LABEL, WIRE_COLOR_HEX, WIRE_COLOR_LABEL } from '../model/constants';
 import { PANEL_SIZES } from '../model/geometry';
 import { getPoles, getTerminals, isResidualDevice, isSwitchingDevice, parseTerminalId } from '../model/terminals';
@@ -238,7 +241,30 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
       </Section>
 
       <Section title="Caratteristiche">
-        {pr.kind === 'mcb' && (
+        {pr.kind === 'mcb' && pr.p.im !== undefined && (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="Corrente nominale In">
+                <Select
+                  value={pr.p.in}
+                  options={IN_VALUES_MCCB}
+                  format={(v) => `${v} A`}
+                  onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, in: v, ir: Math.min(v, Math.max(0.4 * v, pr.p.ir ?? v)) } })}
+                />
+              </Field>
+              <Field label="Potere di interruzione Icu" hint="CEI EN 60947-2">
+                <Select value={pr.p.icn} options={ICU_VALUES} format={(v) => `${v} kA`} onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, icn: v } })} />
+              </Field>
+              <Field label="Termico Ir" hint={`Regolabile da ${fmt(0.4 * pr.p.in, 0)} a ${pr.p.in} A`}>
+                <NumberInput value={pr.p.ir ?? pr.p.in} min={0.4 * pr.p.in} max={pr.p.in} step={pr.p.in >= 100 ? 5 : 0.5} suffix="A" onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, ir: v } })} />
+              </Field>
+              <Field label="Magnetico Im" hint={`Soglia istantanea: ${fmt(pr.p.im * pr.p.in, 0)} A ±20%`}>
+                <NumberInput value={pr.p.im} min={2} max={20} step={0.5} suffix="× In" onChange={(v) => update(comp.id, { kind: 'mcb', p: { ...pr.p, im: v } })} />
+              </Field>
+            </div>
+          </>
+        )}
+        {pr.kind === 'mcb' && pr.p.im === undefined && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Corrente nominale In">
@@ -451,7 +477,41 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             <Row k="Vie" v={pr.p.ways} />
           </>
         )}
-        {pr.kind === 'supply' && (
+        {pr.kind === 'supply' && pr.p.earthing === 'TN-S' && (() => {
+          const kva = pr.p.transformerKVA ?? 400;
+          const uk = pr.p.ukPct ?? 6;
+          const scc = pr.p.mvSccMVA ?? 500;
+          const z = cabinImpedance(kva, uk, scc);
+          const set = (patch: { transformerKVA?: number; ukPct?: number; mvSccMVA?: number }) => {
+            const k = patch.transformerKVA ?? kva;
+            const zz = cabinImpedance(k, patch.ukPct ?? uk, patch.mvSccMVA ?? scc);
+            update(comp.id, { kind: 'supply', p: { ...pr.p, ...patch, contractKW: k, rNetwork: zz.rNetwork, xNetwork: zz.xNetwork } });
+          };
+          return (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Trasformatore MT/BT">
+                  <Select value={kva} options={[...TRANSFORMER_SIZES]} format={(v) => `${v} kVA`} onChange={(v) => set({ transformerKVA: v })} />
+                </Field>
+                <Field label="Tensione di cortocircuito" hint="Tipica 4% fino a 630 kVA in olio, 6% per i trasformatori in resina">
+                  <Select value={uk} options={[4, 6]} format={(v) => `${v} %`} onChange={(v) => set({ ukPct: v })} />
+                </Field>
+                <Field label="Rete MT: potenza di cortocircuito" hint="Valore comunicato dal distributore (tipico 250–500 MVA)">
+                  <Select value={scc} options={[100, 250, 500, 750]} format={(v) => `${v} MVA`} onChange={(v) => set({ mvSccMVA: v })} />
+                </Field>
+                <Field label="Terra di cabina RB" hint="Impianto di terra della cabina, comune a tutto lo stabilimento">
+                  <NumberInput value={pr.p.rb} min={0.01} max={20} step={0.1} suffix="Ω" onChange={(v) => update(comp.id, { kind: 'supply', p: { ...pr.p, rb: v } })} />
+                </Field>
+              </div>
+              <Row k="Sistema" v="TN-S: 400/230 V, neutro e PE separati dal centro stella" mono={false} />
+              <Row k="Corrente nominale del trasformatore" v={`${fmt(z.inA, 0)} A`} />
+              <Row k="Icc trifase ai morsetti BT" v={`${fmt(z.ik3 / 1000, 1)} kA`} />
+              <Row k="Impedenza per fase" v={`R ${fmt(z.r * 1000, 2)} mΩ · X ${fmt(z.x * 1000, 2)} mΩ`} />
+              <p className="text-[0.6875rem] text-slate-500">Zt = ucc · U² / Sn, rete MT Zq = 1,1 · U² / Scc (metodo delle impedenze, IEC 60909). Perdite nel rame tipiche per la taglia.</p>
+            </>
+          );
+        })()}
+        {pr.kind === 'supply' && pr.p.earthing !== 'TN-S' && (
           <>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Tensione U0">

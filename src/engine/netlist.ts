@@ -19,6 +19,7 @@ export type ElementTag =
   | { t: 'source-L'; componentId: string; phase: Phase }
   | { t: 'source-N'; componentId: string }
   | { t: 'rb'; componentId: string }
+  | { t: 'pe-source'; componentId: string }
   | { t: 'ra'; componentId: string }
   | { t: 'fault'; faultId: string }
   | { t: 'extra'; index: number }
@@ -173,6 +174,8 @@ export function buildNetlist(project: Project, opts: NetlistOptions = {}): Netli
         }
         elements.push({ a: tid('N'), b: NODE_STAR, z: zHalf, tag: { t: 'source-N', componentId: c.id } });
         elements.push({ a: NODE_STAR, b: NODE_EARTH, z: C(Math.max(pr.p.rb, 1e-3)), tag: { t: 'rb', componentId: c.id } });
+        // TN-S: il PE parte dal centro stella del trasformatore (con la stessa impedenza del neutro).
+        if (pr.p.earthing === 'TN-S') elements.push({ a: tid('PE'), b: NODE_STAR, z: zHalf, tag: { t: 'pe-source', componentId: c.id } });
         break;
       }
       case 'earth':

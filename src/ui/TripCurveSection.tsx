@@ -2,6 +2,7 @@ import { Maximize2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { deviceShortCircuit } from '../engine/measure';
 import type { ComponentInstance } from '../model/types';
+import { magneticBand, thermalSetting } from '../protection/curves';
 import { protectedCurrent } from '../protection/stepper';
 import { useStore } from '../store/projectStore';
 import { Section } from './fields';
@@ -24,6 +25,10 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
   const point = live && (pr.kind === 'mcb' || pr.kind === 'rcbo' || pr.kind === 'fuse') ? { current: protectedCurrent(result, comp), heat } : null;
   const residual = live && (pr.kind === 'rcd' || pr.kind === 'rcbo') ? (result.residual.get(comp.id) ?? 0) : null;
   const selective = pr.kind === 'rcd' && pr.p.selective;
+  // Interruttori regolabili: curva riferita a Ir, fascia magnetica dalla soglia Im.
+  const ref = pr.kind === 'mcb' ? thermalSetting(pr.p) : pr.kind === 'rcbo' ? pr.p.in : 0;
+  const band: [number, number] | undefined =
+    pr.kind === 'mcb' && pr.p.im ? (magneticBand(pr.p).map((v) => (v * pr.p.in) / ref) as [number, number]) : undefined;
 
   const charts = (w: number, h: number) => (
     <div className="space-y-4">
@@ -31,7 +36,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
       {(pr.kind === 'mcb' || pr.kind === 'rcbo') && (
         <div>
           {pr.kind === 'rcbo' && <div className="mb-1 text-[0.6875rem] font-semibold text-slate-300">Sganciatore magnetotermico</div>}
-          <OvercurrentChart inA={pr.p.in} curve={pr.p.curve} point={point} iccA={icc} width={w} height={h} />
+          <OvercurrentChart inA={ref} curve={pr.p.curve} band={band} point={point} iccA={icc} width={w} height={h} />
         </div>
       )}
       {(pr.kind === 'rcd' || pr.kind === 'rcbo') && (
@@ -56,7 +61,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
           <button className="text-[0.6875rem] text-sky-300 hover:underline" onClick={() => setTable(!table)}>
             {table ? 'Nascondi i valori' : 'Mostra i valori in tabella'}
           </button>
-          {table && <OvercurrentTable inA={pr.p.in} curve={pr.p.curve} />}
+          {table && <OvercurrentTable inA={ref} curve={pr.p.curve} band={band} />}
         </>
       )}
       <p className="text-[0.65625rem] leading-snug text-slate-500">
@@ -72,7 +77,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
               </button>
             </div>
             {charts(Math.max(300, Math.min(640, window.innerWidth - 110)), 400)}
-            {(pr.kind === 'mcb' || pr.kind === 'rcbo') && <OvercurrentTable inA={pr.p.in} curve={pr.p.curve} />}
+            {(pr.kind === 'mcb' || pr.kind === 'rcbo') && <OvercurrentTable inA={ref} curve={pr.p.curve} band={band} />}
           </div>
         </div>
       )}

@@ -51,8 +51,22 @@ export const MAGNETIC_TRIP_S = 0.01;
 
 export type MagneticZone = 'sotto' | 'incerta' | 'certa';
 
-export function magneticZone(ratio: number, curve: TripCurve): MagneticZone {
-  const [lo, hi] = MAGNETIC_BAND[curve];
+/**
+ * Fascia di intervento magnetico in multipli di In: curva B/C/D (CEI EN 60898-1) oppure, per gli interruttori
+ * industriali, la soglia regolata Im con la tolleranza di ±20% (CEI EN 60947-2).
+ */
+export function magneticBand(p: { curve: TripCurve; im?: number }): [number, number] {
+  return p.im ? [0.8 * p.im, 1.2 * p.im] : MAGNETIC_BAND[p.curve];
+}
+
+/** Corrente di regolazione dello sganciatore termico [A]: Ir se regolabile, altrimenti In. */
+export const thermalSetting = (p: { in: number; ir?: number }) => (p.ir && p.ir > 0 ? Math.min(p.ir, p.in) : p.in);
+
+/** Interruttore industriale con sganciatori regolabili (CEI EN 60947-2). */
+export const isIndustrialBreaker = (p: { im?: number }) => !!p.im;
+
+export function magneticZone(ratio: number, curve: TripCurve | [number, number]): MagneticZone {
+  const [lo, hi] = Array.isArray(curve) ? curve : MAGNETIC_BAND[curve];
   if (ratio >= hi) return 'certa';
   if (ratio >= lo) return 'incerta';
   return 'sotto';

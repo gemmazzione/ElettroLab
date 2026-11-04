@@ -69,13 +69,17 @@ export interface TripPoint {
 export function OvercurrentChart({
   inA,
   curve,
+  band,
   point,
   iccA,
   width = 290,
   height = 230,
 }: {
+  /** Corrente di riferimento del termico: In, oppure Ir negli interruttori regolabili */
   inA: number;
   curve: TripCurve;
+  /** Fascia magnetica in multipli di inA (interruttori regolabili); assente = curva B/C/D */
+  band?: [number, number];
   point?: TripPoint | null;
   iccA?: number | null;
   width?: number;
@@ -87,7 +91,7 @@ export function OvercurrentChart({
   const T_MAX = 10000;
   const x = logScale(X_MIN, X_MAX, PAD.l, width - PAD.r);
   const y = logScale(T_MIN, T_MAX, height - PAD.b, PAD.t);
-  const [lo, hi] = MAGNETIC_BAND[curve];
+  const [lo, hi] = band ?? MAGNETIC_BAND[curve];
   const [hover, setHover] = useState<number | null>(null);
 
   // Curva termica da freddo, fino alla soglia magnetica certa; poi intervento magnetico.
@@ -110,7 +114,7 @@ export function OvercurrentChart({
     pts.push(`L${x.to(hi).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
     pts.push(`L${x.to(X_MAX).toFixed(1)},${y.to(MAGNETIC_TRIP_S).toFixed(1)}`);
     return pts.join(' ');
-  }, [curve, width, height]);
+  }, [hi, width, height]);
 
   const ratioNow = point ? point.current / inA : null;
   const tNow = point && ratioNow !== null ? (ratioNow >= hi ? MAGNETIC_TRIP_S : thermalTripTime(point.heat, ratioNow)) : null;
@@ -126,7 +130,7 @@ export function OvercurrentChart({
         width={width}
         height={height}
         role="img"
-        aria-label={`Curva d'intervento ${curve}${inA}: termico da 1,3·In, magnetico certo da ${hi}·In`}
+        aria-label={band ? `Curva d'intervento: termico regolato a ${inA} A, magnetico certo da ${hi.toFixed(1)} volte` : `Curva d'intervento ${curve}${inA}: termico da 1,3·In, magnetico certo da ${hi}·In`}
         onMouseLeave={() => setHover(null)}
         onMouseMove={(e) => {
           const box = e.currentTarget.getBoundingClientRect();
@@ -335,8 +339,8 @@ export function ResidualChart({
 }
 
 /** Valori della curva in forma di tabella (accessibilità e lettura precisa). */
-export function OvercurrentTable({ inA, curve }: { inA: number; curve: TripCurve }) {
-  const [lo, hi] = MAGNETIC_BAND[curve];
+export function OvercurrentTable({ inA, curve, band }: { inA: number; curve: TripCurve; band?: [number, number] }) {
+  const [lo, hi] = band ?? MAGNETIC_BAND[curve];
   const rows = [1.13, 1.3, 1.45, 2, 2.55, 3, lo, hi, 20, 50].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
   return (
     <table className="mt-2 w-full text-[0.65625rem]">

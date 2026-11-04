@@ -564,7 +564,8 @@ function simulateCore(project: Project, opts: NetlistOptions = {}): SimResult {
     const pr = c.params;
     if (pr.kind !== 'mcb' && pr.kind !== 'rcbo' && pr.kind !== 'fuse' && pr.kind !== 'switch' && pr.kind !== 'rcd' && pr.kind !== 'relay') continue;
     const imax = Math.max(0, ...(poleI.get(c.id) ?? []).map((v) => (v ? abs(v) : 0)));
-    const inom = pr.p.in;
+    // Interruttori regolabili: la corrente di riferimento è la regolazione Ir.
+    const inom = pr.kind === 'mcb' && pr.p.ir ? Math.min(pr.p.ir, pr.p.in) : pr.p.in;
     if (imax > 10 * inom) {
       alerts.push({
         code: 'FAULT_CURRENT',

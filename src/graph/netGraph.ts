@@ -69,6 +69,8 @@ export function buildNetGraph(project: Project): NetGraph {
   }
   const earthNets = new Set<string>();
   for (const c of project.components) if (c.params.kind === 'earth') earthNets.add(netOf(terminalId(c.id, 'PE')));
+  // Sistema TN-S: il conduttore di protezione arriva dalla cabina, collegata al suo impianto di terra.
+  if (supply && supply.params.kind === 'supply' && supply.params.p.earthing === 'TN-S') earthNets.add(netOf(terminalId(supply.id, 'PE')));
 
   const distance = new Map<string, number>();
   const queue: string[] = [];

@@ -1,6 +1,6 @@
 import { getPoles } from '../model/terminals';
 import type { ComponentInstance, TripCurve } from '../model/types';
-import { fuseConventional, fuseMeltTime, magneticZone, MAGNETIC_BAND, thermalTripTime } from '../protection/curves';
+import { fuseConventional, fuseMeltTime, isIndustrialBreaker, magneticBand, magneticZone, thermalSetting, thermalTripTime } from '../protection/curves';
 import { AMPACITY_SOURCE, K_ADIABATIC } from './ampacity';
 import type { CircuitCtx, NormCtx } from './context';
 import type { NormRef, Rule, RuleOutcome, RuleSet } from './types';
@@ -26,20 +26,41 @@ const fA = (a: number) => (a >= 1000 ? `${f(a / 1000, 2)} kA` : `${f(a, a >= 100
 
 type R = Rule<NormCtx>;
 
-/** Dati comuni dei dispositivi contro le sovracorrenti (magnetotermici e fusibili gG). */
-const ocpParams = (c: ComponentInstance | undefined): { in: number; icn: number; curve: TripCurve | null; iF: number; ifText: string } | null => {
+/**
+ * Dati comuni dei dispositivi contro le sovracorrenti (magnetotermici, interruttori industriali e fusibili gG).
+ * "in" è la corrente di riferimento delle verifiche: In, oppure la regolazione Ir degli interruttori industriali;
+ * "band" è la fascia di intervento magnetico in multipli di "in" (null per i fusibili).
+ */
+const ocpParams = (
+  c: ComponentInstance | undefined,
+): { in: number; icn: number; curve: TripCurve | null; band: [number, number] | null; label: string; iF: number; ifText: string } | null => {
   if (!c) return null;
   if (c.params.kind === 'mcb' || c.params.kind === 'rcbo') {
     const p = c.params.p;
-    return { in: p.in, icn: p.icn, curve: p.curve, iF: 1.45 * p.in, ifText: '1,45 × In' };
+    if (c.params.kind === 'mcb' && isIndustrialBreaker(c.params.p)) {
+      const ir = thermalSetting(c.params.p);
+      const [lo, hi] = magneticBand(c.params.p);
+      return {
+        in: ir,
+        icn: p.icn,
+        curve: p.curve,
+        band: [(lo * p.in) / ir, (hi * p.in) / ir],
+        label: `Ir = ${f(ir)} A, Im = ${f(c.params.p.im!, 1)}·In`,
+        iF: 1.3 * ir,
+        ifText: '1,3 × Ir (corrente convenzionale di intervento, CEI EN 60947-2)',
+      };
+    }
+    return { in: p.in, icn: p.icn, curve: p.curve, band: magneticBand(p), label: `curva ${p.curve}`, iF: 1.45 * p.in, ifText: '1,45 × In' };
   }
   if (c.params.kind === 'fuse') {
     const p = c.params.p;
     const k = fuseConventional(p.in).if;
-    return { in: p.in, icn: p.icn, curve: null, iF: k * p.in, ifText: `${f(k, 2)} × In (fusione convenzionale gG, CEI EN 60269)` };
+    return { in: p.in, icn: p.icn, curve: null, band: null, label: 'fusibile gG', iF: k * p.in, ifText: `${f(k, 2)} × In (fusione convenzionale gG, CEI EN 60269)` };
   }
   return null;
 };
+/** Fornitura in sistema TN-S (cabina MT/BT dell'utente): le regole del sistema TT non si applicano. */
+const isTn = (ctx: NormCtx) => ctx.supply?.p.earthing === 'TN-S';
 const idnOf = (c: ComponentInstance) => (c.params.kind === 'rcd' || c.params.kind === 'rcbo' ? c.params.p.idn : null);
 
 const fedCircuits = (ctx: NormCtx) => ctx.circuits.filter((c) => c.info.lConnected && c.info.nConnected);
@@ -82,6 +103,7 @@ const ttReIdn: R = {
   refs: [r07('413.1.4.2'), r07('22.4', 'Definizione di UL'), r07('413.1.1.1', 'Nota 1: UL = 50 V c.a.; Nota 3: valori inferiori per luoghi speciali'), rIX('411.5.3')],
   requiredData: ['Resistenza del dispersore RE (misurata)', 'IΔn dei differenziali', 'UL dell\'ambiente'],
   evaluate: (ctx) => {
+    if (isTn(ctx)) return [];
     const out: RuleOutcome[] = [];
     const earth = ctx.earths[0];
     const rcds = ctx.devices.filter((d) => idnOf(d) !== null);
@@ -119,6 +141,114 @@ const ttReIdn: R = {
   },
 };
 
+/** Corrente che fa intervenire la protezione entro t secondi [A] (curve del modello; null se non calcolabile). */
+function tripCurrentWithin(c: ComponentInstance, t: number): number | null {
+  const p = ocpParams(c);
+  if (!p) return null;
+  if (p.band) {
+    // Magnetico certo: intervento < 0,1 s. Per tempi lunghi può bastare il termico.
+    const instant = p.band[1] * p.in;
+    if (t < 1) return instant;
+    let lo = 1.05;
+    let hi = p.band[1];
+    for (let k = 0; k < 60; k++) {
+      const mid = (lo + hi) / 2;
+      if (thermalTripTime(0, mid) <= t) hi = mid;
+      else lo = mid;
+    }
+    return Math.min(instant, hi * p.in);
+  }
+  let lo = 1;
+  let hi = 200;
+  if (!(fuseMeltTime(hi, p.in) <= t)) return null;
+  for (let k = 0; k < 60; k++) {
+    const mid = (lo + hi) / 2;
+    if (fuseMeltTime(mid, p.in) <= t) hi = mid;
+    else lo = mid;
+  }
+  return hi * p.in;
+}
+
+const tnInterruzione: R = {
+  id: 'TN-413',
+  version: '1.0',
+  title: 'Sistema TN: interruzione automatica dell\'alimentazione',
+  description: 'Zs × Ia ≤ U0: il guasto a massa deve far intervenire la protezione entro 0,4 s (circuiti terminali fino a 32 A) o 5 s.',
+  area: 'Protezione contro i contatti elettrici',
+  scope: 'Circuiti in sistema TN-S',
+  severity: 'errore',
+  explanation:
+    'Nel sistema TN la massa è collegata al centro stella del trasformatore tramite il PE: un guasto fase-massa è quasi un cortocircuito e la corrente è limitata solo dall\'impedenza dell\'anello di guasto Zs. Basta che questa corrente faccia intervenire la protezione entro il tempo massimo: 0,4 s con U0 = 230 V per i circuiti terminali con protezione fino a 32 A (Tab. 41A), 5 s per gli altri. Con un differenziale Ia è la sua IΔn.',
+  refs: [r07('413.1.3.3', 'Zs × Ia ≤ U0 e Tab. 41A'), r07('413.1.3.4'), r07('413.1.3.5'), rIX('411.4.4')],
+  requiredData: ['Impedenza della cabina e delle linee', 'Caratteristiche delle protezioni'],
+  evaluate: (ctx) => {
+    if (!isTn(ctx)) return [];
+    const u0 = ctx.supply?.p.voltage ?? 230;
+    return fedCircuits(ctx).map((c): RuleOutcome => {
+      const ilpe = c.iccEnd.lpe;
+      if (ilpe === null || !c.info.peConnected) {
+        return {
+          ruleId: 'TN-413',
+          status: 'errore',
+          subject: c.name,
+          message: 'La massa non è collegata al PE della cabina: un guasto a massa non fa circolare corrente di guasto.',
+          componentIds: [c.load.id],
+        };
+      }
+      const zs = u0 / ilpe;
+      const rcd = c.rcds[0];
+      if (rcd) {
+        const idn = idnOf(rcd)! / 1000;
+        const ok = zs * idn <= u0;
+        return {
+          ruleId: 'TN-413',
+          status: ok ? 'conforme' : 'errore',
+          subject: c.name,
+          message: `Protetto dal differenziale ${rcd.label}: Zs × IΔn = ${f(zs, 3)} Ω × ${f(idn, 3)} A = ${f(zs * idn, 2)} V ≤ U0 = ${u0} V.`,
+          details: [`Corrente di guasto franco a massa a fondo linea ≈ ${fA(ilpe)}`],
+          componentIds: [c.load.id, rcd.id],
+        };
+      }
+      const p = ocpParams(c.ocp);
+      if (!c.ocp || !p) {
+        return {
+          ruleId: 'TN-413',
+          status: 'errore',
+          subject: c.name,
+          message: 'Nessuna protezione contro le sovracorrenti o differenziale a monte: il guasto a massa non verrebbe interrotto.',
+          componentIds: [c.load.id],
+        };
+      }
+      const tMax = p.in <= 32 ? 0.4 : 5;
+      const ia = tripCurrentWithin(c.ocp, tMax);
+      if (ia === null) {
+        return {
+          ruleId: 'TN-413',
+          status: 'dati-insufficienti',
+          subject: c.name,
+          message: `Non riesco a ricavare Ia di ${c.ocp.label} per ${f(tMax, 1)} s: usa la curva del costruttore.`,
+          componentIds: [c.load.id, c.ocp.id],
+        };
+      }
+      const ok = ilpe >= ia;
+      return {
+        ruleId: 'TN-413',
+        status: ok ? 'conforme' : 'errore',
+        subject: c.name,
+        message: ok
+          ? `Zs = ${f(zs, 3)} Ω: il guasto a massa (${fA(ilpe)}) supera Ia = ${fA(ia)} e ${c.ocp.label} interviene entro ${f(tMax, 1)} s.`
+          : `Zs × Ia = ${f(zs, 3)} Ω × ${fA(ia)} = ${f(zs * ia, 0)} V > U0 = ${u0} V: con ${fA(ilpe)} di guasto ${c.ocp.label} non interviene entro ${f(tMax, 1)} s. Aumenta la sezione o accorcia la linea, abbassa la soglia magnetica (curva o Im) oppure aggiungi un differenziale.`,
+        details: [
+          `Tempo massimo: ${tMax === 0.4 ? '0,4 s (Tab. 41A, U0 = 230 V: circuito terminale con protezione fino a 32 A, 413.1.3.4)' : '5 s (413.1.3.5)'}`,
+          `Ia = corrente di intervento entro ${f(tMax, 1)} s di ${c.ocp.label} (${p.label}) ≈ ${fA(ia)}`,
+          `Corrente di guasto franco fase-PE a fondo linea ≈ ${fA(ilpe)}`,
+        ],
+        componentIds: [c.load.id, c.ocp.id],
+      };
+    });
+  },
+};
+
 // ------------------------------------------------------------------ 5. differenziale
 
 const ttDiff: R = {
@@ -134,7 +264,7 @@ const ttDiff: R = {
   refs: [r07('413.1.4.2'), rIX('411.5')],
   requiredData: ['Schema dei circuiti'],
   evaluate: (ctx) =>
-    fedCircuits(ctx).map((c) => ({
+    (isTn(ctx) ? [] : fedCircuits(ctx)).map((c) => ({
       ruleId: 'TT-DIFF',
       status: c.rcds.length ? 'conforme' : 'errore',
       subject: c.name,
@@ -164,7 +294,13 @@ const masseATerra: R = {
       ruleId: 'TT-MASSE',
       status: c.info.peConnected ? 'conforme' : 'errore',
       subject: c.name,
-      message: c.info.peConnected ? 'La massa è collegata al dispersore tramite il PE.' : 'Massa non collegata all\'impianto di terra.',
+      message: c.info.peConnected
+        ? isTn(ctx)
+          ? 'La massa è collegata al PE che arriva dal centro stella del trasformatore di cabina (sistema TN-S).'
+          : 'La massa è collegata al dispersore tramite il PE.'
+        : isTn(ctx)
+          ? 'Massa non collegata al conduttore di protezione della cabina (413.1.3.1).'
+          : 'Massa non collegata all\'impianto di terra.',
       componentIds: [c.load.id],
     })),
 };
@@ -271,7 +407,7 @@ const sovraccarico: R = {
       const c2 = iF <= 1.45 * iz;
       const details = [
         `IB = P / (${c.p.phases === 3 ? '3 × ' : ''}U0${(c.p.cosPhi ?? 1) < 1 ? ' × cos φ' : ''}) = ${f(c.p.powerW, 0)} W / (${c.p.phases === 3 ? '3 × ' : ''}230 V${(c.p.cosPhi ?? 1) < 1 ? ` × ${f(c.p.cosPhi ?? 1, 2)}` : ''}) = ${fA(c.ib)}`,
-        `In = ${p.in} A (${c.ocp.label}, ${p.curve ? `curva ${p.curve}` : 'fusibile gG'})`,
+        `${p.label.startsWith('Ir') ? 'Ir' : 'In'} = ${f(p.in)} A (${c.ocp.label}, ${p.label})`,
         c.iz.source === 'utente'
           ? `Iz = ${f(iz, 1)} A (inserita dall'utente)`
           : `Iz = I0 × k1 × k2 = ${f(c.iz.calc!.i0, 1)} × ${f(c.iz.calc!.k1, 2)} × ${f(c.iz.calc!.k2, 2)} = ${f(iz, 1)} A — ${c.p.cableSection} mm², posa ${c.install?.method}, ${c.install?.insulation}, ${c.install?.ambientC} °C, ${c.install?.grouped} circuiti`,
@@ -436,7 +572,7 @@ const energiaPassante: R = {
           },
         ];
       }
-      const zone = magneticZone(ratio, p.curve);
+      const zone = magneticZone(ratio, p.band!);
       const base = [`Icc minima a fondo linea ≈ ${fA(ik)} (${f(ratio, 1)}·In)`, `K²S² = ${k}² × ${s}² = ${Math.round(k2s2).toLocaleString('it-IT')} A²s`];
       if (zone === 'certa') {
         return [
@@ -444,7 +580,7 @@ const energiaPassante: R = {
             ruleId: 'SC-434-I2T',
             status: 'dati-insufficienti',
             subject: c.name,
-            message: `Intervento magnetico certo (≥ ${MAGNETIC_BAND[p.curve][1]}·In), durata < 0,1 s: confrontare K²S² con l'I²t lasciato passare indicato dal costruttore di ${c.ocp.label}.`,
+            message: `Intervento magnetico certo (≥ ${f(p.band![1], 1)}·${p.curve && p.label.startsWith('Ir') ? 'Ir' : 'In'}), durata < 0,1 s: confrontare K²S² con l'I²t lasciato passare indicato dal costruttore di ${c.ocp.label}.`,
             details: base,
             missingData: [`I²t lasciato passare da ${c.ocp.label} a ${fA(ik)}`],
             componentIds: [c.load.id, c.ocp.id],
@@ -808,6 +944,7 @@ export const RULESET_2007: RuleSet<NormCtx> = {
   rules: [
     contattiDiretti,
     ttReIdn,
+    tnInterruzione,
     sovraccarico,
     potereInterruzione,
     energiaPassante,

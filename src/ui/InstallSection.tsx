@@ -14,7 +14,7 @@ export function InstallSection({ comp }: { comp: ComponentInstance }) {
   const inst = p.install;
   const set = (patch: Partial<CableInstall> | null) =>
     update(comp.id, { kind: 'load', p: { ...p, install: patch === null ? undefined : { ...(inst ?? DEFAULT_INSTALL), ...patch } } });
-  const calc = inst ? ampacity(p.cableSection, inst.method, inst.insulation, inst.ambientC, inst.grouped) : null;
+  const calc = inst ? ampacity(p.cableSection, inst.method, inst.insulation, inst.ambientC, inst.grouped, p.phases === 3 ? 3 : 2) : null;
   const hasSockets = p.hasSockets ?? p.category === 'prese';
 
   return (

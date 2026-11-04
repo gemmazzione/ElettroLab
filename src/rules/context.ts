@@ -93,7 +93,8 @@ export function buildNormContext(project: Project): NormCtx {
     let iz: CircuitCtx['iz'] = null;
     if (install?.izOverride && install.izOverride > 0) iz = { value: install.izOverride, source: 'utente', calc: null };
     else if (install) {
-      const calc = ampacity(p.cableSection, install.method, install.insulation, install.ambientC, install.grouped);
+      // Circuito trifase: tre conduttori carichi.
+      const calc = ampacity(p.cableSection, install.method, install.insulation, install.ambientC, install.grouped, p.phases === 3 ? 3 : 2);
       if (calc) iz = { value: calc.iz, source: 'tabella', calc };
     }
     let dropPct: number | null = null;

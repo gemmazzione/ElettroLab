@@ -105,6 +105,8 @@ export function getPoles(c: ComponentInstance): PoleDef[] {
 }
 
 export const isThreePhaseSupply = (c: ComponentInstance) => c.params.kind === 'supply' && c.params.p.phases === 3;
+/** Fornitura in sistema TN-S (cabina MT/BT dell'utente). */
+export const isTnSupply = (c: ComponentInstance | null | undefined) => !!c && c.params.kind === 'supply' && c.params.p.earthing === 'TN-S';
 export const isThreePhaseLoad = (c: ComponentInstance) => c.params.kind === 'load' && c.params.p.phases === 3;
 
 /** Morsetti di fase del punto di fornitura, con la fase corrispondente. */
@@ -136,6 +138,16 @@ function terminalDefs(c: ComponentInstance): TerminalDef[] {
   const w = componentWidth(c);
   switch (pr.kind) {
     case 'supply':
+      if (pr.p.phases === 3 && pr.p.earthing === 'TN-S') {
+        // Cabina MT/BT: anche il conduttore di protezione parte dal centro stella del trasformatore.
+        return [
+          { key: 'L1', label: 'L1', fn: 'L', role: 'out', side: 'bottom', x: 22, phase: 1 },
+          { key: 'L2', label: 'L2', fn: 'L', role: 'out', side: 'bottom', x: 56, phase: 2 },
+          { key: 'L3', label: 'L3', fn: 'L', role: 'out', side: 'bottom', x: 90, phase: 3 },
+          { key: 'N', label: 'N', fn: 'N', role: 'out', side: 'bottom', x: 124 },
+          { key: 'PE', label: 'PE', fn: 'PE', role: 'out', side: 'bottom', x: 158 },
+        ];
+      }
       if (pr.p.phases === 3) {
         return [
           { key: 'L1', label: 'L1', fn: 'L', role: 'out', side: 'bottom', x: 30, phase: 1 },
