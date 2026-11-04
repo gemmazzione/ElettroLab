@@ -5,6 +5,7 @@ import {
   FileDown,
   FilePlus2,
   FolderOpen,
+  DraftingCompass,
   GraduationCap,
   Gauge,
   Magnet,
@@ -66,7 +67,7 @@ function Btn({
   );
 }
 
-const MODE_LABEL = { lab: 'Laboratorio', pv: 'Progetta FV', academy: 'Accademia' } as const;
+const MODE_LABEL = { lab: 'Laboratorio', impianto: 'Progetta impianto', pv: 'Progetta FV', academy: 'Accademia' } as const;
 
 const Sep = () => <div className="mx-1 h-5 w-px bg-slate-700" />;
 
@@ -87,7 +88,7 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
         </div>
       </div>
       <div className="mr-2 flex shrink-0 rounded-md bg-slate-950 p-0.5 text-[0.75rem] font-semibold">
-        {(['lab', 'pv', 'academy'] as const).map((m) => (
+        {(['lab', 'impianto', 'pv', 'academy'] as const).map((m) => (
           <button
             key={m}
             onClick={() => s.setMode(m)}
@@ -96,7 +97,7 @@ export function TopBar({ onOpen, onInfo }: { onOpen: () => void; onInfo: () => v
             aria-pressed={s.mode === m}
             className={`flex items-center gap-1.5 rounded px-2 py-1 ${s.mode === m ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}
           >
-            {m === 'lab' ? <Zap size={14} /> : m === 'pv' ? <Sun size={14} /> : <GraduationCap size={14} />}
+            {m === 'lab' ? <Zap size={14} /> : m === 'impianto' ? <DraftingCompass size={14} /> : m === 'pv' ? <Sun size={14} /> : <GraduationCap size={14} />}
             {/* Sui telefoni solo le icone: lo spazio serve ai comandi del laboratorio. */}
             <span className={s.mode === m ? 'inline' : 'hidden sm:inline'}>{MODE_LABEL[m]}</span>
           </button>

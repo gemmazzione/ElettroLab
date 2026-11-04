@@ -40,7 +40,7 @@ export interface Toast {
 }
 
 export type RightTab = 'props' | 'checks' | 'norm' | 'info' | 'exercise';
-export type AppMode = 'lab' | 'academy' | 'pv';
+export type AppMode = 'lab' | 'academy' | 'pv' | 'impianto';
 
 export interface ActiveExercise {
   id: string;

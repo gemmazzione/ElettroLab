@@ -11,6 +11,7 @@ import { InfoDialog, OpenDialog, Toasts } from './ui/Dialogs';
 import { CatalogInfoDialog } from './ui/InfoPanel';
 import { AcademyView } from './ui/Academy';
 import { PvDesignView } from './ui/PvDesignView';
+import { ImpiantoView } from './ui/ImpiantoView';
 import { PropertiesPanel } from './ui/PropertiesPanel';
 import { TopBar } from './ui/TopBar';
 import { EmptyProject, LabGuide } from './ui/LabGuide';
@@ -93,6 +94,8 @@ export default function App() {
         <AcademyView key={dataVersion} />
       ) : mode === 'pv' ? (
         <PvDesignView key={dataVersion} />
+      ) : mode === 'impianto' ? (
+        <ImpiantoView key={dataVersion} />
       ) : (
       <div className="relative flex min-h-0 flex-1">
         {wide && <CatalogPanel />}

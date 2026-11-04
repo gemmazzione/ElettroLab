@@ -1,0 +1,246 @@
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { pdfSafe } from '../export/reportData';
+import { f, fA, type PlantResult } from './calc';
+import { KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from './model';
+import { singleLine } from './unifilare';
+
+const MARGIN = 14;
+const INK: [number, number, number] = [20, 24, 32];
+const MUTED: [number, number, number] = [95, 100, 110];
+const T = (s: string) => pdfSafe(s.replace(/φ/g, 'phi').replace(/≫/g, '>>').replace(/Σ/g, 'somma '));
+const TONE: Record<string, [number, number, number]> = { ok: [22, 163, 74], warn: [202, 138, 4], error: [220, 38, 38] };
+const STATUS: Record<string, string> = { ok: 'OK', warn: 'Attenzione', error: 'Da correggere' };
+
+export const pdfName = (p: Plant) => `${p.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'impianto'}_relazione.pdf`;
+
+/** Relazione tecnica del progetto: dati, bilancio delle potenze, dimensionamento delle linee, verifiche, schema unifilare. */
+export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+  const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+  let y = MARGIN + 4;
+  const heading = (title: string, intro?: string) => {
+    y += 9;
+    if (y > 250) {
+      doc.addPage('a4', 'portrait');
+      y = MARGIN + 6;
+    }
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+    doc.text(T(title), MARGIN, y);
+    y += 2;
+    if (intro) {
+      doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...MUTED);
+      const lines = doc.splitTextToSize(T(intro), 182);
+      doc.text(lines, MARGIN, y + 4);
+      y += lines.length * 3.8 + 2;
+    }
+  };
+  const table = (head: string[], body: string[][], kv = false, opts: Record<string, unknown> = {}) => {
+    autoTable(doc, {
+      startY: y + 2,
+      head: head.length ? [head.map(T)] : undefined,
+      body: body.map((row) => row.map(T)),
+      theme: kv ? 'grid' : 'striped',
+      styles: { fontSize: 7.5, cellPadding: 1.3, textColor: INK, overflow: 'linebreak' },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 7.5 },
+      columnStyles: kv ? { 0: { cellWidth: 62, fontStyle: 'bold' } } : {},
+      margin: { left: MARGIN, right: MARGIN },
+      ...opts,
+    });
+    y = lastY();
+  };
+
+  // Intestazione
+  doc.setFont('helvetica', 'bold').setFontSize(16).setTextColor(...INK);
+  doc.text(T('Relazione tecnica dell\'impianto elettrico'), MARGIN, y + 2);
+  doc.setFont('helvetica', 'normal').setFontSize(10).setTextColor(...MUTED);
+  doc.text(T(`${p.name} - ${new Date().toLocaleDateString('it-IT')}`), MARGIN, y + 8);
+  y += 10;
+  doc.setFontSize(7.5);
+  const disclaimer = doc.splitTextToSize(
+    T('Documento di studio generato da ElectroLab. Non è un progetto ai sensi del DM 37/2008: i valori (portate, curve, poteri di interruzione) vanno verificati sulle norme vigenti e sui dati dei costruttori, e il progetto va firmato da chi ne ha titolo. Le verifiche richiamano la CEI 64-8:2007 (6a ed.), sostituita dalla IX edizione.'),
+    182,
+  );
+  doc.text(disclaimer, MARGIN, y + 4);
+  y += disclaimer.length * 3.3 + 2;
+
+  heading('1. Dati generali');
+  table(
+    [],
+    [
+      ['Committente', p.client || '-'],
+      ['Ubicazione', p.address || '-'],
+      ['Progettista', p.designer || '-'],
+      ['Destinazione d\'uso', `${USE_LABEL[p.use]}, ${f(p.areaM2, 0)} m²`],
+      ['Fornitura', SUPPLY_LABEL[p.supply.kind]],
+      p.supply.kind === 'cabina'
+        ? ['Trasformatore', `${p.supply.kva} kVA, ucc ${f(p.supply.ukPct, 1)}%, Scc rete MT ${p.supply.mvSccMVA} MVA`]
+        : ['Potenza impegnata', `${f(p.supply.contractKW, 1)} kW; Icc presunta al punto di consegna ${f(p.supply.iccKA, 1)} kA (dato del distributore)`],
+      ['Sistema di distribuzione', p.earthing === 'TT' ? `TT, resistenza di terra RA = ${f(p.raOhm, 0)} ohm` : 'TN-S (PE dal centro stella del trasformatore)'],
+      ['Caduta di tensione ammessa', `${f(p.maxDropPct, 1)}% dall'origine all'utilizzatore`],
+      ['Progetto da professionista (DM 37/2008 art. 5)', r.dm.required ? `Sì: ${r.dm.reasons.join('; ')}` : 'No, secondo i dati inseriti (progetto del responsabile tecnico dell\'impresa installatrice)'],
+    ],
+    true,
+  );
+
+  heading('2. Bilancio delle potenze', `Potenza contemporanea = kc · somma (P · ku), con kc = ${f(p.kc, 2)} sul quadro generale.`);
+  const b = r.balance;
+  table(
+    [],
+    [
+      ['Potenza installata', `${f(b.installedW / 1000, 1)} kW`],
+      ['Potenza assorbita (con ku)', `${f(b.absorbedW / 1000, 1)} kW`],
+      ['Potenza contemporanea', `${f(b.simultaneousW / 1000, 1)} kW, cos phi medio ${f(b.cosPhi, 2)}`],
+      ['Corrente d\'impiego del generale', b.phaseA.length === 3 ? `${b.phaseA.map((v, i) => `L${i + 1} ${f(v, 1)} A`).join(' · ')} (squilibrio ${f(b.unbalance * 100, 0)}%)` : `${f(b.ibA, 1)} A`],
+      ['Icc presunta sul quadro generale', fA(r.source.iccMaxA)],
+      ['Interruttore generale', r.main.inA ? `In ${r.main.inA} A, potere di interruzione ${r.main.icuKA ?? '-'} kA` : '-'],
+      ['Linea di alimentazione', r.main.section ? `${f(r.main.section, 0)} mm², ${f(p.feeder.lengthM, 0)} m, posa ${p.feeder.method}, ${p.feeder.insulation}; caduta ${f(r.main.dropPct, 2)}%` : '-'],
+    ],
+    true,
+  );
+  if (r.main.checks.some((c) => c.status !== 'ok')) {
+    table(['Verifica', 'Esito'], r.main.checks.filter((c) => c.status !== 'ok').map((c) => [c.label, `${STATUS[c.status]}: ${c.text}`]));
+  }
+
+  heading('3. Dimensionamento delle linee', 'Ib ≤ In ≤ Iz (433.2); portate IEC 60364-5-52 All. B con k1 (temperatura) e k2 (raggruppamento), da verificare su CEI-UNEL 35024/1 o sul catalogo del cavo.');
+  table(
+    ['N.', 'Linea', 'P kW', 'ku', 'cos phi', 'Ib A', 'Protezione', 'Diff.', 'Cavo', 'L m', 'Posa', 'Iz A', 'DV %', 'Icc min', 'Esito'],
+    r.lines.map((lr, i) => {
+      const l = lr.line;
+      return [
+        `Q${i + 1}`,
+        `${l.name}${lr.phase ? ` (L${lr.phase})` : ''}`,
+        f(l.powerW / 1000, 1),
+        f(l.ku, 2),
+        f(l.cosPhi, 2),
+        f(lr.ibA, 1),
+        lr.inA ? `${lr.inA > 63 ? 'In ' : l.curve}${lr.inA} ${l.phases === 3 ? '4P' : '1P+N'} ${lr.icuKA ?? '-'} kA` : '-',
+        l.rcdMa ? `${l.rcdMa} mA ${l.rcdType}` : '-',
+        lr.designation,
+        f(l.lengthM, 0),
+        `${l.method} ${l.insulation}`,
+        lr.iz ? f(lr.iz.iz, 1) : '-',
+        f(lr.dropTotPct, 2),
+        lr.iccMinA ? fA(lr.iccMinA) : '-',
+        STATUS[lr.status]!,
+      ];
+    }),
+    false,
+    {
+      styles: { fontSize: 6.5, cellPadding: 1, textColor: INK, overflow: 'linebreak' },
+      headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontSize: 6.5 },
+      columnStyles: { 1: { cellWidth: 28 } },
+      didParseCell: (d: { section: string; column: { index: number }; cell: { raw: unknown; styles: { textColor: unknown } } }) => {
+        if (d.section === 'body' && d.column.index === 14) {
+          const k = Object.keys(STATUS).find((s) => STATUS[s] === d.cell.raw);
+          if (k) d.cell.styles.textColor = TONE[k];
+        }
+      },
+    },
+  );
+
+  heading('4. Verifiche per linea');
+  for (const [i, lr] of r.lines.entries()) {
+    if (y > 260) {
+      doc.addPage('a4', 'portrait');
+      y = MARGIN;
+    }
+    doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...INK);
+    doc.text(T(`Q${i + 1} - ${lr.line.name} (${KIND_LABEL[lr.line.kind]})`), MARGIN, y + 6);
+    y += 6;
+    table([], lr.checks.map((c) => [`${c.label}${c.ref ? `\n${c.ref}` : ''}`, `${STATUS[c.status]}: ${c.text}`]), true, { columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' } } });
+  }
+
+  heading('5. Ipotesi di calcolo e limiti');
+  doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...INK);
+  const notes = [
+    'Resistività del rame a 70 °C (0,0214 ohm·mm²/m), reattanza dei cavi 0,08 mohm/m; impedenze sommate con parte resistiva e reattiva.',
+    p.supply.kind === 'cabina'
+      ? 'Impedenza a monte dalla cabina (IEC 60909): rete MT Zq = 1,1·U²/Scc, trasformatore Zt = ucc·U²/Sn; anello fase-neutro/fase-PE pari al doppio dell\'impedenza di fase.'
+      : 'Impedenza della rete a monte ricavata dall\'Icc dichiarata dal distributore, con R = X (ipotesi).',
+    'Correnti delle linee sommate aritmeticamente sulle fasi (cautelativo); linee monofase distribuite sulle fasi meno cariche se non indicato.',
+    'Potere di interruzione scelto sull\'Icc massima al quadro generale (cautelativo). Con la protezione dal sovraccarico e Icu adeguato la linea è protetta anche dal cortocircuito (435.1), salvo interruttori non limitatori: verificare I²t sui dati del costruttore.',
+    'Soglie magnetiche convenzionali: B 3-5·In, C 5-10·In, D 10-20·In (CEI EN 60898-1); scatolati Im = 10·In ± 20%.',
+    'Sezioni minime: 1,5 mm² (Tab. 52E) per la luce e 2,5 mm² per gli altri circuiti (buona pratica); PE secondo la Tab. 54F.',
+  ];
+  for (const n of notes) {
+    const lines = doc.splitTextToSize(T(`- ${n}`), 180);
+    if (y + lines.length * 3.6 > 285) {
+      doc.addPage('a4', 'portrait');
+      y = MARGIN;
+    }
+    doc.text(lines, MARGIN + 1, y + 5);
+    y += lines.length * 3.6 + 1;
+  }
+  if (p.notes.trim()) {
+    heading('Note del progettista');
+    doc.setFont('helvetica', 'normal').setFontSize(8.5).setTextColor(...INK);
+    doc.text(doc.splitTextToSize(T(p.notes), 182), MARGIN, y + 5);
+  }
+
+  // Schema unifilare su una pagina orizzontale
+  doc.addPage('a4', 'landscape');
+  doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+  doc.text(T('Schema unifilare del quadro generale'), MARGIN, MARGIN + 2);
+  drawDiagram(doc, p, r, MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
+  return doc;
+}
+
+function drawDiagram(doc: jsPDF, p: Plant, r: PlantResult, ox: number, oy: number, w: number, h: number): void {
+  const d = singleLine(p, r);
+  const k = Math.min(w / d.width, h / d.height);
+  const X = (v: number) => ox + v * k;
+  const Y = (v: number) => oy + v * k;
+  for (const pr of d.prims) {
+    doc.setDrawColor(...INK).setLineWidth(0.25);
+    if (pr.t === 'line') {
+      doc.setLineWidth(pr.bold ? 0.9 : 0.25);
+      doc.line(X(pr.x1), Y(pr.y1), X(pr.x2), Y(pr.y2));
+    } else if (pr.t === 'rect') {
+      if (pr.tone && pr.tone !== 'ok') doc.setDrawColor(...TONE[pr.tone]!);
+      doc.rect(X(pr.x), Y(pr.y), pr.w * k, pr.h * k);
+    } else if (pr.t === 'circle') doc.circle(X(pr.cx), Y(pr.cy), pr.r * k);
+    else {
+      const pt = pr.size * k * 2.83;
+      doc.setFont('helvetica', pr.bold ? 'bold' : 'normal').setFontSize(pt).setTextColor(...(pr.muted ? MUTED : INK));
+      doc.text(T(pr.s), X(pr.x), Y(pr.y), { align: pr.rot ? undefined : (pr.anchor === 'middle' ? 'center' : pr.anchor === 'end' ? 'right' : 'left'), angle: pr.rot ? 90 : 0 });
+    }
+  }
+}
+
+/** Tabella delle linee in CSV (separatore punto e virgola, per Excel in italiano). */
+export function plantCsv(r: PlantResult): string {
+  const head = ['Sigla', 'Linea', 'Tipo', 'Fasi', 'Fase', 'P [W]', 'ku', 'cos phi', 'Ib [A]', 'In [A]', 'Curva', 'Icu [kA]', 'Differenziale [mA]', 'Tipo diff.', 'Cavo', 'Sezione [mm2]', 'PE [mm2]', 'Lunghezza [m]', 'Posa', 'Isolante', 'Iz [A]', 'Caduta totale [%]', 'Icc min fondo linea [A]', 'Esito'];
+  const n = (v: number | null | undefined, d = 2) => (v === null || v === undefined ? '' : v.toFixed(d).replace('.', ','));
+  const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
+  const rows = r.lines.map((lr, i) => {
+    const l = lr.line;
+    return [
+      `Q${i + 1}`,
+      q(l.name),
+      KIND_LABEL[l.kind],
+      l.phases,
+      lr.phase ? `L${lr.phase}` : '',
+      l.powerW,
+      n(l.ku),
+      n(l.cosPhi),
+      n(lr.ibA, 1),
+      lr.inA ?? '',
+      lr.inA && lr.inA > 63 ? '' : l.curve,
+      n(lr.icuKA, 1),
+      l.rcdMa || '',
+      l.rcdMa ? l.rcdType : '',
+      lr.designation,
+      n(lr.section, 1),
+      n(lr.peSection, 1),
+      n(l.lengthM, 0),
+      l.method,
+      l.insulation,
+      n(lr.iz?.iz, 1),
+      n(lr.dropTotPct),
+      n(lr.iccMinA, 0),
+      STATUS[lr.status],
+    ].join(';');
+  });
+  return '﻿' + [head.join(';'), ...rows].join('\r\n');
+}
