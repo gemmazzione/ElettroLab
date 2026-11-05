@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { balance, billOfMaterials, cableDesignation, computePlant, currentOf, dm37, dropPct, peSection, pickIn } from '../calc';
 import { coherent, examplePlants, line, normalizePlant, type Plant } from '../model';
+import { applyPlan, roomCounts, routes } from '../plan';
 
 const ex = (id: string): Plant => examplePlants().find((e) => e.id === id)!.make();
 
@@ -219,5 +220,34 @@ describe('Progetta impianto: rifasamento, cavi in parallelo, terra, computo', ()
     expect(bom.some((b) => b.item.startsWith('Differenziale puro'))).toBe(true);
     expect(bom.some((b) => b.group === 'Comando motori')).toBe(true);
     expect(bom.filter((b) => b.group === 'Quadri').length).toBe(2);
+  });
+});
+
+describe('Progetta impianto: planimetria, SPD, sicurezza', () => {
+  it('planimetria: lunghezze stimate e bagni dalle posizioni dei punti', () => {
+    const p = ex('appartamento');
+    const rs = routes(p);
+    expect(rs.length).toBe(8);
+    for (const r of rs) expect(r.lengthM).toBeGreaterThan(3);
+    const q = applyPlan(p);
+    const notte = q.lines.find((l) => l.name.startsWith('Prese zona notte'))!;
+    expect(notte.bathroom).toBe(true);
+    expect(q.lines.find((l) => l.name === 'Prese zona giorno')!.bathroom).toBe(false);
+    expect(roomCounts(p).find((c) => c.room.type === 'bagno')!.counts.luce).toBe(1);
+    const bom = billOfMaterials(q, computePlant(q));
+    expect(bom.some((b) => b.group === 'Punti' && b.qty > 0)).toBe(true);
+  });
+  it('SPD: verifica informativa e voce nel computo', () => {
+    const p = ex('negozio');
+    expect(computePlant(p).main.checks.find((c) => c.id === 'spd')!.ref).toContain('443');
+    p.spd = 'origine';
+    const r = computePlant(p);
+    expect(billOfMaterials(p, r).some((b) => b.item.startsWith('Scaricatore'))).toBe(true);
+  });
+  it('illuminazione di sicurezza: prescrizioni del Cap. 56', () => {
+    const p = ex('negozio');
+    p.lines.push(line('emergenza', true, {}));
+    const r = computePlant(p);
+    expect(r.lines[r.lines.length - 1]!.checks.some((c) => c.ref?.includes('563'))).toBe(true);
   });
 });

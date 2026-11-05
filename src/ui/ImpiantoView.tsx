@@ -11,6 +11,7 @@ import { TRANSFORMER_SIZES } from '../model/cabin';
 import { INSTALL_METHODS, type InstallMethod, type Insulation } from '../rules/ampacity';
 import type { WireSection } from '../model/types';
 import { Field, NumberInput, Select, TextInput } from './fields';
+import { PlanStep } from './PlanEditor';
 
 /**
  * Sezione «Progetta impianto»: il lavoro del progettista elettrico su un impianto utilizzatore in BT.
@@ -18,7 +19,7 @@ import { Field, NumberInput, Select, TextInput } from './fields';
  * relazione tecnica in PDF e tabella dei cavi.
  */
 
-const STEPS = ['Dati generali', 'Linee e carichi', 'Quadri e verifiche', 'Terra e materiali', 'Documenti'] as const;
+const STEPS = ['Dati generali', 'Linee e carichi', 'Planimetria', 'Quadri e verifiche', 'Terra e materiali', 'Documenti'] as const;
 
 const usePlant = () => useImpianto((s) => currentPlant(s));
 
@@ -37,7 +38,7 @@ export function ImpiantoView() {
           </div>
           <ol className="flex gap-1 overflow-x-auto pb-1 [scrollbar-width:none] xl:flex-col">
             {STEPS.map((t, i) => {
-              const bad = i === 2 && result.errors > 0;
+              const bad = i === 3 && result.errors > 0;
               return (
                 <li key={t} className="shrink-0">
                   <button
@@ -60,9 +61,10 @@ export function ImpiantoView() {
           <LibraryBar />
           {step === 0 && <GeneralStep r={result} />}
           {step === 1 && <LinesStep r={result} />}
-          {step === 2 && <BoardStep r={result} />}
-          {step === 3 && <EarthStep r={result} />}
-          {step === 4 && <DocsStep r={result} />}
+          {step === 2 && <PlanStep r={result} />}
+          {step === 3 && <BoardStep r={result} />}
+          {step === 4 && <EarthStep r={result} />}
+          {step === 5 && <DocsStep r={result} />}
           <div className="flex justify-between pt-1">
             <button disabled={step === 0} onClick={() => setStep(step - 1)} className="rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800 disabled:opacity-30">
               ← {step > 0 ? STEPS[step - 1] : ''}
@@ -298,6 +300,9 @@ function GeneralStep({ r }: { r: PlantResult }) {
             <Field label="Differenziale sul generale" hint="Di solito selettivo (tipo S), a monte dei 30 mA">
               <Select value={p.mainRcdMa} options={[0, 100, 300, 500, 1000] as const} format={(v) => (v ? `${v} mA` : 'nessuno')} onChange={(v) => set({ mainRcdMa: v })} />
             </Field>
+            <Field label="Scaricatori di sovratensione (SPD)" hint="La necessità si valuta con la CEI EN 62305-2">
+              <Select value={p.spd} options={['nessuno', 'origine', 'origine-sottoquadri'] as const} format={(v) => (v === 'nessuno' ? 'nessuno' : v === 'origine' ? 'all\'origine' : 'origine e sottoquadri')} onChange={(v) => set({ spd: v })} />
+            </Field>
             {p.mainRcdMa > 0 && (
               <label className="flex items-center gap-1.5 self-end pb-2 text-[0.75rem] text-slate-300">
                 <input type="checkbox" className="accent-sky-500" checked={p.mainRcdS} onChange={(e) => set({ mainRcdS: e.target.checked })} /> Selettivo (tipo S)
@@ -360,7 +365,7 @@ const methodLabel = (m: InstallMethod) => INSTALL_METHODS.find((x) => x.id === m
 
 // ------------------------------------------------------------------ 2. linee
 
-const ADD_KINDS: LineKind[] = ['luce', 'prese', 'cucina', 'clima', 'scaldabagno', 'ricarica', 'fm', 'motore', 'sottoquadro', 'generico'];
+const ADD_KINDS: LineKind[] = ['luce', 'prese', 'cucina', 'clima', 'scaldabagno', 'ricarica', 'fm', 'motore', 'emergenza', 'sottoquadro', 'generico'];
 
 /** Valore del selettore «Differenziale»: proprio (mA) o di gruppo (id). */
 const rcdValue = (l: PlantLine) => (l.rcdGroup ? `g:${l.rcdGroup}` : `m:${l.rcdMa}`);
@@ -898,7 +903,7 @@ function DocsStep({ r }: { r: PlantResult }) {
   const up = useImpianto((s) => s.update);
   const [notes, setNotes] = useState(p.notes);
   const openInLab = () => {
-    if (!window.confirm('Aprire il quadro generale nel laboratorio? Il progetto aperto ora nel laboratorio viene sostituito: salvalo prima, se ti serve.')) return;
+    if (!window.confirm('Aprire l\'impianto nel laboratorio? Il progetto aperto ora nel laboratorio viene sostituito: salvalo prima, se ti serve.')) return;
     const s = useStore.getState();
     s.openProject(plantToProject(p));
     s.setMode('lab');
@@ -925,7 +930,7 @@ function DocsStep({ r }: { r: PlantResult }) {
         </Card>
         <Card title="Prova il quadro nel laboratorio">
           <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
-            Ricostruisce il quadro generale nel laboratorio con fornitura, protezioni, differenziali, cavi e utilizzatori del progetto: puoi simularlo, inserire guasti e misurare. I sottoquadri diventano un carico con la loro potenza contemporanea.
+            Ricostruisce l'impianto nel laboratorio: fornitura, quadro generale, un quadro per ogni sottoquadro, protezioni, differenziali, SPD, cavi e utilizzatori del progetto. Puoi simularlo, inserire guasti e misurare.
           </p>
           <button onClick={openInLab} className="flex items-center gap-1.5 rounded-md border border-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-sky-200 hover:bg-sky-600/20">
             <FlaskConical size={14} /> Apri nel laboratorio
@@ -945,16 +950,19 @@ function DocsStep({ r }: { r: PlantResult }) {
       <Card title="Cosa manca per un progetto completo">
         <ul className="space-y-2 text-[0.75rem] leading-snug text-slate-300">
           <li>
-            <span className="font-semibold text-slate-100">Planimetrie</span> con punti luce, prese, quadri e percorsi delle condutture, di solito disegnate in CAD.
+            <span className="font-semibold text-slate-100">Disegni esecutivi</span>: la planimetria di questa sezione è uno schema di massima; il progetto vero ha piante in scala con percorsi delle canalizzazioni, di solito in CAD.
           </li>
           <li>
-            <span className="font-semibold text-slate-100">Dotazioni minime delle abitazioni</span> (numero di prese e punti luce per livello): introdotte da una variante della CEI 64-8 successiva al 2007, non verificata qui.
+            <span className="font-semibold text-slate-100">Dotazioni minime delle abitazioni</span> (numero di prese e punti luce per livello): introdotte da una variante della CEI 64-8 successiva al 2007, non verificata qui. La planimetria conta i punti per locale per il confronto.
           </li>
           <li>
-            <span className="font-semibold text-slate-100">Sovratensioni e fulminazione</span>: scelta degli SPD e valutazione del rischio secondo la CEI EN 62305-2.
+            <span className="font-semibold text-slate-100">Valutazione del rischio di fulminazione</span> (CEI EN 62305-2): stabilisce se servono gli SPD e la protezione dell'edificio. Qui si sceglie solo dove installarli.
           </li>
           <li>
-            <span className="font-semibold text-slate-100">Illuminazione di emergenza</span> e altri luoghi della parte 7 (piscine, cantieri, locali medici).
+            <span className="font-semibold text-slate-100">Illuminazione di sicurezza</span>: illuminamenti e autonomie dalle norme dell'attività (UNI EN 1838, prevenzione incendi). Qui ci sono le regole del circuito (Cap. 56).
+          </li>
+          <li>
+            <span className="font-semibold text-slate-100">Altri luoghi della parte 7</span>: piscine, cantieri, locali medici, ambienti a maggior rischio d'incendio.
           </li>
           <li>
             <span className="font-semibold text-slate-100">Prezzi</span>: il computo dà le quantità, il preventivo richiede listini o prezzari.

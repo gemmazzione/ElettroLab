@@ -10,7 +10,61 @@ import type { WireSection } from '../model/types';
 
 export type PlantUse = 'abitazione' | 'condominio' | 'ufficio' | 'negozio' | 'industria';
 export type SupplyKind = 'bt-mono' | 'bt-tri' | 'cabina';
-export type LineKind = 'luce' | 'prese' | 'cucina' | 'clima' | 'scaldabagno' | 'ricarica' | 'fm' | 'motore' | 'sottoquadro' | 'generico';
+export type LineKind = 'luce' | 'prese' | 'cucina' | 'clima' | 'scaldabagno' | 'ricarica' | 'fm' | 'motore' | 'emergenza' | 'sottoquadro' | 'generico';
+
+/** Planimetria: locali (rettangoli in metri) e punti dell'impianto collegati alle linee. */
+export type RoomType = 'soggiorno' | 'camera' | 'cucina' | 'bagno' | 'corridoio' | 'ufficio' | 'locale-tecnico' | 'esterno' | 'reparto';
+export type DeviceKind = 'luce' | 'presa' | 'presa-16' | 'comando' | 'presa-cee' | 'emergenza' | 'utilizzatore';
+
+export interface Room {
+  id: string;
+  name: string;
+  type: RoomType;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface PlanDevice {
+  id: string;
+  kind: DeviceKind;
+  x: number;
+  y: number;
+  /** Linea che alimenta il punto ('' = non assegnato) */
+  lineId: string;
+}
+
+export interface Plan {
+  rooms: Room[];
+  devices: PlanDevice[];
+  /** Posizione del quadro generale e dei sottoquadri (id della linea) [m] */
+  boards: Record<string, { x: number; y: number }>;
+  /** Altezza dei locali [m]: per le risalite verso i punti luce */
+  heightM: number;
+}
+
+export const ROOM_LABEL: Record<RoomType, string> = {
+  soggiorno: 'Soggiorno',
+  camera: 'Camera',
+  cucina: 'Cucina',
+  bagno: 'Bagno',
+  corridoio: 'Corridoio / ingresso',
+  ufficio: 'Ufficio',
+  'locale-tecnico': 'Locale tecnico',
+  esterno: 'Esterno',
+  reparto: 'Reparto / area produttiva',
+};
+
+export const DEVICE_LABEL: Record<DeviceKind, string> = {
+  luce: 'Punto luce',
+  presa: 'Presa 10 A',
+  'presa-16': 'Presa 16 A / bivalente',
+  comando: 'Comando (interruttore, deviatore)',
+  'presa-cee': 'Presa industriale CEE',
+  emergenza: 'Lampada di emergenza',
+  utilizzatore: 'Utilizzatore fisso',
+};
 export type Curve = 'B' | 'C' | 'D';
 
 export interface PlantLine {
@@ -101,6 +155,9 @@ export interface Plant {
   maxDropPct: number;
   lines: PlantLine[];
   rcdGroups: RcdGroup[];
+  /** Protezione contro le sovratensioni: SPD all'origine, anche nei sottoquadri, o nessuno */
+  spd: 'nessuno' | 'origine' | 'origine-sottoquadri';
+  plan: Plan;
   /** Differenziale sull'interruttore generale [mA] (0 = nessuno) e se selettivo */
   mainRcdMa: 0 | 100 | 300 | 500 | 1000;
   mainRcdS: boolean;
@@ -137,6 +194,7 @@ export const KIND_LABEL: Record<LineKind, string> = {
   ricarica: 'Ricarica auto',
   fm: 'Forza motrice',
   motore: 'Motore',
+  emergenza: 'Illuminazione di sicurezza',
   sottoquadro: 'Sottoquadro',
   generico: 'Altro',
 };
@@ -184,6 +242,8 @@ export function lineTemplate(kind: LineKind, threePhase: boolean): Omit<PlantLin
       return { ...base, phases: threePhase ? 3 : 1, powerW: threePhase ? 9000 : 3000, cosPhi: 0.85, ku: 0.7, lengthM: 30, method: 'C', grouped: 1 };
     case 'motore':
       return { ...base, phases: threePhase ? 3 : 1, withNeutral: false, powerW: threePhase ? 8700 : 2400, cosPhi: 0.84, ku: 0.9, lengthM: 30, method: 'C', grouped: 1, curve: 'D', rcdMa: threePhase ? 300 : 30, starting: 'diretto' };
+    case 'emergenza':
+      return { ...base, powerW: 150, cosPhi: 0.9, curve: 'B', lengthM: 30 };
     case 'sottoquadro':
       return { ...base, phases: threePhase ? 3 : 1, powerW: threePhase ? 20000 : 4500, cosPhi: 0.9, ku: 0.7, lengthM: 40, method: 'C', grouped: 1, rcdMa: threePhase ? 300 : 0, rcdType: 'A', rcdS: true, kcSub: 0.8 };
     default:
@@ -197,6 +257,10 @@ export function line(kind: LineKind, threePhase: boolean, patch: Partial<PlantLi
 
 export function defaultPlant(): Plant {
   return examplePlants()[0]!.make();
+}
+
+export function emptyPlan(): Plan {
+  return { rooms: [], devices: [], boards: { '': { x: 1, y: 1 } }, heightM: 2.7 };
 }
 
 export const isThreePhaseSupply = (p: Plant) => p.supply.kind !== 'bt-mono';
@@ -215,6 +279,8 @@ export function normalizePlant(raw: unknown): Plant {
     feeder: { ...base.feeder, ...(o.feeder ?? {}) },
     lines: Array.isArray(o.lines) ? o.lines.map((l) => ({ ...lineTemplate((l as PlantLine).kind ?? 'generico', true), ...(l as PlantLine) })) : base.lines,
     rcdGroups: Array.isArray(o.rcdGroups) ? o.rcdGroups : [],
+    plan: o.plan && typeof o.plan === 'object' ? { ...emptyPlan(), ...o.plan } : emptyPlan(),
+    spd: o.spd ?? 'nessuno',
     updated: typeof o.updated === 'string' ? o.updated : '',
   };
   return coherent(p);
@@ -238,7 +304,9 @@ export function coherent(p: Plant): Plant {
     if (x.rcdGroup && (!g || g.boardId !== x.boardId)) x = { ...x, rcdGroup: '' };
     return x;
   });
-  return { ...p, earthing, lines, rcdGroups };
+  const ids = new Set(lines.map((l) => l.id));
+  const plan = { ...p.plan, devices: p.plan.devices.map((d) => (d.lineId && !ids.has(d.lineId) ? { ...d, lineId: '' } : d)) };
+  return { ...p, earthing, lines, rcdGroups, plan };
 }
 
 /** Quadri dell'impianto: il generale e uno per ogni linea «sottoquadro». */
@@ -276,6 +344,8 @@ const plantBase = (patch: Partial<Plant>): Plant => ({
   mainRcdMa: 0,
   mainRcdS: true,
   pfcKvar: 0,
+  spd: 'nessuno',
+  plan: emptyPlan(),
   soilOhmM: 100,
   rodLengthM: 1.5,
   notes: '',
@@ -295,21 +365,48 @@ export function examplePlants(): PlantExample[] {
         const g1 = 'g' + newId();
         const g2 = 'g' + newId();
         const grp = (id: string) => ({ rcdGroup: id, rcdMa: 0 as const });
+        const lines = [
+          line('luce', false, { name: 'Luci zona giorno', powerW: 800, lengthM: 22, ...grp(g1) }),
+          line('luce', false, { name: 'Luci zona notte e bagno', powerW: 600, lengthM: 26, bathroom: true, ...grp(g1) }),
+          line('prese', false, { name: 'Prese zona giorno', lengthM: 24, ...grp(g1) }),
+          line('prese', false, { name: 'Prese zona notte e bagno', lengthM: 28, bathroom: true, ...grp(g1) }),
+          line('cucina', false, { name: 'Piano a induzione', powerW: 3700, ku: 0.6, lengthM: 10, ...grp(g2) }),
+          line('prese', false, { name: 'Lavatrice e lavastoviglie', powerW: 4000, ku: 0.5, cosPhi: 0.95, lengthM: 14, ...grp(g2) }),
+          line('scaldabagno', false, { name: 'Scaldabagno', powerW: 1200, lengthM: 9, bathroom: true, ...grp(g2) }),
+          line('clima', false, { name: 'Climatizzatori', powerW: 2600, lengthM: 20 }),
+        ];
+        const L = lines.map((l) => l.id);
+        const room = (name: string, type: RoomType, x: number, y: number, w: number, h: number): Room => ({ id: newId('r'), name, type, x, y, w, h });
+        const dv = (kind: DeviceKind, x: number, y: number, li: number): PlanDevice => ({ id: newId('d'), kind, x, y, lineId: L[li] ?? '' });
         return plantBase({
           name: 'Appartamento 110 m²',
           areaM2: 110,
           kc: 0.5,
           rcdGroups: [G(g1, 'Luci e prese'), G(g2, 'Cucina e servizi')],
-          lines: [
-            line('luce', false, { name: 'Luci zona giorno', powerW: 800, lengthM: 22, ...grp(g1) }),
-            line('luce', false, { name: 'Luci zona notte e bagno', powerW: 600, lengthM: 26, bathroom: true, ...grp(g1) }),
-            line('prese', false, { name: 'Prese zona giorno', lengthM: 24, ...grp(g1) }),
-            line('prese', false, { name: 'Prese zona notte e bagno', lengthM: 28, bathroom: true, ...grp(g1) }),
-            line('cucina', false, { name: 'Piano a induzione', powerW: 3700, ku: 0.6, lengthM: 10, ...grp(g2) }),
-            line('prese', false, { name: 'Lavatrice e lavastoviglie', powerW: 4000, ku: 0.5, cosPhi: 0.95, lengthM: 14, ...grp(g2) }),
-            line('scaldabagno', false, { name: 'Scaldabagno', powerW: 1200, lengthM: 9, bathroom: true, ...grp(g2) }),
-            line('clima', false, { name: 'Climatizzatori', powerW: 2600, lengthM: 20 }),
-          ],
+          lines,
+          plan: {
+            heightM: 2.7,
+            boards: { '': { x: 0.6, y: 6.2 } },
+            rooms: [
+              room('Soggiorno', 'soggiorno', 0, 0, 6, 5),
+              room('Cucina', 'cucina', 6, 0, 4, 3.5),
+              room('Ingresso e corridoio', 'corridoio', 0, 5, 10, 2),
+              room('Camera', 'camera', 0, 7, 4.5, 4),
+              room('Cameretta', 'camera', 4.5, 7, 3.5, 4),
+              room('Bagno', 'bagno', 8, 7, 2.5, 4),
+              room('Ripostiglio', 'locale-tecnico', 6, 3.5, 4, 1.5),
+            ],
+            devices: [
+              dv('luce', 3, 2.5, 0), dv('luce', 8, 1.8, 0), dv('luce', 5, 6, 0), dv('comando', 0.5, 5.5, 0), dv('comando', 5.8, 4.6, 0),
+              dv('luce', 2.2, 9, 1), dv('luce', 6.2, 9, 1), dv('luce', 9.2, 9, 1), dv('comando', 4.2, 7.4, 1), dv('comando', 8.3, 7.4, 1),
+              dv('presa-16', 0.3, 1, 2), dv('presa-16', 0.3, 4, 2), dv('presa', 5.7, 1, 2), dv('presa-16', 3, 4.7, 2), dv('presa', 9.7, 2.8, 2),
+              dv('presa-16', 0.3, 8.5, 3), dv('presa', 4.2, 10.7, 3), dv('presa-16', 4.8, 8, 3), dv('presa', 7.7, 10.7, 3), dv('presa', 10.2, 8.5, 3),
+              dv('utilizzatore', 7.5, 0.4, 4),
+              dv('presa-16', 9.7, 0.6, 5), dv('presa-16', 9.6, 4, 5),
+              dv('utilizzatore', 10.2, 10.5, 6),
+              dv('utilizzatore', 3, 0.3, 7), dv('utilizzatore', 2.2, 10.7, 7),
+            ],
+          },
         });
       },
     },

@@ -2,7 +2,8 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
 import { billOfMaterials, f, fA, type BomRow, type PlantResult } from './calc';
-import { KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from './model';
+import { DEVICE_LABEL, KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from './model';
+import { planExtent, routes } from './plan';
 import { singleLine } from './unifilare';
 
 const MARGIN = 14;
@@ -79,6 +80,7 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
       ['Sistema di distribuzione', p.earthing === 'TT' ? `TT, resistenza di terra RA = ${f(p.raOhm, 0)} ohm` : 'TN-S (PE dal centro stella del trasformatore)'],
       ['Caduta di tensione ammessa', `${f(p.maxDropPct, 1)}% dall'origine all'utilizzatore`],
       ['Quadri', r.boards.map((b) => b.name).join(', ')],
+      ['Scaricatori di sovratensione', p.spd === 'nessuno' ? 'nessuno (necessità da valutazione del rischio CEI EN 62305-2)' : p.spd === 'origine' ? "all'origine dell'impianto" : "all'origine e nei sottoquadri"],
       ['Differenziale sul generale', p.mainRcdMa ? `${p.mainRcdMa} mA${p.mainRcdS ? ' selettivo (S)' : ''}` : 'nessuno'],
       ['Progetto da professionista (DM 37/2008 art. 5)', r.dm.required ? `Sì: ${r.dm.reasons.join('; ')}` : 'No, secondo i dati inseriti (progetto del responsabile tecnico dell\'impresa installatrice)'],
     ],
@@ -198,6 +200,14 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
     doc.text(doc.splitTextToSize(T(p.notes), 182), MARGIN, y + 5);
   }
 
+  // Planimetria
+  if (p.plan.rooms.length || p.plan.devices.length) {
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+    doc.text(T('Planimetria (schema di massima)'), MARGIN, MARGIN + 2);
+    drawPlan(doc, p, r, MARGIN, MARGIN + 8, 297 - 2 * MARGIN - 60, 210 - 2 * MARGIN - 10);
+  }
+
   // Schema unifilare di ogni quadro su una pagina orizzontale
   for (const bd of r.boards) {
     doc.addPage('a4', 'landscape');
@@ -206,6 +216,59 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
     drawDiagram(doc, p, r, bd.id, MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
   }
   return doc;
+}
+
+const PLAN_SYMBOL: Record<string, string> = { luce: 'X', presa: 'P', 'presa-16': 'P16', comando: 'C', 'presa-cee': 'CEE', emergenza: 'E', utilizzatore: 'U' };
+
+function drawPlan(doc: jsPDF, p: Plant, r: PlantResult, ox: number, oy: number, w: number, h: number): void {
+  const ext = planExtent(p);
+  const k = Math.min(w / ext.w, h / ext.h);
+  const X = (v: number) => ox + v * k;
+  const Y = (v: number) => oy + v * k;
+  doc.setLineWidth(0.3);
+  for (const rm of p.plan.rooms) {
+    doc.setDrawColor(...INK);
+    if (rm.type === 'bagno') doc.setFillColor(224, 242, 254).rect(X(rm.x), Y(rm.y), rm.w * k, rm.h * k, 'FD');
+    else doc.rect(X(rm.x), Y(rm.y), rm.w * k, rm.h * k);
+    doc.setFont('helvetica', 'bold').setFontSize(7).setTextColor(...INK);
+    doc.text(T(rm.name), X(rm.x) + 1.5, Y(rm.y) + 3.5);
+    doc.setFont('helvetica', 'normal').setFontSize(6).setTextColor(...MUTED);
+    doc.text(T(`${f(rm.w * rm.h, 1)} m²`), X(rm.x) + 1.5, Y(rm.y) + 6.5);
+  }
+  const tag = (id: string) => r.lines.find((x) => x.line.id === id)?.tag ?? '';
+  for (const [id, pos] of Object.entries(p.plan.boards)) {
+    doc.setDrawColor(180, 120, 10).setFillColor(255, 247, 237).rect(X(pos.x) - 3, Y(pos.y) - 2, 6, 4, 'FD');
+    doc.setFont('helvetica', 'bold').setFontSize(5).setTextColor(180, 120, 10);
+    doc.text(T(id ? tag(id) || 'SQ' : 'QG'), X(pos.x), Y(pos.y) + 1, { align: 'center' });
+  }
+  for (const d of p.plan.devices) {
+    doc.setDrawColor(...INK).setFillColor(255, 255, 255).circle(X(d.x), Y(d.y), 1.8, 'FD');
+    doc.setFont('helvetica', 'bold').setFontSize(4).setTextColor(...INK);
+    doc.text(PLAN_SYMBOL[d.kind] ?? '?', X(d.x), Y(d.y) + 0.6, { align: 'center' });
+    if (d.lineId) {
+      doc.setFont('helvetica', 'normal').setFontSize(4).setTextColor(...MUTED);
+      doc.text(T(tag(d.lineId)), X(d.x) + 2.2, Y(d.y) - 1.2);
+    }
+  }
+  // Legenda e lunghezze stimate
+  let ly = oy + 2;
+  const lx = ox + w + 6;
+  doc.setFont('helvetica', 'bold').setFontSize(8).setTextColor(...INK);
+  doc.text(T('Legenda'), lx, ly);
+  doc.setFont('helvetica', 'normal').setFontSize(7);
+  for (const [kk, lab] of Object.entries(DEVICE_LABEL)) {
+    ly += 4;
+    doc.text(T(`${PLAN_SYMBOL[kk]}  ${lab}`), lx, ly);
+  }
+  ly += 8;
+  doc.setFont('helvetica', 'bold').setFontSize(8);
+  doc.text(T('Lunghezze stimate'), lx, ly);
+  doc.setFont('helvetica', 'normal').setFontSize(7);
+  for (const ro of routes(p)) {
+    ly += 4;
+    if (ly > 200) break;
+    doc.text(T(`${tag(ro.lineId)}  ${ro.lengthM} m${ro.bathroom ? ' (bagno)' : ''}`), lx, ly);
+  }
 }
 
 function drawDiagram(doc: jsPDF, p: Plant, r: PlantResult, boardId: string, ox: number, oy: number, w: number, h: number): void {

@@ -2,7 +2,7 @@ import { cabinImpedance } from '../model/cabin';
 import { RHO_CU_70 } from '../model/constants';
 import type { WireSection } from '../model/types';
 import { ampacity, type AmpacityResult } from '../rules/ampacity';
-import { boardsOf, isThreePhaseSupply, type Curve, type Plant, type PlantLine, type RcdGroup } from './model';
+import { boardsOf, DEVICE_LABEL, isThreePhaseSupply, type Curve, type DeviceKind, type Plant, type PlantLine, type RcdGroup } from './model';
 
 /**
  * Dimensionamento dell'impianto come lo imposta un progettista: bilancio delle potenze quadro per quadro, corrente
@@ -495,6 +495,7 @@ function lineResult(p: Plant, l: PlantLine, tag: string, up: Upstream, phaseOf: 
   if (l.kind === 'prese' && inA && inA > 16 && l.phases === 1)
     checks.push({ id: 'socket', label: 'Prese', status: 'warn', text: `Le prese domestiche sono da 10/16 A: con una protezione da ${inA} A la presa non è protetta dal sovraccarico.` });
   if (l.bathroom) checks.push(...bathroomChecks());
+  if (l.kind === 'emergenza') checks.push(...safetyChecks());
 
   return {
     line: l,
@@ -529,6 +530,16 @@ function bathroomChecks(): Check[] {
     { id: '701-eq', label: 'Bagno: equipotenziale', status: 'info', text: 'Collegamento equipotenziale supplementare tra le masse estranee accessibili delle zone 0, 1, 2 e 3 e i conduttori di protezione delle masse in queste zone.', ref: 'CEI 64-8:2007 701.413.1.2' },
     { id: '701-ip', label: 'Bagno: gradi di protezione', status: 'info', text: 'Almeno IPX7 in zona 0, IPX4 in zona 1 e 2 (IPX5 nei bagni pubblici lavati con getti d\'acqua).', ref: 'CEI 64-8:2007 701.512.2' },
     { id: '701-dev', label: 'Bagno: apparecchi e cassette', status: 'info', text: 'Nelle zone 0, 1 e 2 niente cassette di derivazione, né dispositivi di protezione, sezionamento o comando (salvo circuiti SELV fino a 12 V c.a. con sorgente fuori dalle zone).', ref: 'CEI 64-8:2007 701.520.04, 701.53' },
+  ];
+}
+
+/** Circuiti dei servizi di sicurezza (illuminazione di sicurezza): CEI 64-8:2007 Cap. 56. */
+function safetyChecks(): Check[] {
+  return [
+    { id: '563-ind', label: 'Sicurezza: circuito indipendente', status: 'info', text: 'Il circuito non deve dipendere dagli altri: un guasto o una modifica altrove non deve comprometterlo (cavi, canalizzazioni o percorsi distinti). Non deve attraversare luoghi con pericolo di esplosione.', ref: 'CEI 64-8:2007 563.1, 563.2' },
+    { id: '563-ol', label: 'Sicurezza: sovraccarico', status: 'info', text: 'La protezione contro i sovraccarichi si può omettere; le protezioni vanno scelte perché una sovracorrente in un circuito non comprometta gli altri circuiti di sicurezza.', ref: 'CEI 64-8:2007 563.3, 563.4' },
+    { id: '561-src', label: 'Sicurezza: sorgente', status: 'info', text: 'Sorgente (batterie degli apparecchi autonomi o centralizzata) che mantenga l\'alimentazione per una durata adeguata; autonomia e illuminamenti dipendono dalle norme dell\'attività (es. UNI EN 1838), non verificate qui.', ref: 'CEI 64-8:2007 561.1, 562.1' },
+    { id: '563-id', label: 'Sicurezza: dispositivi', status: 'info', text: 'Dispositivi di protezione, comando e sezionamento chiaramente identificati e raggruppati in luoghi accessibili solo a persone addestrate.', ref: 'CEI 64-8:2007 563.5' },
   ];
 }
 
@@ -680,6 +691,24 @@ export function computePlant(p: Plant): PlantResult {
   }
   if (tri && b.unbalance > 0.3 && b.ibA > 10)
     mainChecks.push({ id: 'unbalance', label: 'Equilibrio delle fasi', status: 'warn', text: `Squilibrio del ${f(b.unbalance * 100, 0)}% tra le fasi: sposta qualche linea monofase sulla fase meno carica.` });
+
+  // Sovratensioni
+  if (p.spd === 'nessuno')
+    mainChecks.push({
+      id: 'spd',
+      label: 'Sovratensioni',
+      status: 'info',
+      text: 'Nessun SPD: la necessità va stabilita con la valutazione del rischio della CEI EN 62305-2. Senza SPD i componenti devono reggere da soli le sovratensioni (tenuta all\'impulso della Tab. 44A: 4 kV per quadri, cavi e prese, 2,5 kV per gli elettrodomestici).',
+      ref: 'CEI 64-8:2007 443.3, 443.4.1, Tab. 44A',
+    });
+  else
+    mainChecks.push({
+      id: 'spd',
+      label: 'Sovratensioni',
+      status: 'info',
+      text: `SPD all'origine${p.spd === 'origine-sottoquadri' ? ' e nei sottoquadri' : ''}: il livello di protezione Up, più la tensione sui collegamenti dell'SPD, deve restare sotto la tenuta degli apparecchi da proteggere (2,5 kV per la categoria II a 230/400 V). Collegamenti corti; protezione di riserva dell'SPD secondo il costruttore.`,
+      ref: 'CEI 64-8:2007 443.3, 443.4, Tab. 44A',
+    });
 
   // Rifasamento
   const raw = boardBalance(p, '', p.kc, tri, new Map());
@@ -883,6 +912,15 @@ export function billOfMaterials(p: Plant, r: PlantResult): BomRow[] {
   for (const g of r.groups) put('Protezioni', `Differenziale puro ${g.poles}P In ${g.inA} A, ${g.group.idnMa} mA tipo ${g.group.type}${g.group.s ? ' S' : ''} («${g.group.name}»)`, 1);
   if (r.main.section) put('Cavi', `Cavo ${cableDesignation(tri ? 3 : 1, true, r.main.section)} ${p.feeder.insulation === 'EPR' ? '(isolamento EPR)' : '(isolamento PVC)'}`, Math.round(p.feeder.lengthM * r.main.parallel), 'm');
   if (p.pfcKvar) put('Rifasamento', `Batteria di rifasamento ${p.pfcKvar} kvar`, 1);
+  if (p.spd !== 'nessuno') {
+    put('Protezioni', `Scaricatore di sovratensione (SPD) ${tri ? '3P+N' : '1P+N'} all'origine`, 1);
+    if (p.spd === 'origine-sottoquadri')
+      for (const b of r.boards.filter((x) => x.feeder)) put('Protezioni', `Scaricatore di sovratensione (SPD) ${b.feeder!.line.phases === 3 ? '3P+N' : '1P+N'} nel sottoquadro`, 1);
+  }
+  const pts = new Map<DeviceKind, number>();
+  for (const d of p.plan.devices) pts.set(d.kind, (pts.get(d.kind) ?? 0) + 1);
+  for (const [k, n] of pts) put('Punti', `${DEVICE_LABEL[k]} (scatola, frutto o apparecchio)`, n);
+  if (p.plan.rooms.length) put('Punti', 'Scatola di derivazione (una per locale, stima)', p.plan.rooms.length);
   if (r.earth.tt) {
     put('Terra', `Picchetto di terra da ${f(p.rodLengthM, 1)} m con pozzetto`, r.earth.rods);
     put('Terra', 'Conduttore di terra 16 mm² rame (o 25 mm² se non protetto contro la corrosione)', 1, 'tratta');

@@ -17,3 +17,18 @@ describe('Progetta impianto → laboratorio', () => {
     });
   }
 });
+
+describe('Progetta impianto → laboratorio: sottoquadri e SPD', () => {
+  it('officina: un pannello per il sottoquadro; negozio con SPD', () => {
+    const o = plantToProject(examplePlants().find((e) => e.id === 'officina')!.make());
+    expect(o.panels.length).toBe(2);
+    const n = examplePlants().find((e) => e.id === 'negozio')!.make();
+    n.spd = 'origine';
+    const pr = plantToProject(n);
+    expect(pr.components.some((c) => c.params.kind === 'spd')).toBe(true);
+    expect(checkWiring(pr).filter((i) => i.severity === 'errore')).toEqual([]);
+    for (const c of pr.components) if (c.params.kind !== 'load') c.closed = true;
+    const r = simulate(pr);
+    expect(r.ok).toBe(true);
+  });
+});
