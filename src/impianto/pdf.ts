@@ -1,7 +1,7 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { pdfSafe } from '../export/reportData';
-import { f, fA, type PlantResult } from './calc';
+import { billOfMaterials, f, fA, type BomRow, type PlantResult } from './calc';
 import { KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from './model';
 import { singleLine } from './unifilare';
 
@@ -9,8 +9,8 @@ const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
 const MUTED: [number, number, number] = [95, 100, 110];
 const T = (s: string) => pdfSafe(s.replace(/φ/g, 'phi').replace(/≫/g, '>>').replace(/Σ/g, 'somma '));
-const TONE: Record<string, [number, number, number]> = { ok: [22, 163, 74], warn: [202, 138, 4], error: [220, 38, 38] };
-const STATUS: Record<string, string> = { ok: 'OK', warn: 'Attenzione', error: 'Da correggere' };
+const TONE: Record<string, [number, number, number]> = { ok: [22, 163, 74], info: [2, 132, 199], warn: [202, 138, 4], error: [220, 38, 38] };
+const STATUS: Record<string, string> = { ok: 'OK', info: 'In opera', warn: 'Attenzione', error: 'Da correggere' };
 
 export const pdfName = (p: Plant) => `${p.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'impianto'}_relazione.pdf`;
 
@@ -78,6 +78,8 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
         : ['Potenza impegnata', `${f(p.supply.contractKW, 1)} kW; Icc presunta al punto di consegna ${f(p.supply.iccKA, 1)} kA (dato del distributore)`],
       ['Sistema di distribuzione', p.earthing === 'TT' ? `TT, resistenza di terra RA = ${f(p.raOhm, 0)} ohm` : 'TN-S (PE dal centro stella del trasformatore)'],
       ['Caduta di tensione ammessa', `${f(p.maxDropPct, 1)}% dall'origine all'utilizzatore`],
+      ['Quadri', r.boards.map((b) => b.name).join(', ')],
+      ['Differenziale sul generale', p.mainRcdMa ? `${p.mainRcdMa} mA${p.mainRcdS ? ' selettivo (S)' : ''}` : 'nessuno'],
       ['Progetto da professionista (DM 37/2008 art. 5)', r.dm.required ? `Sì: ${r.dm.reasons.join('; ')}` : 'No, secondo i dati inseriti (progetto del responsabile tecnico dell\'impresa installatrice)'],
     ],
     true,
@@ -94,7 +96,8 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
       ['Corrente d\'impiego del generale', b.phaseA.length === 3 ? `${b.phaseA.map((v, i) => `L${i + 1} ${f(v, 1)} A`).join(' · ')} (squilibrio ${f(b.unbalance * 100, 0)}%)` : `${f(b.ibA, 1)} A`],
       ['Icc presunta sul quadro generale', fA(r.source.iccMaxA)],
       ['Interruttore generale', r.main.inA ? `In ${r.main.inA} A, potere di interruzione ${r.main.icuKA ?? '-'} kA` : '-'],
-      ['Linea di alimentazione', r.main.section ? `${f(r.main.section, 0)} mm², ${f(p.feeder.lengthM, 0)} m, posa ${p.feeder.method}, ${p.feeder.insulation}; caduta ${f(r.main.dropPct, 2)}%` : '-'],
+      ['Rifasamento', p.pfcKvar ? `${p.pfcKvar} kvar (cos phi da ${f(r.pfc.cosPhiBefore, 2)} a ${f(b.cosPhi, 2)})` : r.pfc.suggestedKvar ? `nessuno; per cos phi 0,95 servono circa ${f(r.pfc.neededKvar, 1)} kvar` : 'non necessario'],
+      ['Linea di alimentazione', r.main.section ? `${r.main.parallel > 1 ? `${r.main.parallel} x ` : ''}${f(r.main.section, 0)} mm², ${f(p.feeder.lengthM, 0)} m, posa ${p.feeder.method}, ${p.feeder.insulation}; caduta ${f(r.main.dropPct, 2)}%` : '-'],
     ],
     true,
   );
@@ -103,23 +106,29 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
   }
 
   heading('3. Dimensionamento delle linee', 'Ib ≤ In ≤ Iz (433.2); portate IEC 60364-5-52 All. B con k1 (temperatura) e k2 (raggruppamento), da verificare su CEI-UNEL 35024/1 o sul catalogo del cavo.');
+  for (const bd of r.boards) {
+  if (r.boards.length > 1) {
+    doc.setFont('helvetica', 'bold').setFontSize(9.5).setTextColor(...INK);
+    doc.text(T(bd.feeder ? `${bd.name} (alimentato da ${bd.feeder.tag}, Icc al quadro ${fA(bd.lines[0]?.iccOriginA ?? 0)})` : bd.name), MARGIN, y + 7);
+    y += 6;
+  }
   table(
     ['N.', 'Linea', 'P kW', 'ku', 'cos phi', 'Ib A', 'Protezione', 'Diff.', 'Cavo', 'L m', 'Posa', 'Iz A', 'DV %', 'Icc min', 'Esito'],
-    r.lines.map((lr, i) => {
+    bd.lines.map((lr) => {
       const l = lr.line;
       return [
-        `Q${i + 1}`,
+        lr.tag,
         `${l.name}${lr.phase ? ` (L${lr.phase})` : ''}`,
         f(l.powerW / 1000, 1),
         f(l.ku, 2),
         f(l.cosPhi, 2),
         f(lr.ibA, 1),
         lr.inA ? `${lr.inA > 63 ? 'In ' : l.curve}${lr.inA} ${l.phases === 3 ? '4P' : '1P+N'} ${lr.icuKA ?? '-'} kA` : '-',
-        l.rcdMa ? `${l.rcdMa} mA ${l.rcdType}` : '-',
+        l.rcdGroup ? `gruppo ${p.rcdGroups.find((g) => g.id === l.rcdGroup)?.name ?? ''}` : l.rcdMa ? `${l.rcdMa} mA ${l.rcdType}` : '-',
         lr.designation,
         f(l.lengthM, 0),
         `${l.method} ${l.insulation}`,
-        lr.iz ? f(lr.iz.iz, 1) : '-',
+        lr.izA ? f(lr.izA, 1) : '-',
         f(lr.dropTotPct, 2),
         lr.iccMinA ? fA(lr.iccMinA) : '-',
         STATUS[lr.status]!,
@@ -138,20 +147,31 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
       },
     },
   );
+  }
+  if (r.groups.length) {
+    heading('Differenziali di gruppo', 'Selettività tra differenziali in serie: a monte tipo S con IΔn almeno 3 volte quella a valle (CEI 64-8:2007 536.3, commento).');
+    table(['Differenziale', 'Quadro', 'Caratteristiche', 'Linee protette'], r.groups.map((g) => [g.group.name, g.boardName, `${g.poles}P In ${g.inA} A, ${g.group.idnMa} mA tipo ${g.group.type}${g.group.s ? ' S' : ''}`, g.lines.map((x) => x.tag).join(', ') || '-']));
+  }
 
   heading('4. Verifiche per linea');
-  for (const [i, lr] of r.lines.entries()) {
+  for (const lr of r.lines) {
     if (y > 260) {
       doc.addPage('a4', 'portrait');
       y = MARGIN;
     }
     doc.setFont('helvetica', 'bold').setFontSize(9).setTextColor(...INK);
-    doc.text(T(`Q${i + 1} - ${lr.line.name} (${KIND_LABEL[lr.line.kind]})`), MARGIN, y + 6);
+    doc.text(T(`${lr.tag} - ${lr.line.name} (${KIND_LABEL[lr.line.kind]})`), MARGIN, y + 6);
     y += 6;
     table([], lr.checks.map((c) => [`${c.label}${c.ref ? `\n${c.ref}` : ''}`, `${STATUS[c.status]}: ${c.text}`]), true, { columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' } } });
   }
 
-  heading('5. Ipotesi di calcolo e limiti');
+  heading('5. Impianto di terra');
+  table([], r.earth.checks.map((c) => [`${c.label}${c.ref ? `\n${c.ref}` : ''}`, `${STATUS[c.status]}: ${c.text}`]), true, { columnStyles: { 0: { cellWidth: 52, fontStyle: 'bold' } } });
+
+  heading('6. Computo dei materiali', 'Quantità ricavate dal progetto, senza prezzi e senza sfridi.');
+  table(['Voce', 'Materiale', 'Quantità'], billOfMaterials(p, r).map((b) => [b.group, b.item, `${f(b.qty, 0)} ${b.unit}`]), false, { columnStyles: { 0: { cellWidth: 26 }, 2: { cellWidth: 24 } } });
+
+  heading('7. Ipotesi di calcolo e limiti');
   doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...INK);
   const notes = [
     'Resistività del rame a 70 °C (0,0214 ohm·mm²/m), reattanza dei cavi 0,08 mohm/m; impedenze sommate con parte resistiva e reattiva.',
@@ -178,16 +198,18 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
     doc.text(doc.splitTextToSize(T(p.notes), 182), MARGIN, y + 5);
   }
 
-  // Schema unifilare su una pagina orizzontale
-  doc.addPage('a4', 'landscape');
-  doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
-  doc.text(T('Schema unifilare del quadro generale'), MARGIN, MARGIN + 2);
-  drawDiagram(doc, p, r, MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
+  // Schema unifilare di ogni quadro su una pagina orizzontale
+  for (const bd of r.boards) {
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+    doc.text(T(`Schema unifilare: ${bd.name}`), MARGIN, MARGIN + 2);
+    drawDiagram(doc, p, r, bd.id, MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
+  }
   return doc;
 }
 
-function drawDiagram(doc: jsPDF, p: Plant, r: PlantResult, ox: number, oy: number, w: number, h: number): void {
-  const d = singleLine(p, r);
+function drawDiagram(doc: jsPDF, p: Plant, r: PlantResult, boardId: string, ox: number, oy: number, w: number, h: number): void {
+  const d = singleLine(p, r, boardId);
   const k = Math.min(w / d.width, h / d.height);
   const X = (v: number) => ox + v * k;
   const Y = (v: number) => oy + v * k;
@@ -213,10 +235,10 @@ export function plantCsv(r: PlantResult): string {
   const head = ['Sigla', 'Linea', 'Tipo', 'Fasi', 'Fase', 'P [W]', 'ku', 'cos phi', 'Ib [A]', 'In [A]', 'Curva', 'Icu [kA]', 'Differenziale [mA]', 'Tipo diff.', 'Cavo', 'Sezione [mm2]', 'PE [mm2]', 'Lunghezza [m]', 'Posa', 'Isolante', 'Iz [A]', 'Caduta totale [%]', 'Icc min fondo linea [A]', 'Esito'];
   const n = (v: number | null | undefined, d = 2) => (v === null || v === undefined ? '' : v.toFixed(d).replace('.', ','));
   const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
-  const rows = r.lines.map((lr, i) => {
+  const rows = r.lines.map((lr) => {
     const l = lr.line;
     return [
-      `Q${i + 1}`,
+      lr.tag,
       q(l.name),
       KIND_LABEL[l.kind],
       l.phases,
@@ -228,19 +250,25 @@ export function plantCsv(r: PlantResult): string {
       lr.inA ?? '',
       lr.inA && lr.inA > 63 ? '' : l.curve,
       n(lr.icuKA, 1),
-      l.rcdMa || '',
-      l.rcdMa ? l.rcdType : '',
+      l.rcdGroup ? 'gruppo' : l.rcdMa || '',
+      l.rcdGroup ? '' : l.rcdMa ? l.rcdType : '',
       lr.designation,
       n(lr.section, 1),
       n(lr.peSection, 1),
       n(l.lengthM, 0),
       l.method,
       l.insulation,
-      n(lr.iz?.iz, 1),
+      n(lr.izA, 1),
       n(lr.dropTotPct),
       n(lr.iccMinA, 0),
       STATUS[lr.status],
     ].join(';');
   });
   return '﻿' + [head.join(';'), ...rows].join('\r\n');
+}
+
+/** Computo dei materiali in CSV. */
+export function bomCsv(rows: BomRow[]): string {
+  const q = (x: string) => `"${x.replace(/"/g, '""')}"`;
+  return '\uFEFF' + ['Voce;Materiale;Quantità;Unità', ...rows.map((b) => [q(b.group), q(b.item), b.qty, b.unit].join(';'))].join('\r\n');
 }

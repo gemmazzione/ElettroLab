@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { balance, cableDesignation, computePlant, currentOf, dm37, dropPct, peSection, pickIn } from '../calc';
+import { balance, billOfMaterials, cableDesignation, computePlant, currentOf, dm37, dropPct, peSection, pickIn } from '../calc';
 import { coherent, examplePlants, line, normalizePlant, type Plant } from '../model';
 
 const ex = (id: string): Plant => examplePlants().find((e) => e.id === id)!.make();
@@ -65,6 +65,7 @@ describe('Progetta impianto: verifiche', () => {
   it('TT senza differenziale: errore', () => {
     const p = ex('appartamento');
     p.lines[0]!.rcdMa = 0;
+    p.lines[0]!.rcdGroup = '';
     const r = computePlant(p);
     expect(r.lines[0]!.checks.find((c) => c.id === '413')!.status).toBe('error');
   });
@@ -136,5 +137,87 @@ describe('Progetta impianto: dati', () => {
     expect(p.name).toBe('X');
     expect(p.lines[0]!.powerW).toBeGreaterThan(0);
     expect(p.supply.kind).toBe('bt-mono');
+  });
+});
+
+describe('Progetta impianto: sottoquadri e differenziali', () => {
+  it('officina: il sottoquadro prende la potenza dalle sue linee e le sue linee partono più a valle', () => {
+    const p = ex('officina');
+    const r = computePlant(p);
+    const qu = r.lines.find((l) => l.line.kind === 'sottoquadro')!;
+    expect(qu.sub).not.toBeNull();
+    expect(qu.ibA).toBeGreaterThan(5);
+    const child = r.lines.find((l) => l.boardId === qu.line.id)!;
+    expect(child.tag.startsWith(`${qu.tag}.`)).toBe(true);
+    expect(child.iccOriginA).toBeLessThan(r.source.iccMaxA);
+    expect(child.dropTotPct).toBeGreaterThan(qu.dropTotPct);
+    expect(r.boards.length).toBe(2);
+  });
+  it('differenziale di gruppo: le linee del gruppo sono protette dal gruppo', () => {
+    const r = computePlant(ex('appartamento'));
+    expect(r.groups.length).toBe(2);
+    expect(r.groups[0]!.lines.length).toBeGreaterThan(0);
+    for (const l of r.groups[0]!.lines) expect(l.checks.find((c) => c.id === '413')!.status).toBe('ok');
+    expect(r.groups[0]!.inA).toBeGreaterThanOrEqual(25);
+  });
+  it('selettività differenziale: 30 mA sotto un 300 mA S è selettivo, sotto un 30 mA no', () => {
+    const p = ex('appartamento');
+    p.mainRcdMa = 300;
+    p.mainRcdS = true;
+    const ok = computePlant(p).lines.find((l) => l.line.rcdMa === 30 && !l.line.rcdGroup)!;
+    expect(ok.checks.find((c) => c.id === '536')!.status).toBe('ok');
+    p.mainRcdS = false;
+    const bad = computePlant(p).lines.find((l) => l.line.rcdMa === 30 && !l.line.rcdGroup)!;
+    expect(bad.checks.find((c) => c.id === '536')!.status).toBe('warn');
+  });
+  it('selettività tra interruttori: a monte stessa taglia → avviso', () => {
+    const p = ex('appartamento');
+    p.lines[0]!.inOverride = 63;
+    const r = computePlant(p);
+    expect(r.lines[0]!.checks.find((c) => c.id === 'sel')!.status).toBe('warn');
+  });
+  it('bagno: prescrizioni della Sez. 701', () => {
+    const r = computePlant(ex('appartamento'));
+    const b = r.lines.find((l) => l.line.bathroom)!;
+    expect(b.checks.some((c) => c.ref?.includes('701'))).toBe(true);
+  });
+});
+
+describe('Progetta impianto: rifasamento, cavi in parallelo, terra, computo', () => {
+  it('rifasamento: suggerisce i kvar e la batteria porta il cos φ sopra 0,95', () => {
+    const p = ex('officina');
+    const r = computePlant(p);
+    expect(r.pfc.neededKvar).toBeGreaterThan(0);
+    p.pfcKvar = r.pfc.suggestedKvar!;
+    const r2 = computePlant(p);
+    expect(r2.balance.cosPhi).toBeGreaterThanOrEqual(0.95);
+    expect(r2.main.checks.find((c) => c.id === 'pf')!.status).toBe('ok');
+  });
+  it('linea da 300 A: cavi in parallelo', () => {
+    const p = ex('officina');
+    p.lines = [line('fm', true, { powerW: 190000, ku: 1, cosPhi: 0.9, lengthM: 60, method: 'E', insulation: 'EPR', grouped: 1 })];
+    const r = computePlant(p);
+    const l = r.lines[0]!;
+    expect(l.section).not.toBeNull();
+    expect(l.izA!).toBeGreaterThanOrEqual(l.inA!);
+  });
+  it('terra TT: RA massima dalla IΔn più alta e stima dei picchetti', () => {
+    const p = ex('appartamento');
+    const r = computePlant(p);
+    expect(r.earth.raMaxOhm).toBeCloseTo(50 / 0.03, 0);
+    expect(r.earth.rods).toBeGreaterThanOrEqual(1);
+    p.mainRcdMa = 300;
+    p.raOhm = 200;
+    expect(computePlant(p).earth.raOk).toBe(false);
+    expect(r.earth.equipotentialMm2).toBeGreaterThanOrEqual(6);
+  });
+  it('computo: protezioni, cavi e terra', () => {
+    const p = ex('officina');
+    const r = computePlant(p);
+    const bom = billOfMaterials(p, r);
+    expect(bom.some((b) => b.group === 'Cavi' && b.unit === 'm' && b.qty > 0)).toBe(true);
+    expect(bom.some((b) => b.item.startsWith('Differenziale puro'))).toBe(true);
+    expect(bom.some((b) => b.group === 'Comando motori')).toBe(true);
+    expect(bom.filter((b) => b.group === 'Quadri').length).toBe(2);
   });
 });

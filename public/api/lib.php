@@ -164,6 +164,11 @@ function ensureExtras(): void
     } catch (PDOException $e) {
         $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN pv MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN pv TEXT NULL');
     }
+    try {
+        $pdo->query('SELECT impianti FROM el_state LIMIT 1');
+    } catch (PDOException $e) {
+        $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN impianti MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN impianti TEXT NULL');
+    }
 }
 
 /** Scarica un URL (HTTPS) con un tempo massimo; null se non raggiungibile. */

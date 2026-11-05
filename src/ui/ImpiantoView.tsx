@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, DraftingCompass, FileDown, FileSpreadsheet, Plus, Trash2, XCircle } from 'lucide-react';
-import { computePlant, f, fA, IN_ALL, SECTIONS, type Check, type LineResult, type PlantResult, type Status } from '../impianto/calc';
-import { examplePlants, isThreePhaseSupply, KIND_LABEL, line, SUPPLY_LABEL, USE_LABEL, type LineKind, type Plant, type PlantLine, type PlantUse, type SupplyKind } from '../impianto/model';
-import { buildPlantPdf, pdfName, plantCsv } from '../impianto/pdf';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, DraftingCompass, FileDown, FileSpreadsheet, FlaskConical, Info, Plus, Trash2, XCircle } from 'lucide-react';
+import { billOfMaterials, computePlant, f, fA, IN_ALL, isSubBoard, SECTIONS, type Check, type LineResult, type PlantResult, type Status } from '../impianto/calc';
+import { boardsOf, examplePlants, isThreePhaseSupply, KIND_LABEL, line, newId, SUPPLY_LABEL, USE_LABEL, type LineKind, type Plant, type PlantLine, type PlantUse, type RcdGroup, type SupplyKind } from '../impianto/model';
+import { bomCsv, buildPlantPdf, pdfName, plantCsv } from '../impianto/pdf';
+import { plantToProject } from '../impianto/toLab';
+import { useStore } from '../store/projectStore';
 import { currentPlant, useImpianto } from '../impianto/store';
 import { singleLine, type Prim } from '../impianto/unifilare';
 import { TRANSFORMER_SIZES } from '../model/cabin';
@@ -16,7 +18,7 @@ import { Field, NumberInput, Select, TextInput } from './fields';
  * relazione tecnica in PDF e tabella dei cavi.
  */
 
-const STEPS = ['Dati generali', 'Linee e carichi', 'Quadro e verifiche', 'Documenti'] as const;
+const STEPS = ['Dati generali', 'Linee e carichi', 'Quadri e verifiche', 'Terra e materiali', 'Documenti'] as const;
 
 const usePlant = () => useImpianto((s) => currentPlant(s));
 
@@ -59,7 +61,8 @@ export function ImpiantoView() {
           {step === 0 && <GeneralStep r={result} />}
           {step === 1 && <LinesStep r={result} />}
           {step === 2 && <BoardStep r={result} />}
-          {step === 3 && <DocsStep r={result} />}
+          {step === 3 && <EarthStep r={result} />}
+          {step === 4 && <DocsStep r={result} />}
           <div className="flex justify-between pt-1">
             <button disabled={step === 0} onClick={() => setStep(step - 1)} className="rounded-md px-3 py-1.5 text-[0.75rem] text-slate-300 hover:bg-slate-800 disabled:opacity-30">
               ← {step > 0 ? STEPS[step - 1] : ''}
@@ -90,9 +93,9 @@ const Card = ({ title, children, right }: { title?: string; children: ReactNode;
   </section>
 );
 
-const TONE: Record<Status, string> = { ok: 'text-emerald-300', warn: 'text-amber-200', error: 'text-red-300' };
+const TONE: Record<Status, string> = { ok: 'text-emerald-300', info: 'text-sky-200', warn: 'text-amber-200', error: 'text-red-300' };
 const StatusIcon = ({ s, size = 14 }: { s: Status; size?: number }) =>
-  s === 'ok' ? <CheckCircle2 size={size} className="shrink-0 text-emerald-400" aria-label="ok" /> : s === 'warn' ? <AlertTriangle size={size} className="shrink-0 text-amber-300" aria-label="attenzione" /> : <XCircle size={size} className="shrink-0 text-red-400" aria-label="da correggere" />;
+  s === 'ok' ? <CheckCircle2 size={size} className="shrink-0 text-emerald-400" aria-label="ok" /> : s === 'info' ? <Info size={size} className="shrink-0 text-sky-400" aria-label="da rispettare in opera" /> : s === 'warn' ? <AlertTriangle size={size} className="shrink-0 text-amber-300" aria-label="attenzione" /> : <XCircle size={size} className="shrink-0 text-red-400" aria-label="da correggere" />;
 
 function CheckList({ checks }: { checks: Check[] }) {
   return (
@@ -104,7 +107,7 @@ function CheckList({ checks }: { checks: Check[] }) {
           </span>
           <span>
             <span className="font-semibold text-slate-200">{c.label}: </span>
-            <span className={c.status === 'ok' ? 'text-slate-300' : TONE[c.status]}>{c.text}</span>
+            <span className={c.status === 'ok' || c.status === 'info' ? 'text-slate-300' : TONE[c.status]}>{c.text}</span>
             {c.ref && <span className="ml-1 text-[0.6875rem] text-slate-500">({c.ref})</span>}
           </span>
         </li>
@@ -185,7 +188,7 @@ function LibraryBar() {
       >
         <Trash2 size={14} /> Elimina
       </button>
-      <span className="ml-auto text-[0.6875rem] text-slate-500">Salvato in questo browser</span>
+      <span className="ml-auto text-[0.6875rem] text-slate-500">Salvato nel browser e, con l'accesso, nell'account</span>
     </div>
   );
 }
@@ -292,6 +295,14 @@ function GeneralStep({ r }: { r: PlantResult }) {
             <Field label="Caduta di tensione massima">
               <NumberInput value={p.maxDropPct} min={1} max={10} step={0.5} suffix="%" onChange={(v) => set({ maxDropPct: v })} />
             </Field>
+            <Field label="Differenziale sul generale" hint="Di solito selettivo (tipo S), a monte dei 30 mA">
+              <Select value={p.mainRcdMa} options={[0, 100, 300, 500, 1000] as const} format={(v) => (v ? `${v} mA` : 'nessuno')} onChange={(v) => set({ mainRcdMa: v })} />
+            </Field>
+            {p.mainRcdMa > 0 && (
+              <label className="flex items-center gap-1.5 self-end pb-2 text-[0.75rem] text-slate-300">
+                <input type="checkbox" className="accent-sky-500" checked={p.mainRcdS} onChange={(e) => set({ mainRcdS: e.target.checked })} /> Selettivo (tipo S)
+              </label>
+            )}
           </div>
         </Card>
       </div>
@@ -351,131 +362,19 @@ const methodLabel = (m: InstallMethod) => INSTALL_METHODS.find((x) => x.id === m
 
 const ADD_KINDS: LineKind[] = ['luce', 'prese', 'cucina', 'clima', 'scaldabagno', 'ricarica', 'fm', 'motore', 'sottoquadro', 'generico'];
 
+/** Valore del selettore «Differenziale»: proprio (mA) o di gruppo (id). */
+const rcdValue = (l: PlantLine) => (l.rcdGroup ? `g:${l.rcdGroup}` : `m:${l.rcdMa}`);
+
 function LinesStep({ r }: { r: PlantResult }) {
   const p = usePlant();
-  const up = useImpianto((s) => s.update);
-  const tri = isThreePhaseSupply(p);
-  const setLine = (id: string, patch: Partial<PlantLine>) => up((x) => ({ ...x, lines: x.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
-  const add = (k: LineKind) => up((x) => ({ ...x, lines: [...x.lines, line(k, tri)] }));
   const b = r.balance;
   return (
     <div className="space-y-4">
-      <Card title="Linee in partenza dal quadro generale">
-        <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
-          Per ogni linea: potenza installata, coefficiente di utilizzazione ku (quota della potenza assorbita in servizio), lunghezza e posa del cavo, curva dell'interruttore e differenziale. Sezioni e protezioni le calcola il programma; nel passo successivo puoi forzarle.
-        </p>
-        <div className="mb-3 flex flex-wrap gap-1.5">
-          {ADD_KINDS.map((k) => (
-            <button key={k} onClick={() => add(k)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[0.71875rem] text-slate-200 hover:border-sky-500 hover:bg-slate-800">
-              <Plus size={12} /> {KIND_LABEL[k]}
-            </button>
-          ))}
-        </div>
-        {p.lines.length === 0 ? (
-          <p className="rounded-md border border-dashed border-slate-700 p-6 text-center text-[0.75rem] text-slate-400">Nessuna linea: aggiungine una con i pulsanti qui sopra.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[68rem] border-separate border-spacing-y-1 text-[0.71875rem]">
-              <thead className="text-left text-[0.65625rem] uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-1 font-medium">Sigla</th>
-                  <th className="px-1 font-medium">Nome</th>
-                  {tri && <th className="px-1 font-medium">Fasi</th>}
-                  {tri && <th className="px-1 font-medium">Fase</th>}
-                  <th className="px-1 font-medium">P [W]</th>
-                  <th className="px-1 font-medium">cos φ</th>
-                  <th className="px-1 font-medium">ku</th>
-                  <th className="px-1 font-medium">L [m]</th>
-                  <th className="px-1 font-medium">Posa</th>
-                  <th className="px-1 font-medium">Isol.</th>
-                  <th className="px-1 font-medium">°C</th>
-                  <th className="px-1 font-medium" title="Circuiti raggruppati nella stessa canalizzazione">Circ.</th>
-                  <th className="px-1 font-medium">Curva</th>
-                  <th className="px-1 font-medium">Diff.</th>
-                  <th className="px-1 font-medium">Ib</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {p.lines.map((l, i) => {
-                  const lr = r.lines[i]!;
-                  return (
-                    <tr key={l.id} className="bg-slate-950/50 align-middle">
-                      <td className="rounded-l-md px-1 py-1 font-mono text-slate-400">Q{i + 1}</td>
-                      <td className="w-[13rem] px-1">
-                        <TextInput value={l.name} onChange={(v) => setLine(l.id, { name: v })} />
-                      </td>
-                      {tri && (
-                        <td className="w-[5rem] px-1">
-                          <Select value={l.phases} options={[1, 3] as const} format={(v) => (v === 1 ? '1F+N' : l.withNeutral ? '3F+N' : '3F')} onChange={(v) => setLine(l.id, { phases: v })} />
-                        </td>
-                      )}
-                      {tri && (
-                        <td className="w-[4.5rem] px-1">
-                          {l.phases === 1 ? (
-                            <Select value={l.phase} options={[0, 1, 2, 3] as const} format={(v) => (v ? `L${v}` : `auto${lr.phase ? ` L${lr.phase}` : ''}`)} onChange={(v) => setLine(l.id, { phase: v })} />
-                          ) : (
-                            <label className="flex items-center gap-1 text-[0.6875rem] text-slate-400" title="Neutro distribuito">
-                              <input type="checkbox" className="accent-sky-500" checked={l.withNeutral} onChange={(e) => setLine(l.id, { withNeutral: e.target.checked })} /> N
-                            </label>
-                          )}
-                        </td>
-                      )}
-                      <td className="w-[6rem] px-1">
-                        <NumberInput value={l.powerW} min={1} max={2000000} step={50} onChange={(v) => setLine(l.id, { powerW: v })} />
-                      </td>
-                      <td className="w-[4.5rem] px-1">
-                        <NumberInput value={l.cosPhi} min={0.3} max={1} step={0.01} onChange={(v) => setLine(l.id, { cosPhi: v })} />
-                      </td>
-                      <td className="w-[4.5rem] px-1">
-                        <NumberInput value={l.ku} min={0.05} max={1} step={0.05} onChange={(v) => setLine(l.id, { ku: v })} />
-                      </td>
-                      <td className="w-[4.5rem] px-1">
-                        <NumberInput value={l.lengthM} min={1} max={2000} onChange={(v) => setLine(l.id, { lengthM: v })} />
-                      </td>
-                      <td className="w-[4.5rem] px-1">
-                        <Select value={l.method} options={INSTALL_METHODS.map((m) => m.id)} onChange={(v) => setLine(l.id, { method: v })} />
-                      </td>
-                      <td className="w-[4.5rem] px-1">
-                        <Select value={l.insulation} options={['PVC', 'EPR'] as Insulation[]} onChange={(v) => setLine(l.id, { insulation: v })} />
-                      </td>
-                      <td className="w-[4rem] px-1">
-                        <NumberInput value={l.ambientC} min={10} max={60} step={5} onChange={(v) => setLine(l.id, { ambientC: v })} />
-                      </td>
-                      <td className="w-[3.75rem] px-1">
-                        <NumberInput value={l.grouped} min={1} max={20} onChange={(v) => setLine(l.id, { grouped: v })} />
-                      </td>
-                      <td className="w-[4rem] px-1">
-                        <Select value={l.curve} options={['B', 'C', 'D'] as const} onChange={(v) => setLine(l.id, { curve: v })} />
-                      </td>
-                      <td className="w-[6rem] px-1">
-                        <Select value={l.rcdMa} options={[0, 30, 100, 300] as const} format={(v) => (v ? `${v} mA` : 'nessuno')} onChange={(v) => setLine(l.id, { rcdMa: v })} />
-                      </td>
-                      <td className="px-1 font-mono text-slate-200">{f(lr.ibA, 1)} A</td>
-                      <td className="rounded-r-md px-1">
-                        <div className="flex">
-                          <button
-                            title="Duplica la linea"
-                            aria-label={`Duplica ${l.name}`}
-                            onClick={() => up((x) => ({ ...x, lines: [...x.lines.slice(0, i + 1), { ...l, id: `${l.id}c${Date.now().toString(36)}`, name: `${l.name} 2` }, ...x.lines.slice(i + 1)] }))}
-                            className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-                          >
-                            <Copy size={13} />
-                          </button>
-                          <button title="Elimina la linea" aria-label={`Elimina ${l.name}`} onClick={() => up((x) => ({ ...x, lines: x.lines.filter((y) => y.id !== l.id) }))} className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-300">
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
-      <Card title="Bilancio delle potenze">
+      {boardsOf(p).map((bd) => (
+        <BoardLines key={bd.id || 'qg'} boardId={bd.id} name={bd.name} r={r} />
+      ))}
+      <RcdGroupsCard />
+      <Card title="Bilancio delle potenze del quadro generale">
         <div className="grid gap-x-8 gap-y-1 text-[0.75rem] sm:grid-cols-2">
           <KV k="Potenza installata" v={`${f(b.installedW / 1000, 1)} kW`} />
           <KV k="Potenza assorbita (Σ P · ku)" v={`${f(b.absorbedW / 1000, 1)} kW`} />
@@ -509,51 +408,310 @@ function LinesStep({ r }: { r: PlantResult }) {
   );
 }
 
-// ------------------------------------------------------------------ 3. quadro e verifiche
+function BoardLines({ boardId, name, r }: { boardId: string; name: string; r: PlantResult }) {
+  const p = usePlant();
+  const up = useImpianto((s) => s.update);
+  const feeder = p.lines.find((l) => l.id === boardId);
+  const tri = boardId ? feeder?.phases === 3 : isThreePhaseSupply(p);
+  const lines = p.lines.filter((l) => l.boardId === boardId && l.id !== boardId);
+  const groups = p.rcdGroups.filter((g) => g.boardId === boardId);
+  const setLine = (id: string, patch: Partial<PlantLine>) => up((x) => ({ ...x, lines: x.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+  const add = (k: LineKind) => up((x) => ({ ...x, lines: [...x.lines, line(k, tri, { boardId, ...(k === 'sottoquadro' && boardId ? { kind: 'generico', name: 'Linea' } : {}) })] }));
+  const resOf = (id: string) => r.lines.find((x) => x.line.id === id);
+  const fr = boardId ? resOf(boardId) : null;
+  return (
+    <Card
+      title={boardId ? `Sottoquadro «${name}»` : 'Linee del quadro generale'}
+      right={
+        boardId && feeder ? (
+          <div className="flex items-center gap-2 text-[0.71875rem] text-slate-400">
+            <span>
+              alimentato da {fr?.tag} · {feeder.phases === 3 ? 'trifase' : 'monofase'}
+            </span>
+            <span>kc</span>
+            <div className="w-[4.5rem]">
+              <NumberInput value={feeder.kcSub ?? 0.8} min={0.1} max={1} step={0.05} onChange={(v) => setLine(feeder.id, { kcSub: v })} />
+            </div>
+          </div>
+        ) : null
+      }
+    >
+      {!boardId && (
+        <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
+          Per ogni linea: potenza installata, coefficiente di utilizzazione ku, lunghezza e posa del cavo, curva dell'interruttore e differenziale (proprio o di gruppo). Una linea «Sottoquadro» diventa un quadro con le sue linee qui sotto.
+        </p>
+      )}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {ADD_KINDS.filter((k) => !boardId || k !== 'sottoquadro').map((k) => (
+          <button key={k} onClick={() => add(k)} className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[0.71875rem] text-slate-200 hover:border-sky-500 hover:bg-slate-800">
+            <Plus size={12} /> {KIND_LABEL[k]}
+          </button>
+        ))}
+      </div>
+      {lines.length === 0 ? (
+        <p className="rounded-md border border-dashed border-slate-700 p-6 text-center text-[0.75rem] text-slate-400">Nessuna linea: aggiungine una con i pulsanti qui sopra.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[72rem] border-separate border-spacing-y-1 text-[0.71875rem]">
+            <thead className="text-left text-[0.65625rem] uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-1 font-medium">Sigla</th>
+                <th className="px-1 font-medium">Nome</th>
+                {tri && <th className="px-1 font-medium">Fasi</th>}
+                {tri && <th className="px-1 font-medium">Fase</th>}
+                <th className="px-1 font-medium">P [W]</th>
+                <th className="px-1 font-medium">cos φ</th>
+                <th className="px-1 font-medium">ku</th>
+                <th className="px-1 font-medium">L [m]</th>
+                <th className="px-1 font-medium">Posa</th>
+                <th className="px-1 font-medium">Isol.</th>
+                <th className="px-1 font-medium">°C</th>
+                <th className="px-1 font-medium" title="Circuiti raggruppati nella stessa canalizzazione">Circ.</th>
+                <th className="px-1 font-medium">Curva</th>
+                <th className="px-1 font-medium">Differenziale</th>
+                <th className="px-1 font-medium" title="Alimenta componenti in un bagno o doccia">Bagno</th>
+                <th className="px-1 font-medium">Ib</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => {
+                const lr = resOf(l.id);
+                const isSub = isSubBoard(p, l);
+                const rcdOpts = ['m:0', 'm:30', 'm:100', 'm:300', ...groups.map((g) => `g:${g.id}`)];
+                return (
+                  <tr key={l.id} className="bg-slate-950/50 align-middle">
+                    <td className="rounded-l-md px-1 py-1 font-mono text-slate-400">{lr?.tag ?? `#${i + 1}`}</td>
+                    <td className="w-[12rem] px-1">
+                      <TextInput value={l.name} onChange={(v) => setLine(l.id, { name: v })} />
+                    </td>
+                    {tri && (
+                      <td className="w-[5.75rem] px-1">
+                        <Select value={l.phases} options={[1, 3] as const} format={(v) => (v === 1 ? '1F+N' : l.withNeutral ? '3F+N' : '3F')} onChange={(v) => setLine(l.id, { phases: v })} />
+                      </td>
+                    )}
+                    {tri && (
+                      <td className="w-[5.75rem] px-1">
+                        {l.phases === 1 ? (
+                          <Select value={l.phase} options={[0, 1, 2, 3] as const} format={(v) => (v ? `L${v}` : `auto${lr?.phase ? ` L${lr.phase}` : ''}`)} onChange={(v) => setLine(l.id, { phase: v })} />
+                        ) : (
+                          <label className="flex items-center gap-1 text-[0.6875rem] text-slate-400" title="Neutro distribuito">
+                            <input type="checkbox" className="accent-sky-500" checked={l.withNeutral} onChange={(e) => setLine(l.id, { withNeutral: e.target.checked })} /> N
+                          </label>
+                        )}
+                      </td>
+                    )}
+                    {isSub ? (
+                      <td colSpan={3} className="px-1 text-[0.6875rem] text-slate-400">
+                        dalle sue linee: {f((lr?.sub?.simultaneousW ?? 0) / 1000, 1)} kW, cos φ {f(lr?.cosPhi ?? 1, 2)}
+                      </td>
+                    ) : (
+                      <>
+                        <td className="w-[6rem] px-1">
+                          <NumberInput value={l.powerW} min={1} max={2000000} step={50} onChange={(v) => setLine(l.id, { powerW: v })} />
+                        </td>
+                        <td className="w-[4.5rem] px-1">
+                          <NumberInput value={l.cosPhi} min={0.3} max={1} step={0.01} onChange={(v) => setLine(l.id, { cosPhi: v })} />
+                        </td>
+                        <td className="w-[4.5rem] px-1">
+                          <NumberInput value={l.ku} min={0.05} max={1} step={0.05} onChange={(v) => setLine(l.id, { ku: v })} />
+                        </td>
+                      </>
+                    )}
+                    <td className="w-[4.5rem] px-1">
+                      <NumberInput value={l.lengthM} min={1} max={2000} onChange={(v) => setLine(l.id, { lengthM: v })} />
+                    </td>
+                    <td className="w-[4.5rem] px-1">
+                      <Select value={l.method} options={INSTALL_METHODS.map((m) => m.id)} onChange={(v) => setLine(l.id, { method: v })} />
+                    </td>
+                    <td className="w-[4.5rem] px-1">
+                      <Select value={l.insulation} options={['PVC', 'EPR'] as Insulation[]} onChange={(v) => setLine(l.id, { insulation: v })} />
+                    </td>
+                    <td className="w-[4rem] px-1">
+                      <NumberInput value={l.ambientC} min={10} max={60} step={5} onChange={(v) => setLine(l.id, { ambientC: v })} />
+                    </td>
+                    <td className="w-[3.75rem] px-1">
+                      <NumberInput value={l.grouped} min={1} max={20} onChange={(v) => setLine(l.id, { grouped: v })} />
+                    </td>
+                    <td className="w-[4rem] px-1">
+                      <Select value={l.curve} options={['B', 'C', 'D'] as const} onChange={(v) => setLine(l.id, { curve: v })} />
+                    </td>
+                    <td className="w-[9rem] px-1">
+                      <Select
+                        value={rcdValue(l)}
+                        options={rcdOpts}
+                        format={(v) => (v.startsWith('g:') ? `gruppo «${groups.find((g) => `g:${g.id}` === v)?.name ?? '?'}»` : v === 'm:0' ? 'nessuno' : `proprio ${v.slice(2)} mA`)}
+                        onChange={(v) => setLine(l.id, v.startsWith('g:') ? { rcdGroup: v.slice(2), rcdMa: 0 } : { rcdGroup: '', rcdMa: Number(v.slice(2)) as PlantLine['rcdMa'] })}
+                      />
+                    </td>
+                    <td className="px-1 text-center">
+                      <input type="checkbox" aria-label={`${l.name} in un bagno`} className="accent-sky-500" checked={!!l.bathroom} onChange={(e) => setLine(l.id, { bathroom: e.target.checked })} />
+                    </td>
+                    <td className="px-1 font-mono text-slate-200">{lr ? `${f(lr.ibA, 1)} A` : '—'}</td>
+                    <td className="rounded-r-md px-1">
+                      <div className="flex">
+                        <button
+                          title="Duplica la linea"
+                          aria-label={`Duplica ${l.name}`}
+                          onClick={() => up((x) => ({ ...x, lines: [...x.lines, { ...l, id: newId(), name: `${l.name} 2` }] }))}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+                        >
+                          <Copy size={13} />
+                        </button>
+                        <button
+                          title="Elimina la linea"
+                          aria-label={`Elimina ${l.name}`}
+                          onClick={() => (!isSub || window.confirm(`Eliminare il sottoquadro «${l.name}»? Le sue linee passano al quadro generale.`)) && up((x) => ({ ...x, lines: x.lines.filter((y) => y.id !== l.id) }))}
+                          className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-red-300"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function RcdGroupsCard() {
+  const p = usePlant();
+  const up = useImpianto((s) => s.update);
+  const boards = boardsOf(p);
+  const setG = (id: string, patch: Partial<RcdGroup>) => up((x) => ({ ...x, rcdGroups: x.rcdGroups.map((g) => (g.id === id ? { ...g, ...patch } : g)) }));
+  return (
+    <Card
+      title="Differenziali di gruppo"
+      right={
+        <button
+          onClick={() => up((x) => ({ ...x, rcdGroups: [...x.rcdGroups, { id: `g${newId()}`, name: `Gruppo ${x.rcdGroups.length + 1}`, boardId: '', idnMa: 30, type: 'A', s: false }] }))}
+          className="flex items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[0.71875rem] text-slate-200 hover:border-sky-500 hover:bg-slate-800"
+        >
+          <Plus size={12} /> Differenziale di gruppo
+        </button>
+      }
+    >
+      <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
+        Un differenziale puro protegge più linee dello stesso quadro: dividere le linee su più differenziali evita che un guasto spenga tutto. Assegna le linee al gruppo con la colonna «Differenziale».
+      </p>
+      {p.rcdGroups.length === 0 ? (
+        <p className="text-[0.75rem] text-slate-500">Nessun differenziale di gruppo: ogni linea usa il suo differenziale.</p>
+      ) : (
+        <div className="space-y-2">
+          {p.rcdGroups.map((g) => (
+            <div key={g.id} className="grid items-end gap-2 rounded-md bg-slate-950/50 p-2 sm:grid-cols-[minmax(0,1fr)_10rem_6rem_5rem_auto_auto]">
+              <Field label="Nome">
+                <TextInput value={g.name} onChange={(v) => setG(g.id, { name: v })} />
+              </Field>
+              <Field label="Quadro">
+                <Select value={g.boardId} options={boards.map((b) => b.id)} format={(v) => boards.find((b) => b.id === v)?.name ?? v} onChange={(v) => setG(g.id, { boardId: v })} />
+              </Field>
+              <Field label="IΔn">
+                <Select value={g.idnMa} options={[30, 100, 300, 500] as const} format={(v) => `${v} mA`} onChange={(v) => setG(g.id, { idnMa: v })} />
+              </Field>
+              <Field label="Tipo">
+                <Select value={g.type} options={['AC', 'A', 'F', 'B'] as const} onChange={(v) => setG(g.id, { type: v })} />
+              </Field>
+              <label className="flex items-center gap-1.5 pb-2 text-[0.75rem] text-slate-300">
+                <input type="checkbox" className="accent-sky-500" checked={g.s} onChange={(e) => setG(g.id, { s: e.target.checked })} /> S
+              </label>
+              <button
+                aria-label={`Elimina ${g.name}`}
+                onClick={() => up((x) => ({ ...x, rcdGroups: x.rcdGroups.filter((y) => y.id !== g.id), lines: x.lines.map((l) => (l.rcdGroup === g.id ? { ...l, rcdGroup: '', rcdMa: 30 } : l)) }))}
+                className="mb-1 rounded p-1.5 text-slate-400 hover:bg-slate-800 hover:text-red-300"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ------------------------------------------------------------------ 3. quadri e verifiche
 
 function BoardStep({ r }: { r: PlantResult }) {
   const p = usePlant();
+  const up = useImpianto((s) => s.update);
   const [open, setOpen] = useState<string | null>(null);
+  const [diagram, setDiagram] = useState('');
+  const board = r.boards.find((b) => b.id === diagram) ? diagram : '';
   return (
     <div className="space-y-4">
       <Card title="Quadro generale" right={<StatusIcon s={r.main.status} size={16} />}>
         <CheckList checks={r.main.checks} />
+        {(r.pfc.suggestedKvar || p.pfcKvar > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3 text-[0.75rem]">
+            <span className="text-slate-400">Rifasamento sul quadro generale:</span>
+            <div className="w-[9rem]">
+              <Select<number> value={p.pfcKvar} options={[0, 5, 10, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150, 200, 250, 300, 400]} format={(v) => (v ? `${v} kvar` : 'nessuno')} onChange={(v) => up((x) => ({ ...x, pfcKvar: v }))} />
+            </div>
+            {r.pfc.suggestedKvar && p.pfcKvar !== r.pfc.suggestedKvar && (
+              <button onClick={() => up((x) => ({ ...x, pfcKvar: r.pfc.suggestedKvar! }))} className="rounded-md bg-sky-600 px-2 py-1 font-semibold text-white hover:bg-sky-500">
+                Usa {r.pfc.suggestedKvar} kvar (cos φ 0,95)
+              </button>
+            )}
+          </div>
+        )}
       </Card>
-      <Card title="Linee: protezioni e cavi">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[52rem] text-[0.75rem]">
-            <thead className="text-left text-[0.65625rem] uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-800">
-                <th className="py-1.5 pr-2 font-medium" />
-                <th className="py-1.5 pr-2 font-medium">Linea</th>
-                <th className="py-1.5 pr-2 font-medium">Ib</th>
-                <th className="py-1.5 pr-2 font-medium">Protezione</th>
-                <th className="py-1.5 pr-2 font-medium">Cavo</th>
-                <th className="py-1.5 pr-2 font-medium">Iz</th>
-                <th className="py-1.5 pr-2 font-medium">ΔV tot.</th>
-                <th className="py-1.5 pr-2 font-medium">Icc fondo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.lines.map((lr, i) => (
-                <LineRow key={lr.line.id} lr={lr} i={i} open={open === lr.line.id} toggle={() => setOpen(open === lr.line.id ? null : lr.line.id)} maxDrop={p.maxDropPct} />
+      {r.boards.map((b) => (
+        <Card key={b.id || 'qg'} title={b.id ? `Sottoquadro «${b.name}»` : 'Linee del quadro generale'} right={b.feeder ? <span className="text-[0.71875rem] text-slate-400">Icc al quadro {fA(b.lines[0]?.iccOriginA ?? 0)} · ΔV all'arrivo {f(b.feeder.dropTotPct, 2)}%</span> : null}>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[54rem] text-[0.75rem]">
+              <thead className="text-left text-[0.65625rem] uppercase tracking-wide text-slate-500">
+                <tr className="border-b border-slate-800">
+                  <th className="py-1.5 pr-2 font-medium" />
+                  <th className="py-1.5 pr-2 font-medium">Linea</th>
+                  <th className="py-1.5 pr-2 font-medium">Ib</th>
+                  <th className="py-1.5 pr-2 font-medium">Protezione</th>
+                  <th className="py-1.5 pr-2 font-medium">Cavo</th>
+                  <th className="py-1.5 pr-2 font-medium">Iz</th>
+                  <th className="py-1.5 pr-2 font-medium">ΔV tot.</th>
+                  <th className="py-1.5 pr-2 font-medium">Icc fondo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {b.lines.map((lr) => (
+                  <LineRow key={lr.line.id} lr={lr} open={open === lr.line.id} toggle={() => setOpen(open === lr.line.id ? null : lr.line.id)} maxDrop={p.maxDropPct} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {b.lines.length === 0 && <p className="text-[0.75rem] text-slate-400">Nessuna linea in questo quadro.</p>}
+        </Card>
+      ))}
+      <Card
+        title="Schema unifilare"
+        right={
+          r.boards.length > 1 ? (
+            <div className="flex flex-wrap gap-1">
+              {r.boards.map((b) => (
+                <button key={b.id || 'qg'} onClick={() => setDiagram(b.id)} className={`rounded px-2 py-1 text-[0.71875rem] ${board === b.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+                  {b.name}
+                </button>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {r.lines.length === 0 && <p className="text-[0.75rem] text-slate-400">Aggiungi le linee nel passo precedente.</p>}
-      </Card>
-      <Card title="Schema unifilare">
-        <Diagram />
+            </div>
+          ) : null
+        }
+      >
+        <Diagram r={r} boardId={board} />
       </Card>
     </div>
   );
 }
 
-function LineRow({ lr, i, open, toggle, maxDrop }: { lr: LineResult; i: number; open: boolean; toggle: () => void; maxDrop: number }) {
+function LineRow({ lr, open, toggle, maxDrop }: { lr: LineResult; open: boolean; toggle: () => void; maxDrop: number }) {
   const up = useImpianto((s) => s.update);
   const l = lr.line;
   const setLine = (patch: Partial<PlantLine>) => up((x) => ({ ...x, lines: x.lines.map((y) => (y.id === l.id ? { ...y, ...patch } : y)) }));
+  const rcdText = lr.line.rcdGroup ? ` · gruppo` : l.rcdMa ? ` · ${l.rcdMa} mA ${l.rcdType}` : '';
   return (
     <>
       <tr className="cursor-pointer border-b border-slate-800/70 hover:bg-slate-800/40" onClick={toggle}>
@@ -564,19 +722,20 @@ function LineRow({ lr, i, open, toggle, maxDrop }: { lr: LineResult; i: number; 
           </div>
         </td>
         <td className="py-1.5 pr-2">
-          <span className="font-mono text-slate-500">Q{i + 1}</span> <span className="text-slate-100">{l.name}</span>
+          <span className="font-mono text-slate-500">{lr.tag}</span> <span className="text-slate-100">{l.name}</span>
           {lr.phase && <span className="ml-1 text-[0.6875rem] text-slate-500">L{lr.phase}</span>}
+          {l.bathroom && <span className="ml-1 text-[0.6875rem] text-sky-300">bagno</span>}
         </td>
         <td className="py-1.5 pr-2 font-mono">{f(lr.ibA, 1)} A</td>
         <td className="py-1.5 pr-2 font-mono">
           {lr.inA ? `${lr.inA > 63 ? 'In ' : l.curve}${lr.inA}` : '—'}
-          {l.inOverride ? '*' : ''} {l.phases === 3 ? '4P' : '1P+N'} · {lr.icuKA ?? '—'} kA{l.rcdMa ? ` · ${l.rcdMa} mA ${l.rcdType}` : ''}
+          {l.inOverride ? '*' : ''} · {lr.icuKA ?? '—'} kA{rcdText}
         </td>
         <td className="py-1.5 pr-2 font-mono">
           {lr.designation}
           {l.sectionOverride ? '*' : ''} · {f(l.lengthM, 0)} m
         </td>
-        <td className="py-1.5 pr-2 font-mono">{lr.iz ? fA(lr.iz.iz) : '—'}</td>
+        <td className="py-1.5 pr-2 font-mono">{lr.izA ? fA(lr.izA) : '—'}</td>
         <td className={`py-1.5 pr-2 font-mono ${lr.dropTotPct > maxDrop ? 'text-amber-200' : ''}`}>{f(lr.dropTotPct, 2)}%</td>
         <td className="py-1.5 pr-2 font-mono">{lr.iccMinA ? fA(lr.iccMinA) : '—'}</td>
       </tr>
@@ -591,11 +750,28 @@ function LineRow({ lr, i, open, toggle, maxDrop }: { lr: LineResult; i: number; 
                   <Select<number> value={l.inOverride ?? 0} options={[0, ...IN_ALL]} format={(v) => (v ? `${v} A` : `automatica (${lr.inA ?? '—'} A)`)} onChange={(v) => setLine({ inOverride: v || undefined })} />
                 </Field>
                 <Field label="Sezione" hint="Automatica = la più piccola che supera tutte le verifiche">
-                  <Select<number> value={l.sectionOverride ?? 0} options={[0, ...SECTIONS]} format={(v) => (v ? `${f(v, v % 1 ? 1 : 0)} mm²` : `automatica (${lr.section ? f(lr.section, lr.section % 1 ? 1 : 0) : '—'} mm²)`)} onChange={(v) => setLine({ sectionOverride: (v || undefined) as WireSection | undefined })} />
+                  <Select<number>
+                    value={l.sectionOverride ?? 0}
+                    options={[0, ...SECTIONS]}
+                    format={(v) => (v ? `${f(v, v % 1 ? 1 : 0)} mm²` : `automatica (${lr.designation})`)}
+                    onChange={(v) => setLine({ sectionOverride: (v || undefined) as WireSection | undefined })}
+                  />
                 </Field>
-                <Field label="Tipo di differenziale">
-                  <Select value={l.rcdType} options={['AC', 'A', 'F', 'B'] as const} onChange={(v) => setLine({ rcdType: v })} />
-                </Field>
+                {!l.rcdGroup && l.rcdMa > 0 && (
+                  <Field label="Tipo di differenziale">
+                    <Select value={l.rcdType} options={['AC', 'A', 'F', 'B'] as const} onChange={(v) => setLine({ rcdType: v })} />
+                  </Field>
+                )}
+                {l.kind === 'sottoquadro' && !l.rcdGroup && l.rcdMa > 0 && (
+                  <label className="flex items-center gap-1.5 text-[0.75rem] text-slate-300">
+                    <input type="checkbox" className="accent-sky-500" checked={!!l.rcdS} onChange={(e) => setLine({ rcdS: e.target.checked })} /> Differenziale selettivo (S)
+                  </label>
+                )}
+                {l.kind === 'motore' && (
+                  <Field label="Avviamento">
+                    <Select value={l.starting ?? 'diretto'} options={['diretto', 'stella-triangolo', 'inverter'] as const} onChange={(v) => setLine({ starting: v })} />
+                  </Field>
+                )}
               </div>
             </div>
           </td>
@@ -605,13 +781,12 @@ function LineRow({ lr, i, open, toggle, maxDrop }: { lr: LineResult; i: number; 
   );
 }
 
-function Diagram() {
+function Diagram({ r, boardId }: { r: PlantResult; boardId: string }) {
   const p = usePlant();
-  const r = useMemo(() => computePlant(p), [p]);
-  const d = useMemo(() => singleLine(p, r), [p, r]);
+  const d = useMemo(() => singleLine(p, r, boardId), [p, r, boardId]);
   return (
     <div className="overflow-x-auto rounded-md bg-slate-950 p-2">
-      <svg width={d.width} height={d.height} viewBox={`0 0 ${d.width} ${d.height}`} role="img" aria-label="Schema unifilare del quadro generale" className="block">
+      <svg width={d.width} height={d.height} viewBox={`0 0 ${d.width} ${d.height}`} role="img" aria-label="Schema unifilare del quadro" className="block">
         {d.prims.map((pr, i) => (
           <PrimSvg key={i} p={pr} />
         ))}
@@ -642,7 +817,73 @@ function PrimSvg({ p }: { p: Prim }) {
   );
 }
 
-// ------------------------------------------------------------------ 4. documenti
+// ------------------------------------------------------------------ 4. terra e materiali
+
+function EarthStep({ r }: { r: PlantResult }) {
+  const p = usePlant();
+  const up = useImpianto((s) => s.update);
+  const set = (patch: Partial<Plant>) => up((x) => ({ ...x, ...patch }));
+  const bom = useMemo(() => billOfMaterials(p, r), [p, r]);
+  const groups = [...new Set(bom.map((b) => b.group))];
+  return (
+    <div className="space-y-4">
+      <Card title="Impianto di terra">
+        {r.earth.tt && (
+          <div className="mb-3 grid gap-3 sm:grid-cols-3">
+            <Field label="Resistenza di terra di progetto RA">
+              <NumberInput value={p.raOhm} min={0.1} max={5000} suffix="Ω" onChange={(v) => set({ raOhm: v })} />
+            </Field>
+            <Field label="Resistività del terreno" hint="Argilla 20–100, terreno sabbioso 200–1000, roccia oltre 1000 Ω·m (valori indicativi)">
+              <NumberInput value={p.soilOhmM} min={1} max={10000} suffix="Ω·m" onChange={(v) => set({ soilOhmM: v })} />
+            </Field>
+            <Field label="Lunghezza dei picchetti">
+              <NumberInput value={p.rodLengthM} min={0.5} max={6} step={0.5} suffix="m" onChange={(v) => set({ rodLengthM: v })} />
+            </Field>
+          </div>
+        )}
+        <CheckList checks={r.earth.checks} />
+      </Card>
+      <Card
+        title="Computo dei materiali"
+        right={
+          <button
+            onClick={() => download(pdfName(p).replace('_relazione.pdf', '_materiali.csv'), new Blob([bomCsv(bom)], { type: 'text/csv;charset=utf-8' }))}
+            className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-1 text-[0.71875rem] text-slate-200 hover:bg-slate-800"
+          >
+            <FileSpreadsheet size={13} /> CSV
+          </button>
+        }
+      >
+        <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
+          Quantità ricavate dal progetto, senza prezzi e senza sfridi: per il preventivo servono i prezzi dei listini o di un prezzario regionale. Mancano scatole, tubi, canalizzazioni, frutti e apparecchi, che dipendono dalla planimetria.
+        </p>
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <div key={g}>
+              <div className="mb-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-slate-500">{g}</div>
+              <table className="w-full text-[0.75rem]">
+                <tbody>
+                  {bom
+                    .filter((b) => b.group === g)
+                    .map((b) => (
+                      <tr key={b.item + b.unit} className="border-b border-slate-800/60">
+                        <td className="py-1 pr-3 text-slate-200">{b.item}</td>
+                        <td className="w-24 py-1 text-right font-mono text-slate-100">
+                          {f(b.qty, 0)} {b.unit}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ 5. documenti
 
 function download(name: string, blob: Blob) {
   const a = document.createElement('a');
@@ -656,12 +897,18 @@ function DocsStep({ r }: { r: PlantResult }) {
   const p = usePlant();
   const up = useImpianto((s) => s.update);
   const [notes, setNotes] = useState(p.notes);
+  const openInLab = () => {
+    if (!window.confirm('Aprire il quadro generale nel laboratorio? Il progetto aperto ora nel laboratorio viene sostituito: salvalo prima, se ti serve.')) return;
+    const s = useStore.getState();
+    s.openProject(plantToProject(p));
+    s.setMode('lab');
+  };
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="space-y-4">
-        <Card title="Relazione tecnica e tabella dei cavi">
+        <Card title="Relazione tecnica e tabelle">
           <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
-            La relazione raccoglie dati generali, obbligo di progetto, bilancio delle potenze, dimensionamento e verifiche di ogni linea, ipotesi di calcolo e schema unifilare. La tabella dei cavi si apre in Excel.
+            La relazione raccoglie dati generali, obbligo di progetto, bilancio delle potenze, dimensionamento e verifiche di ogni linea, differenziali, impianto di terra, computo dei materiali, ipotesi di calcolo e lo schema unifilare di ogni quadro.
           </p>
           {r.errors > 0 && <p className="mb-3 text-[0.75rem] text-red-300">Ci sono {r.errors} verifiche da correggere: la relazione le riporta come tali.</p>}
           <div className="flex flex-wrap gap-2">
@@ -676,6 +923,14 @@ function DocsStep({ r }: { r: PlantResult }) {
             </button>
           </div>
         </Card>
+        <Card title="Prova il quadro nel laboratorio">
+          <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
+            Ricostruisce il quadro generale nel laboratorio con fornitura, protezioni, differenziali, cavi e utilizzatori del progetto: puoi simularlo, inserire guasti e misurare. I sottoquadri diventano un carico con la loro potenza contemporanea.
+          </p>
+          <button onClick={openInLab} className="flex items-center gap-1.5 rounded-md border border-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-sky-200 hover:bg-sky-600/20">
+            <FlaskConical size={14} /> Apri nel laboratorio
+          </button>
+        </Card>
         <Card title="Note del progettista">
           <textarea
             value={notes}
@@ -687,26 +942,26 @@ function DocsStep({ r }: { r: PlantResult }) {
           />
         </Card>
       </div>
-      <Card title="Cosa contiene un progetto vero">
+      <Card title="Cosa manca per un progetto completo">
         <ul className="space-y-2 text-[0.75rem] leading-snug text-slate-300">
-          <li>
-            <span className="font-semibold text-slate-100">Relazione tecnica</span> con i criteri e i calcoli: è quella che produce questa sezione, in forma di studio.
-          </li>
-          <li>
-            <span className="font-semibold text-slate-100">Schemi dei quadri</span>: unifilare e, per i quadri più complessi, i fronti quadro e gli schemi funzionali.
-          </li>
           <li>
             <span className="font-semibold text-slate-100">Planimetrie</span> con punti luce, prese, quadri e percorsi delle condutture, di solito disegnate in CAD.
           </li>
           <li>
-            <span className="font-semibold text-slate-100">Computo metrico</span> dei materiali e delle lavorazioni, con i prezzari.
+            <span className="font-semibold text-slate-100">Dotazioni minime delle abitazioni</span> (numero di prese e punti luce per livello): introdotte da una variante della CEI 64-8 successiva al 2007, non verificata qui.
           </li>
           <li>
-            <span className="font-semibold text-slate-100">Verifiche particolari</span> dove servono: illuminazione e luci di emergenza, rischio di fulminazione, luoghi speciali.
+            <span className="font-semibold text-slate-100">Sovratensioni e fulminazione</span>: scelta degli SPD e valutazione del rischio secondo la CEI EN 62305-2.
+          </li>
+          <li>
+            <span className="font-semibold text-slate-100">Illuminazione di emergenza</span> e altri luoghi della parte 7 (piscine, cantieri, locali medici).
+          </li>
+          <li>
+            <span className="font-semibold text-slate-100">Prezzi</span>: il computo dà le quantità, il preventivo richiede listini o prezzari.
           </li>
         </ul>
         <p className="mt-3 text-[0.6875rem] leading-snug text-slate-500">
-          Le verifiche di questa sezione richiamano la CEI 64-8:2007, letta sul testo come studio storico: l'edizione vigente è la IX (dal 1/11/2024). Portate dei cavi, curve e poteri di interruzione vanno confermati su tabelle CEI-UNEL e cataloghi dei costruttori.
+          Le verifiche richiamano la CEI 64-8:2007, letta sul testo come studio storico: l'edizione vigente è la IX (dal 1/11/2024) e alcune prescrizioni (per esempio i bagni) sono cambiate. Portate dei cavi, curve e poteri di interruzione vanno confermati su tabelle CEI-UNEL e cataloghi dei costruttori.
         </p>
       </Card>
     </div>

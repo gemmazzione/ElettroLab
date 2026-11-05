@@ -63,6 +63,8 @@ export const api = {
   pvgis: (lat: number, lon: number) => call<{ weather: unknown }>(`pvgis&lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`),
   pv: () => call<{ pv: unknown }>('pv'),
   savePv: (pv: unknown) => call<object>('pv_save', { pv }),
+  impianti: () => call<{ impianti: unknown }>('impianti'),
+  saveImpianti: (impianti: unknown) => call<object>('impianti_save', { impianti }),
   saveProject: (project: Project) => call<object>('project_save', { project }),
   deleteProject: (id: string) => call<object>('project_delete', { id }),
   state: () => call<{ current: Project | null; lessons: Record<string, unknown> | null; exercises: Record<string, unknown> | null; updatedAt: string | null }>('state'),

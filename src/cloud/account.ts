@@ -5,6 +5,7 @@ import type { Project } from '../model/types';
 import { clearStorageSpace, currentSpace, onPersist, setStorageSpace, withoutSync, type PersistEvent } from '../persistence/space';
 import { loadCurrent, replaceLibrary, storeCurrentLocal, validateProject } from '../persistence/storage';
 import { mergeLibraries, usePvDesign, validLibrary } from '../pvdesign/store';
+import { mergePlants, useImpianto, validPlants } from '../impianto/store';
 import { DEMO_PROJECTS } from '../projects/demos';
 import { useStore } from '../store/projectStore';
 import { api, ApiError, type AccountUser } from './api';
@@ -82,6 +83,7 @@ export const useAccount = create<AccountState>((set, get) => ({
     withoutSync(() => useStore.getState().openProject(loadCurrent() ?? DEMO_PROJECTS[0]!.build()));
     useStore.setState({ progress: loadProgress() });
     usePvDesign.getState().reload();
+    useImpianto.getState().reload();
     set({ phase: 'signed-out', user: null, sync: 'idle', syncError: null, dataVersion: get().dataVersion + 1 });
   },
 }));
@@ -95,7 +97,8 @@ const newer = (a: Project | null, b: Project | null): Project | null => {
 /** Carica i dati dell'account e attiva la sincronizzazione. */
 async function enterAccount(user: AccountUser, interactive: boolean): Promise<void> {
   // I progetti FV si leggono a parte: un server non ancora aggiornato non ha questa azione.
-  const [lib, state, pv] = await Promise.all([api.projects(), api.state(), api.pv().catch(() => null)]);
+  const [lib, state, pv, imp] = await Promise.all([api.projects(), api.state(), api.pv().catch(() => null), api.impianti().catch(() => null)]);
+  const beforeImp = { currentId: useImpianto.getState().currentId, plants: useImpianto.getState().plants };
   const before = useStore.getState().project;
   const beforePv = usePvDesign.getState().library;
   setStorageSpace(spaceOf(user));
@@ -116,9 +119,16 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
   const cloudPv = validLibrary(pv?.pv);
   const pvLib = mergeLibraries(cloudPv, interactive ? beforePv : validLibrary(localPvLibrary()));
   if (pvLib) withoutSync(() => usePvDesign.getState().replaceLibrary(pvLib));
+  // Progetti di «Progetta impianto»: si uniscono quelli dell'account e quelli del browser.
+  useImpianto.getState().reload();
+  const cloudImp = validPlants(imp?.impianti);
+  const localImp = validPlants({ currentId: useImpianto.getState().currentId, plants: useImpianto.getState().plants });
+  const impLib = mergePlants(cloudImp, interactive ? beforeImp : localImp);
+  if (impLib) withoutSync(() => useImpianto.getState().replace(impLib));
   useAccount.setState((s) => ({ phase: 'signed-in', user, dataVersion: s.dataVersion + 1, sync: 'idle', syncError: null }));
 
   if (pvLib && pv && JSON.stringify(pvLib) !== JSON.stringify(cloudPv)) queue({ type: 'pv', data: pvLib });
+  if (impLib && imp && JSON.stringify(impLib) !== JSON.stringify(cloudImp)) queue({ type: 'impianti', data: impLib });
   const accountCurrent = newer(cachedCurrent, cloudCurrent);
   if (!interactive) {
     // Sessione già aperta (ricarica della pagina): si riprende il lavoro dell'account.
@@ -140,6 +150,17 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
 const DEBOUNCE_MS = { current: 3000, lessons: 1000, exercises: 1000 } as const;
 let pvTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingPv: unknown = undefined;
+let impTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingImp: unknown = undefined;
+
+function flushImp(): Promise<void> {
+  if (impTimer) clearTimeout(impTimer);
+  impTimer = null;
+  if (pendingImp === undefined) return chain;
+  const data = pendingImp;
+  pendingImp = undefined;
+  return run(() => api.saveImpianti(data));
+}
 
 function flushPv(): Promise<void> {
   if (pvTimer) clearTimeout(pvTimer);
@@ -186,7 +207,7 @@ function flushState(): Promise<void> {
 }
 
 export function flushPending(): Promise<void> {
-  return flushPv().then(flushState);
+  return flushPv().then(flushImp).then(flushState);
 }
 
 function queue(e: PersistEvent): void {
@@ -211,6 +232,11 @@ function queue(e: PersistEvent): void {
       pendingPv = e.data;
       if (pvTimer) clearTimeout(pvTimer);
       pvTimer = setTimeout(() => void flushPv(), 4000);
+      return;
+    case 'impianti':
+      pendingImp = e.data;
+      if (impTimer) clearTimeout(impTimer);
+      impTimer = setTimeout(() => void flushImp(), 4000);
       return;
   }
   const wait = DEBOUNCE_MS[e.type];

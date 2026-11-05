@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { storageKey } from '../persistence/space';
+import { emitPersist, storageKey } from '../persistence/space';
 import { coherent, examplePlants, newId, normalizePlant, type Plant } from './model';
 
 /** Progetti di «Progetta impianto» salvati nel browser (memoria locale dello spazio corrente). */
@@ -25,12 +25,42 @@ function read(): Saved | null {
   }
 }
 
-function write(s: Saved): void {
+function write(s: Saved, sync = true): void {
   try {
     localStorage.setItem(storageKey(KEY), JSON.stringify(s));
   } catch {
     /* memoria locale non disponibile o piena */
   }
+  if (sync) emitPersist({ type: 'impianti', data: { currentId: s.currentId, plants: s.plants } });
+}
+
+/** Elenco valido letto dall'account o dalla memoria locale. */
+export function validPlants(x: unknown): { currentId: string; plants: Plant[] } | null {
+  if (!x || typeof x !== 'object') return null;
+  const o = x as { currentId?: unknown; plants?: unknown };
+  if (!Array.isArray(o.plants)) return null;
+  const plants: Plant[] = [];
+  for (const raw of o.plants) {
+    try {
+      plants.push(normalizePlant(raw));
+    } catch {
+      /* progetto non leggibile: si salta */
+    }
+  }
+  if (!plants.length) return null;
+  return { currentId: typeof o.currentId === 'string' && plants.some((p) => p.id === o.currentId) ? o.currentId : plants[0]!.id, plants };
+}
+
+/** Unisce due elenchi tenendo per ogni progetto la versione modificata più di recente. */
+export function mergePlants(a: { currentId: string; plants: Plant[] } | null, b: { currentId: string; plants: Plant[] } | null) {
+  if (!a) return b;
+  if (!b) return a;
+  const map = new Map<string, Plant>();
+  for (const x of [...a.plants, ...b.plants]) {
+    const prev = map.get(x.id);
+    if (!prev || x.updated > prev.updated) map.set(x.id, x);
+  }
+  return { currentId: a.currentId, plants: [...map.values()].sort((x, y) => (x.updated < y.updated ? 1 : -1)) };
 }
 
 interface ImpiantoStore {
@@ -45,6 +75,8 @@ interface ImpiantoStore {
   open: (id: string) => void;
   remove: (id: string) => void;
   reload: () => void;
+  /** Sostituisce l'elenco (dati dell'account) senza rimandarlo al server. */
+  replace: (lib: { currentId: string; plants: Plant[] }) => void;
 }
 
 function initial(): Saved {
@@ -65,7 +97,7 @@ export const useImpianto = create<ImpiantoStore>((set, get) => {
     setStep: (n) => persist({ step: n }),
     update: (fn) => {
       const { plants, currentId } = get();
-      persist({ plants: plants.map((p) => (p.id === currentId ? coherent(fn(p)) : p)) });
+      persist({ plants: plants.map((p) => (p.id === currentId ? { ...coherent(fn(p)), updated: new Date().toISOString() } : p)) });
     },
     create: (exampleId) => {
       const ex = examplePlants().find((e) => e.id === exampleId) ?? examplePlants()[0]!;
@@ -84,6 +116,11 @@ export const useImpianto = create<ImpiantoStore>((set, get) => {
       persist({ plants, currentId: plants.some((p) => p.id === get().currentId) ? get().currentId : plants[0]!.id });
     },
     reload: () => set(initial()),
+    replace: (lib) => {
+      const next = { ...lib, step: get().step };
+      write(next, false);
+      set(next);
+    },
   };
 });
 
