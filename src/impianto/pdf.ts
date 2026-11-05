@@ -4,7 +4,8 @@ import { pdfSafe } from '../export/reportData';
 import { billOfMaterials, f, fA, type BomRow, type PlantResult } from './calc';
 import { DEVICE_LABEL, KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from './model';
 import { planExtent, routes } from './plan';
-import { singleLine } from './unifilare';
+import { singleLine, type Diagram } from './unifilare';
+import { multiLine, WIRE_PRINT } from './multifilare';
 
 const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
@@ -213,7 +214,16 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
     doc.addPage('a4', 'landscape');
     doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
     doc.text(T(`Schema unifilare: ${bd.name}`), MARGIN, MARGIN + 2);
-    drawDiagram(doc, p, r, bd.id, MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
+    drawDiagram(doc, singleLine(p, r, bd.id), MARGIN, MARGIN + 8, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 10);
+  }
+  // Schema multifilare di ogni quadro
+  for (const bd of r.boards) {
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+    doc.text(T(`Schema multifilare: ${bd.name}`), MARGIN, MARGIN + 2);
+    doc.setFont('helvetica', 'normal').setFontSize(7.5).setTextColor(...MUTED);
+    doc.text(T('Fasi L1 marrone, L2 nero, L3 grigio; neutro blu; PE giallo-verde (tratteggiato).'), MARGIN, MARGIN + 7);
+    drawDiagram(doc, multiLine(p, r, bd.id), MARGIN, MARGIN + 11, 297 - 2 * MARGIN, 210 - 2 * MARGIN - 13);
   }
   return doc;
 }
@@ -271,20 +281,25 @@ function drawPlan(doc: jsPDF, p: Plant, r: PlantResult, ox: number, oy: number, 
   }
 }
 
-function drawDiagram(doc: jsPDF, p: Plant, r: PlantResult, boardId: string, ox: number, oy: number, w: number, h: number): void {
-  const d = singleLine(p, r, boardId);
+function drawDiagram(doc: jsPDF, d: Diagram, ox: number, oy: number, w: number, h: number): void {
   const k = Math.min(w / d.width, h / d.height);
   const X = (v: number) => ox + v * k;
   const Y = (v: number) => oy + v * k;
   for (const pr of d.prims) {
     doc.setDrawColor(...INK).setLineWidth(0.25);
     if (pr.t === 'line') {
-      doc.setLineWidth(pr.bold ? 0.9 : 0.25);
+      if (pr.wire) doc.setDrawColor(...WIRE_PRINT[pr.wire]);
+      doc.setLineWidth(pr.bold ? 0.9 : pr.wire ? 0.35 : 0.25);
+      if (pr.dash) doc.setLineDashPattern([1.2, 0.8], 0);
       doc.line(X(pr.x1), Y(pr.y1), X(pr.x2), Y(pr.y2));
+      if (pr.dash) doc.setLineDashPattern([], 0);
     } else if (pr.t === 'rect') {
       if (pr.tone && pr.tone !== 'ok') doc.setDrawColor(...TONE[pr.tone]!);
       doc.rect(X(pr.x), Y(pr.y), pr.w * k, pr.h * k);
-    } else if (pr.t === 'circle') doc.circle(X(pr.cx), Y(pr.cy), pr.r * k);
+    } else if (pr.t === 'circle') {
+      if (pr.dot) doc.setFillColor(...WIRE_PRINT[pr.dot]).circle(X(pr.cx), Y(pr.cy), pr.r * k, 'F');
+      else doc.circle(X(pr.cx), Y(pr.cy), pr.r * k);
+    }
     else {
       const pt = pr.size * k * 2.83;
       doc.setFont('helvetica', pr.bold ? 'bold' : 'normal').setFontSize(pt).setTextColor(...(pr.muted ? MUTED : INK));

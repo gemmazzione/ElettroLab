@@ -1,6 +1,7 @@
 import { cabinImpedance } from '../model/cabin';
 import { catalogItem } from '../model/catalog';
-import type { ComponentInstance, Project, WireSection } from '../model/types';
+import { buildComb, COMB_RATED_A } from '../model/comb';
+import type { CombType, ComponentInstance, Project, WireSection } from '../model/types';
 import { ProjectBuilder, t } from '../projects/demos';
 import { computePlant, f, isMccb, SECTIONS, sourceImpedance, type LineResult, type PlantResult } from './calc';
 import { isThreePhaseSupply, type Plant } from './model';
@@ -118,30 +119,64 @@ export function plantToProject(p: Plant): Project {
       }
       groupDev.set(g.group.id, rd);
     }
-    // Linee
-    bd.lines.forEach((lr: LineResult, i) => {
+    // Linee. Prima passata: interruttori delle linee, affiancati per sorgente (sbarra o differenziale di gruppo)
+    // e per poli, così gli ingressi si collegano con un pettine invece che con un cavo per dispositivo.
+    const specs = bd.lines.map((lr: LineResult, i) => {
       const l = lr.line;
       const inA = lr.inA ?? 16;
-      const sec = labSection((lr.section ?? 2.5) * lr.parallel);
       const mono = l.phases === 1;
       const neutral = mono || l.withNeutral || !!lr.sub;
       const grp = l.rcdGroup ? groupDev.get(l.rcdGroup) : undefined;
       const ownRcd = !l.rcdGroup && l.rcdMa > 0;
       const useRcbo = mono && ownRcd && inA <= 32 && !isMccb(inA);
-      const devId = useRcbo ? 'rcbo-1pn' : breakerId(inA, l.phases, neutral);
-      const q = b.add(devId, place(devId), (c) => {
-        c.label = lr.tag;
-        c.closed = true;
-        setBreaker(c, inA, l.curve, lr.icuKA);
-        if (useRcbo && c.params.kind === 'rcbo') c.params.p = { ...c.params.p, idn: l.rcdMa, rcdType: l.rcdType as never };
-      });
+      const grp2 = !!grp && grp.catalogId === 'rcd-2p';
       const ph = (lr.phase ?? 1) - 1;
-      const from = grp ?? bus2;
-      const grp2 = grp && grp.catalogId === 'rcd-2p';
-      if (mono) {
-        if (grp2) b.wire(t(from, outK(0)), t(q, inK(0)), sec, 0.2).wire(t(from, outK(1)), t(q, inK(1)), sec, 0.2);
-        else b.wire(busOut(from, busTri ? ph : 0), t(q, inK(0)), sec, 0.2).wire(busOut(from, busTri ? 3 : 1), t(q, inK(1)), sec, 0.2);
-      } else for (let k = 0; k < (neutral ? 4 : 3); k++) b.wire(busOut(from, k), t(q, inK(k)), sec, 0.2);
+      const comb: CombType | null = isMccb(inA) ? null : mono ? '1P+N' : neutral ? '3P+N' : '3P';
+      // Sorgente comune: stesso dispositivo a monte, stessi poli e, per le monofase in un quadro trifase, stessa fase.
+      const key = `${l.rcdGroup || 'bus'}|${comb ?? `x${l.id}`}|${mono && busTri && !grp2 ? ph : ''}`;
+      return { lr, i, l, inA, mono, neutral, grp, grp2, ownRcd, useRcbo, ph, comb, key, sec: labSection((lr.section ?? 2.5) * lr.parallel), devId: useRcbo ? 'rcbo-1pn' : breakerId(inA, l.phases, neutral), q: null as ComponentInstance | null };
+    });
+    const keys = [...new Set(specs.map((x) => x.key))];
+    for (const k of keys) {
+      const run = specs.filter((x) => x.key === k);
+      for (const sp of run)
+        sp.q = b.add(sp.devId, place(sp.devId), (c) => {
+          c.label = sp.lr.tag;
+          c.closed = true;
+          setBreaker(c, sp.inA, sp.l.curve, sp.lr.icuKA);
+          if (sp.useRcbo && c.params.kind === 'rcbo') c.params.p = { ...c.params.p, idn: sp.l.rcdMa, rcdType: sp.l.rcdType as never };
+        });
+      // Pettine solo se la protezione a monte non supera la corrente del pettine.
+      const first = run[0]!;
+      const srcIn = first.grp ? (res.groups.find((g) => g.group.id === first.l.rcdGroup)?.inA ?? 999) : boardId ? (res.lines.find((x) => x.line.id === boardId)?.inA ?? 999) : (res.main.inA ?? 999);
+      const feed = (sp: (typeof specs)[number]) => {
+        const q = sp.q!;
+        const from = sp.grp ?? bus2;
+        if (sp.mono) {
+          if (sp.grp2) b.wire(t(from, outK(0)), t(q, inK(0)), sp.sec, 0.2).wire(t(from, outK(1)), t(q, inK(1)), sp.sec, 0.2);
+          else b.wire(busOut(from, busTri ? sp.ph : 0), t(q, inK(0)), sp.sec, 0.2).wire(busOut(from, busTri ? 3 : 1), t(q, inK(1)), sp.sec, 0.2);
+        } else for (let n = 0; n < (sp.neutral ? 4 : 3); n++) b.wire(busOut(from, n), t(q, inK(n)), sp.sec, 0.2);
+      };
+      // Tratti contigui sulla stessa fila: il primo riceve i cavi, gli altri il pettine.
+      let i = 0;
+      while (i < run.length) {
+        let j = i + 1;
+        const w = (c: ComponentInstance) => catalogItem(c.catalogId).modules;
+        while (j < run.length && run[j]!.q!.rail!.row === run[j - 1]!.q!.rail!.row && run[j]!.q!.rail!.slot === run[j - 1]!.q!.rail!.slot + w(run[j - 1]!.q!)) j++;
+        feed(run[i]!);
+        const chunk = run.slice(i, j);
+        const combed = chunk.length > 1 && first.comb && srcIn <= COMB_RATED_A ? buildComb(b.project, first.comb, { ...run[i]!.q!.rail! }, chunk.length) : null;
+        if (combed && combed.ok) {
+          b.project.wires.push(...combed.wires);
+          for (const sp of chunk) if (!combed.devices.includes(sp.q!)) feed(sp);
+        } else for (const sp of chunk.slice(1)) feed(sp);
+        i = j;
+      }
+    }
+    // Seconda passata: differenziali propri, sottoquadri e utilizzatori
+    specs.forEach((sp) => {
+      const { lr, i, l, inA, mono, neutral, ownRcd, useRcbo, sec } = sp;
+      const q = sp.q!;
       let out = q;
       if (ownRcd && !useRcbo) {
         const rd = b.add(mono ? 'rcd-2p' : 'rcd-4p', place(mono ? 'rcd-2p' : 'rcd-4p'), (c) => {

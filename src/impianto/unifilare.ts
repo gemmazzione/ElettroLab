@@ -7,10 +7,13 @@ import type { Plant } from './model';
  * di gruppo con la loro sbarra e una colonna per linea con interruttore, differenziale proprio, cavo e utilizzatore.
  */
 
+/** Colore del conduttore (schema multifilare): fasi, neutro blu, PE giallo-verde. */
+export type Wire = 'L1' | 'L2' | 'L3' | 'N' | 'PE';
+
 export type Prim =
-  | { t: 'line'; x1: number; y1: number; x2: number; y2: number; bold?: boolean }
+  | { t: 'line'; x1: number; y1: number; x2: number; y2: number; bold?: boolean; wire?: Wire; dash?: boolean }
   | { t: 'rect'; x: number; y: number; w: number; h: number; tone?: 'ok' | 'warn' | 'error' }
-  | { t: 'circle'; cx: number; cy: number; r: number }
+  | { t: 'circle'; cx: number; cy: number; r: number; dot?: Wire }
   | { t: 'text'; x: number; y: number; s: string; size: number; anchor?: 'start' | 'middle' | 'end'; muted?: boolean; rot?: boolean; bold?: boolean };
 
 export interface Diagram {

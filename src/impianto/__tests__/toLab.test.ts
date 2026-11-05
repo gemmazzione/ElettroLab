@@ -32,3 +32,17 @@ describe('Progetta impianto → laboratorio: sottoquadri e SPD', () => {
     expect(r.ok).toBe(true);
   });
 });
+
+describe('Progetta impianto → laboratorio: pettini', () => {
+  it('le linee della stessa sorgente sono collegate con un pettine', () => {
+    for (const id of ['appartamento', 'negozio']) {
+      const pr = plantToProject(examplePlants().find((e) => e.id === id)!.make());
+      expect(pr.wires.some((w) => w.comb), id).toBe(true);
+    }
+  });
+  it('nessun pettine a valle di una protezione oltre 63 A (generale dell\'officina da 100 A)', () => {
+    const pr = plantToProject(examplePlants().find((e) => e.id === 'officina')!.make());
+    const qg = pr.components.find((c) => c.label === 'QG')!;
+    expect(pr.wires.some((w) => w.comb && w.from.startsWith(qg.id))).toBe(false);
+  });
+});

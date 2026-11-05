@@ -7,6 +7,7 @@ import { plantToProject } from '../impianto/toLab';
 import { useStore } from '../store/projectStore';
 import { currentPlant, useImpianto } from '../impianto/store';
 import { singleLine, type Prim } from '../impianto/unifilare';
+import { multiLine, WIRE_SCREEN } from '../impianto/multifilare';
 import { TRANSFORMER_SIZES } from '../model/cabin';
 import { INSTALL_METHODS, type InstallMethod, type Insulation } from '../rules/ampacity';
 import type { WireSection } from '../model/types';
@@ -647,6 +648,7 @@ function BoardStep({ r }: { r: PlantResult }) {
   const up = useImpianto((s) => s.update);
   const [open, setOpen] = useState<string | null>(null);
   const [diagram, setDiagram] = useState('');
+  const [multi, setMulti] = useState(false);
   const board = r.boards.find((b) => b.id === diagram) ? diagram : '';
   return (
     <div className="space-y-4">
@@ -693,20 +695,39 @@ function BoardStep({ r }: { r: PlantResult }) {
         </Card>
       ))}
       <Card
-        title="Schema unifilare"
+        title={multi ? 'Schema multifilare' : 'Schema unifilare'}
         right={
-          r.boards.length > 1 ? (
-            <div className="flex flex-wrap gap-1">
-              {r.boards.map((b) => (
-                <button key={b.id || 'qg'} onClick={() => setDiagram(b.id)} className={`rounded px-2 py-1 text-[0.71875rem] ${board === b.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
-                  {b.name}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-md bg-slate-950 p-0.5" role="group" aria-label="Tipo di schema">
+              {(['Unifilare', 'Multifilare'] as const).map((t, i) => (
+                <button key={t} onClick={() => setMulti(i === 1)} aria-pressed={multi === (i === 1)} className={`rounded px-2 py-1 text-[0.71875rem] ${multi === (i === 1) ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'}`}>
+                  {t}
                 </button>
               ))}
             </div>
-          ) : null
+            {r.boards.length > 1 && (
+              <div className="flex flex-wrap gap-1">
+                {r.boards.map((b) => (
+                  <button key={b.id || 'qg'} onClick={() => setDiagram(b.id)} className={`rounded px-2 py-1 text-[0.71875rem] ${board === b.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+                    {b.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         }
       >
-        <Diagram r={r} boardId={board} />
+        {multi && (
+          <p className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] text-slate-400">
+            {(['L1', 'L2', 'L3', 'N', 'PE'] as const).map((w) => (
+              <span key={w} className="flex items-center gap-1">
+                <span className="inline-block h-0.5 w-4" style={{ background: WIRE_SCREEN[w] }} />
+                {w === 'N' ? 'N (blu)' : w === 'PE' ? 'PE (giallo-verde)' : w}
+              </span>
+            ))}
+          </p>
+        )}
+        <Diagram r={r} boardId={board} multi={multi} />
       </Card>
     </div>
   );
@@ -786,9 +807,9 @@ function LineRow({ lr, open, toggle, maxDrop }: { lr: LineResult; open: boolean;
   );
 }
 
-function Diagram({ r, boardId }: { r: PlantResult; boardId: string }) {
+function Diagram({ r, boardId, multi }: { r: PlantResult; boardId: string; multi: boolean }) {
   const p = usePlant();
-  const d = useMemo(() => singleLine(p, r, boardId), [p, r, boardId]);
+  const d = useMemo(() => (multi ? multiLine(p, r, boardId) : singleLine(p, r, boardId)), [p, r, boardId, multi]);
   return (
     <div className="overflow-x-auto rounded-md bg-slate-950 p-2">
       <svg width={d.width} height={d.height} viewBox={`0 0 ${d.width} ${d.height}`} role="img" aria-label="Schema unifilare del quadro" className="block">
@@ -803,9 +824,9 @@ function Diagram({ r, boardId }: { r: PlantResult; boardId: string }) {
 const STROKE = { ok: '#94a3b8', warn: '#fbbf24', error: '#f87171' } as const;
 
 function PrimSvg({ p }: { p: Prim }) {
-  if (p.t === 'line') return <line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke="#cbd5e1" strokeWidth={p.bold ? 3 : 1.2} />;
+  if (p.t === 'line') return <line x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.wire ? WIRE_SCREEN[p.wire] : '#cbd5e1'} strokeWidth={p.bold ? 3 : p.wire ? 1.4 : 1.2} strokeDasharray={p.dash ? '5 3' : undefined} />;
   if (p.t === 'rect') return <rect x={p.x} y={p.y} width={p.w} height={p.h} rx={2} fill="#0f172a" stroke={STROKE[p.tone ?? 'ok']} strokeWidth={1.4} />;
-  if (p.t === 'circle') return <circle cx={p.cx} cy={p.cy} r={p.r} fill="#0f172a" stroke="#cbd5e1" strokeWidth={1.2} />;
+  if (p.t === 'circle') return p.dot ? <circle cx={p.cx} cy={p.cy} r={p.r} fill={WIRE_SCREEN[p.dot]} /> : <circle cx={p.cx} cy={p.cy} r={p.r} fill="#0f172a" stroke="#cbd5e1" strokeWidth={1.2} />;
   return (
     <text
       x={p.x}
