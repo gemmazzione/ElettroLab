@@ -165,6 +165,11 @@ function ensureExtras(): void
         $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN pv MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN pv TEXT NULL');
     }
     try {
+        $pdo->query('SELECT cei FROM el_state LIMIT 1');
+    } catch (PDOException $e) {
+        $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN cei MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN cei TEXT NULL');
+    }
+    try {
         $pdo->query('SELECT impianti FROM el_state LIMIT 1');
     } catch (PDOException $e) {
         $pdo->exec(isMysql() ? 'ALTER TABLE el_state ADD COLUMN impianti MEDIUMTEXT NULL' : 'ALTER TABLE el_state ADD COLUMN impianti TEXT NULL');

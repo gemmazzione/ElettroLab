@@ -2,13 +2,15 @@ import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, GraduationCap, LogOu
 import { useState } from 'react';
 import { LESSONS, loadLessonProgress } from '../academy/lessons';
 import { LessonsView } from './Lessons';
+import { CeiPathView } from './CeiPath';
+import { ALL_CARDS } from '../academy/cei';
 import { EXERCISES, exerciseById } from '../academy/exercises';
 import { LEVELS, type Task } from '../academy/types';
 import { catalogItem } from '../model/catalog';
 import { useStore } from '../store/projectStore';
 
 /** Scheda aperta dell'Accademia (ricordata durante la sessione). */
-let lastTab: 'lezioni' | 'esercizi' = 'lezioni';
+let lastTab: 'lezioni' | 'esercizi' | 'cei' = 'lezioni';
 
 /** Pagina dell'Accademia: lezioni per tema e livello, esercizi nel simulatore. */
 export function AcademyView() {
@@ -49,7 +51,7 @@ export function AcademyView() {
           </div>
         </div>
         <div className="mb-6 flex gap-1 border-b border-slate-800" role="tablist">
-          {(['lezioni', 'esercizi'] as const).map((t) => (
+          {(['lezioni', 'esercizi', 'cei'] as const).map((t) => (
             <button
               key={t}
               role="tab"
@@ -57,11 +59,12 @@ export function AcademyView() {
               onClick={() => setTab(t)}
               className={`-mb-px border-b-2 px-4 py-2 text-[0.84375rem] font-semibold ${tab === t ? 'border-amber-400 text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
             >
-              {t === 'lezioni' ? `Lezioni (${LESSONS.length})` : `Esercizi nel simulatore (${EXERCISES.length})`}
+              {t === 'lezioni' ? `Lezioni (${LESSONS.length})` : t === 'esercizi' ? `Esercizi nel simulatore (${EXERCISES.length})` : `Percorso CEI 64-8 (${ALL_CARDS.length} schede)`}
             </button>
           ))}
         </div>
         {tab === 'lezioni' && <LessonsView progress={lessonProgress} setProgress={setLessonProgress} />}
+        {tab === 'cei' && <CeiPathView />}
         {tab === 'esercizi' && LEVELS.map((l) => (
           <section key={l.level} className="mb-8">
             <div className="mb-3 flex items-baseline gap-3">

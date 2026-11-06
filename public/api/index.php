@@ -204,6 +204,26 @@ try {
             upsertState($u['id'], ['pv' => $json]);
             ok();
 
+        // -------------------------------------------------------------- ripasso del percorso CEI 64-8
+        case 'cei':
+            $u = requireUser();
+            ensureExtras();
+            $st = db()->prepare('SELECT cei FROM el_state WHERE user_id = ?');
+            $st->execute([$u['id']]);
+            $v = $st->fetchColumn();
+            ok(['cei' => is_string($v) ? json_decode($v, true) : null]);
+
+        case 'cei_save':
+            $u = requireUser();
+            ensureExtras();
+            $b = body();
+            $json = json_encode($b['cei'] ?? null, JSON_UNESCAPED_UNICODE);
+            if ($json === false || strlen($json) > MAX_STATE_BYTES) {
+                fail(413, 'Dati troppo grandi.');
+            }
+            upsertState($u['id'], ['cei' => $json]);
+            ok();
+
         // -------------------------------------------------------------- progetti di «Progetta impianto»
         case 'impianti':
             $u = requireUser();

@@ -45,7 +45,8 @@ export type PersistEvent =
   | { type: 'lessons'; data: unknown }
   | { type: 'exercises'; data: unknown }
   | { type: 'pv'; data: unknown }
-  | { type: 'impianti'; data: unknown };
+  | { type: 'impianti'; data: unknown }
+  | { type: 'cei'; data: unknown };
 
 type Listener = (e: PersistEvent) => void;
 const listeners = new Set<Listener>();

@@ -6,6 +6,7 @@ import { clearStorageSpace, currentSpace, onPersist, setStorageSpace, withoutSyn
 import { loadCurrent, replaceLibrary, storeCurrentLocal, validateProject } from '../persistence/storage';
 import { mergeLibraries, usePvDesign, validLibrary } from '../pvdesign/store';
 import { mergePlants, useImpianto, validPlants } from '../impianto/store';
+import { loadCeiProgress, mergeCeiProgress, replaceCeiProgress, type CeiProgress } from '../academy/cei';
 import { DEMO_PROJECTS } from '../projects/demos';
 import { useStore } from '../store/projectStore';
 import { api, ApiError, type AccountUser } from './api';
@@ -97,7 +98,8 @@ const newer = (a: Project | null, b: Project | null): Project | null => {
 /** Carica i dati dell'account e attiva la sincronizzazione. */
 async function enterAccount(user: AccountUser, interactive: boolean): Promise<void> {
   // I progetti FV si leggono a parte: un server non ancora aggiornato non ha questa azione.
-  const [lib, state, pv, imp] = await Promise.all([api.projects(), api.state(), api.pv().catch(() => null), api.impianti().catch(() => null)]);
+  const [lib, state, pv, imp, cei] = await Promise.all([api.projects(), api.state(), api.pv().catch(() => null), api.impianti().catch(() => null), api.cei().catch(() => null)]);
+  const beforeCei = loadCeiProgress();
   const beforeImp = { currentId: useImpianto.getState().currentId, plants: useImpianto.getState().plants };
   const before = useStore.getState().project;
   const beforePv = usePvDesign.getState().library;
@@ -125,10 +127,15 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
   const localImp = validPlants({ currentId: useImpianto.getState().currentId, plants: useImpianto.getState().plants });
   const impLib = mergePlants(cloudImp, interactive ? beforeImp : localImp);
   if (impLib) withoutSync(() => useImpianto.getState().replace(impLib));
+  // Ripasso del percorso CEI 64-8
+  const cloudCei = cei?.cei && typeof cei.cei === 'object' ? (cei.cei as CeiProgress) : null;
+  const ceiAll = mergeCeiProgress(cloudCei, interactive ? beforeCei : loadCeiProgress());
+  replaceCeiProgress(ceiAll);
   useAccount.setState((s) => ({ phase: 'signed-in', user, dataVersion: s.dataVersion + 1, sync: 'idle', syncError: null }));
 
   if (pvLib && pv && JSON.stringify(pvLib) !== JSON.stringify(cloudPv)) queue({ type: 'pv', data: pvLib });
   if (impLib && imp && JSON.stringify(impLib) !== JSON.stringify(cloudImp)) queue({ type: 'impianti', data: impLib });
+  if (cei && JSON.stringify(ceiAll) !== JSON.stringify(cloudCei ?? {})) queue({ type: 'cei', data: ceiAll });
   const accountCurrent = newer(cachedCurrent, cloudCurrent);
   if (!interactive) {
     // Sessione già aperta (ricarica della pagina): si riprende il lavoro dell'account.
@@ -150,6 +157,17 @@ async function enterAccount(user: AccountUser, interactive: boolean): Promise<vo
 const DEBOUNCE_MS = { current: 3000, lessons: 1000, exercises: 1000 } as const;
 let pvTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingPv: unknown = undefined;
+let ceiTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingCei: unknown = undefined;
+
+function flushCei(): Promise<void> {
+  if (ceiTimer) clearTimeout(ceiTimer);
+  ceiTimer = null;
+  if (pendingCei === undefined) return chain;
+  const data = pendingCei;
+  pendingCei = undefined;
+  return run(() => api.saveCei(data));
+}
 let impTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingImp: unknown = undefined;
 
@@ -207,7 +225,7 @@ function flushState(): Promise<void> {
 }
 
 export function flushPending(): Promise<void> {
-  return flushPv().then(flushImp).then(flushState);
+  return flushPv().then(flushImp).then(flushCei).then(flushState);
 }
 
 function queue(e: PersistEvent): void {
@@ -232,6 +250,11 @@ function queue(e: PersistEvent): void {
       pendingPv = e.data;
       if (pvTimer) clearTimeout(pvTimer);
       pvTimer = setTimeout(() => void flushPv(), 4000);
+      return;
+    case 'cei':
+      pendingCei = e.data;
+      if (ceiTimer) clearTimeout(ceiTimer);
+      ceiTimer = setTimeout(() => void flushCei(), 3000);
       return;
     case 'impianti':
       pendingImp = e.data;
