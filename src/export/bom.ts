@@ -30,7 +30,7 @@ export function itemSpec(c: ComponentInstance): string {
     case 'mcb':
       return `${pr.p.poles} curva ${pr.p.curve} ${pr.p.in} A, Icn ${f(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`;
     case 'rcbo':
-      return `${pr.p.poles} curva ${pr.p.curve} ${pr.p.in} A, IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}, Icn ${f(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`;
+      return `${pr.p.poles} curva ${pr.p.curve} ${pr.p.in} A${pr.p.block ? ' con blocco differenziale associato' : ''}, IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}${pr.p.selective ? ' selettivo' : ''}, Icn ${f(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`;
     case 'rcd':
       return `${pr.p.poles} ${pr.p.in} A, IΔn ${pr.p.idn} mA tipo ${pr.p.rcdType}${pr.p.selective ? ' selettivo' : ''}`;
     case 'switch':

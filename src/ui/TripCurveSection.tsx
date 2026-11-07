@@ -26,7 +26,7 @@ export function TripCurveSection({ comp }: { comp: ComponentInstance }) {
   const live = running && result && result.ok;
   const point = live && (pr.kind === 'mcb' || pr.kind === 'rcbo' || pr.kind === 'fuse') ? { current: protectedCurrent(result, comp), heat } : null;
   const residual = live && (pr.kind === 'rcd' || pr.kind === 'rcbo') ? (result.residual.get(comp.id) ?? 0) : null;
-  const selective = pr.kind === 'rcd' && pr.p.selective;
+  const selective = (pr.kind === 'rcd' || pr.kind === 'rcbo') && !!pr.p.selective;
   // Interruttori regolabili: curva riferita a Ir, fascia magnetica dalla soglia Im.
   const ref = pr.kind === 'mcb' ? thermalSetting(pr.p) : pr.kind === 'rcbo' ? pr.p.in : 0;
   const band: [number, number] | undefined =

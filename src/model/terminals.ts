@@ -93,14 +93,14 @@ export function getPoles(c: ComponentInstance): PoleDef[] {
       return [pole(0, 'L', overcurrent), pole(1, 'N', false)];
     case '2P':
       // In un 2P magnetotermico entrambi i poli sono protetti; in uso monofase il secondo è il neutro.
-      return [pole(0, 'L', overcurrent), pole(1, 'N', pr.kind === 'mcb')];
+      return [pole(0, 'L', overcurrent), pole(1, 'N', pr.kind === 'mcb' || (pr.kind === 'rcbo' && !!pr.p.block))];
     case '3P':
       return [pole(0, 'L', overcurrent), pole(1, 'L', overcurrent), pole(2, 'L', overcurrent)];
     case '3P+N':
       return [pole(0, 'L', overcurrent), pole(1, 'L', overcurrent), pole(2, 'L', overcurrent), pole(3, 'N', false)];
     case '4P':
       // 4P magnetotermico: anche il neutro è protetto; differenziale/sezionatore: nessuna protezione di sovracorrente.
-      return [pole(0, 'L', overcurrent), pole(1, 'L', overcurrent), pole(2, 'L', overcurrent), pole(3, 'N', pr.kind === 'mcb')];
+      return [pole(0, 'L', overcurrent), pole(1, 'L', overcurrent), pole(2, 'L', overcurrent), pole(3, 'N', pr.kind === 'mcb' || (pr.kind === 'rcbo' && !!pr.p.block))];
   }
 }
 

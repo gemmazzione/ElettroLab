@@ -318,6 +318,26 @@ export const COMPONENT_INFO: Record<string, ComponentInfo> = {
       S('Nel simulatore', 'Somma dei modelli magnetotermico e differenziale; l\'evento registrato indica quale funzione è intervenuta.'),
     ],
   },
+  'mcb-blocco-2p': {
+    title: 'Magnetotermico 2P con blocco differenziale',
+    summary: 'Magnetotermico bipolare a cui si aggancia un blocco differenziale: un unico apparecchio con le due protezioni.',
+    sections: [
+      S('A cosa serve', 'Protegge un circuito monofase dalle sovracorrenti e dalle dispersioni verso terra. Rispetto al magnetotermico differenziale compatto (RCBO 1P+N) arriva a correnti più alte (fino a 63 A) e ha lo sganciatore su entrambi i poli.'),
+      S('Come funziona', 'Il blocco differenziale, accostato al magnetotermico e collegato meccanicamente alla sua leva, contiene il toroide e lo sganciatore: quando misura una corrente differenziale oltre la soglia fa aprire il magnetotermico.'),
+      ...RCD_COMMON.slice(1, 3),
+      S('Nel simulatore', 'Somma dei modelli magnetotermico (sganciatore su entrambi i poli) e differenziale; con IΔn ≥ 100 mA il blocco può essere selettivo (S).'),
+    ],
+  },
+  'mcb-blocco-4p': {
+    title: 'Magnetotermico 4P con blocco differenziale',
+    summary: 'Magnetotermico quadripolare con blocco differenziale associato, per linee trifase con neutro o come generale.',
+    sections: [
+      S('A cosa serve', 'Protegge una linea trifase con neutro, per esempio la partenza di un sottoquadro o il generale di un quadro trifase. Con un blocco selettivo (S) da 300 mA a monte di differenziali da 30 mA si ottiene la selettività differenziale.'),
+      S('Come funziona', 'Quattro poli protetti contro le sovracorrenti (anche il neutro) e un toroide che abbraccia tutti i conduttori attivi: la somma delle correnti è la corrente differenziale.'),
+      ...RCD_COMMON.slice(1, 3),
+      S('Nel simulatore', 'Modello magnetotermico e differenziale insieme; il tipo S ritarda l\'intervento come nei differenziali selettivi.'),
+    ],
+  },
   'bar-n-8': {
     title: 'Morsettiera di neutro',
     summary: 'Distribuisce il neutro a più circuiti: tutti i morsetti sono allo stesso potenziale.',

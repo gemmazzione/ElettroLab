@@ -194,7 +194,7 @@ export function advance(
         const ires = res.residual.get(c.id) ?? 0;
         const idnA = pr.p.idn / 1000;
         const zone = residualZone(ires, idnA);
-        const selective = pr.kind === 'rcd' && pr.p.selective;
+        const selective = !!pr.p.selective;
         if (zone === 'certa') cands.push({ id: c.id, time: residualTripTime(ires, idnA, selective), cause: 'differenziale', current: ires });
         if (zone === 'incerta' && !s.warnedResidual) {
           s.warnedResidual = true;

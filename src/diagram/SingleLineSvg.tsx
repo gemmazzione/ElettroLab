@@ -32,7 +32,7 @@ function ratingLines(c: ComponentInstance): string[] {
     case 'mcb':
       return [`${pr.p.poles} ${pr.p.curve}${pr.p.in}`, `Icn ${n1(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`];
     case 'rcbo':
-      return [`${pr.p.poles} ${pr.p.curve}${pr.p.in}`, `IΔn ${pr.p.idn} mA ${pr.p.rcdType}`, `Icn ${n1(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`];
+      return [`${pr.p.poles} ${pr.p.curve}${pr.p.in}`, `IΔn ${pr.p.idn} mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`, `Icn ${n1(pr.p.icn, pr.p.icn % 1 ? 1 : 0)} kA`];
     case 'rcd':
       return [`${pr.p.poles} ${pr.p.in} A`, `IΔn ${pr.p.idn} mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`];
     case 'switch':

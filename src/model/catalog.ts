@@ -364,6 +364,36 @@ export const CATALOG: CatalogItem[] = [
     },
   },
   {
+    id: 'mcb-blocco-2p',
+    kind: 'rcbo',
+    name: 'Magnetotermico 2P con blocco differenziale',
+    category: 'Magnetotermici differenziali',
+    description:
+      'Magnetotermico bipolare con il blocco differenziale associato al suo fianco: protezione da sovraccarico e cortocircuito su entrambi i poli e protezione differenziale, fino a 63 A.',
+    mount: 'din',
+    modules: 4,
+    labelPrefix: 'Q',
+    defaults: {
+      kind: 'rcbo',
+      p: { poles: '2P', in: 25, curve: 'C', icn: 6, idn: 30, rcdType: 'A', block: true, selective: false },
+    },
+  },
+  {
+    id: 'mcb-blocco-4p',
+    kind: 'rcbo',
+    name: 'Magnetotermico 4P con blocco differenziale',
+    category: 'Magnetotermici differenziali',
+    description:
+      'Magnetotermico quadripolare con blocco differenziale associato: protegge linee trifase con neutro e può fare da generale, anche con blocco selettivo (S).',
+    mount: 'din',
+    modules: 8,
+    labelPrefix: 'Q',
+    defaults: {
+      kind: 'rcbo',
+      p: { poles: '4P', in: 40, curve: 'C', icn: 10, idn: 300, rcdType: 'A', block: true, selective: true },
+    },
+  },
+  {
     id: 'bar-n-8',
     kind: 'bar',
     name: 'Morsettiera neutro 8 vie',
@@ -960,6 +990,8 @@ export const ICN_VALUES = [3, 4.5, 6, 10, 15, 25];
 export const IN_VALUES_MCCB = [16, 25, 32, 40, 63, 100, 125, 160, 200, 250, 320, 400, 500, 630, 800, 1000, 1250, 1600];
 export const ICU_VALUES = [10, 16, 25, 36, 50, 70, 100];
 export const IDN_VALUES = [10, 30, 100, 300];
+/** Blocchi differenziali associati ai magnetotermici: sensibilità disponibili [mA]. */
+export const IDN_VALUES_BLOCK = [30, 100, 300, 500, 1000];
 export const RCD_TYPES = ['AC', 'A', 'F', 'B'] as const;
 export const CURVES = ['B', 'C', 'D'] as const;
 export const CONTRACT_KW = [1.5, 3, 4.5, 6, 10];

@@ -158,6 +158,10 @@ export interface RcboParams {
   icn: number;
   idn: number;
   rcdType: RcdType;
+  /** Magnetotermico con blocco differenziale associato (tutti i poli protetti, fino a 63 A) */
+  block?: boolean;
+  /** Blocco differenziale selettivo (tipo S, ritardato) */
+  selective?: boolean;
 }
 
 /** Scaricatore di sovratensione (SPD) */

@@ -74,7 +74,7 @@ export function rcdTest(project: Project, loadId: string): RcdTestResult {
   if (!rcd || (rcd.params.kind !== 'rcd' && rcd.params.kind !== 'rcbo')) return { rcd: null, idnMa: 0, selective: false, ra, ut: null, rows: [] };
   const idnMa = rcd.params.p.idn;
   const idn = idnMa / 1000;
-  const selective = rcd.params.kind === 'rcd' && rcd.params.p.selective;
+  const selective = !!rcd.params.p.selective;
   const rows: RcdTestRow[] = [0.5, 1, 2, 5].map((mult) => {
     const i = mult * idn;
     const zone = residualZone(i, idn);

@@ -42,7 +42,7 @@ function rating(comp: ComponentInstance): { main: string; sub: string; lever: st
     case 'rcd':
       return { main: `${pr.p.in}A`, sub: `${pr.p.idn}mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`, lever: '#1f4fb8' };
     case 'rcbo':
-      return { main: `${pr.p.curve}${pr.p.in}`, sub: `${pr.p.idn}mA ${pr.p.rcdType}`, lever: '#22272e' };
+      return { main: `${pr.p.curve}${pr.p.in}`, sub: `${pr.p.idn}mA ${pr.p.rcdType}${pr.p.selective ? ' S' : ''}`, lever: '#22272e' };
     case 'switch':
       return { main: `${pr.p.in}A`, sub: 'I-0', lever: '#b42318' };
     case 'relay':

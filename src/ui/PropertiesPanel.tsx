@@ -16,6 +16,7 @@ import {
   IN_VALUES_FUSE,
   IN_VALUES_MCB,
   IN_VALUES_RCBO,
+  IDN_VALUES_BLOCK,
   IN_VALUES_RCD,
   IN_VALUES_SWITCH,
   KIND_LABEL,
@@ -307,13 +308,18 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
           <>
             <div className="grid grid-cols-2 gap-2">
               <Field label="Corrente nominale In">
-                <Select value={pr.p.in} options={IN_VALUES_RCBO} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, in: v } })} />
+                <Select value={pr.p.in} options={pr.p.block ? IN_VALUES_MCB : IN_VALUES_RCBO} format={(v) => `${v} A`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, in: v } })} />
               </Field>
               <Field label="Curva">
                 <Select value={pr.p.curve} options={CURVES} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, curve: v } })} />
               </Field>
               <Field label="Sensibilità IΔn">
-                <Select value={pr.p.idn} options={IDN_VALUES} format={(v) => `${v} mA`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, idn: v } })} />
+                <Select
+                  value={pr.p.idn}
+                  options={pr.p.block ? IDN_VALUES_BLOCK : IDN_VALUES}
+                  format={(v) => `${v} mA`}
+                  onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, idn: v, selective: v >= 100 ? pr.p.selective : false } })}
+                />
               </Field>
               <Field label="Tipo differenziale">
                 <Select value={pr.p.rcdType} options={RCD_TYPES} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, rcdType: v } })} />
@@ -322,6 +328,17 @@ function ComponentProps({ comp }: { comp: ComponentInstance }) {
             <Field label="Potere di interruzione Icn">
               <Select value={pr.p.icn} options={ICN_VALUES} format={(v) => `${fmt(v, v % 1 ? 1 : 0)} kA`} onChange={(v) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, icn: v } })} />
             </Field>
+            {pr.p.block && (
+              <label className={`flex items-center gap-2 text-[0.75rem] ${pr.p.idn < 100 ? 'text-slate-600' : 'text-slate-300'}`} title="Disponibile solo per IΔn ≥ 100 mA">
+                <input
+                  type="checkbox"
+                  disabled={pr.p.idn < 100}
+                  checked={!!pr.p.selective}
+                  onChange={(e) => update(comp.id, { kind: 'rcbo', p: { ...pr.p, selective: e.target.checked } })}
+                />
+                Blocco selettivo (S) — ritardato
+              </label>
+            )}
           </>
         )}
         {pr.kind === 'rcd' && (
