@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Copy, DraftingCompass, FileDown, FileSpreadsheet, FlaskConical, Info, Plus, Trash2, XCircle } from 'lucide-react';
 import { billOfMaterials, computePlant, f, fA, IN_ALL, isSubBoard, SECTIONS, type Check, type LineResult, type PlantResult, type Status } from '../impianto/calc';
 import { boardsOf, examplePlants, isThreePhaseSupply, KIND_LABEL, line, newId, SUPPLY_LABEL, USE_LABEL, type LineKind, type Plant, type PlantLine, type PlantUse, type RcdGroup, type SupplyKind } from '../impianto/model';
-import { bomCsv, buildPlantPdf, pdfName, plantCsv } from '../impianto/pdf';
+import { bomCsv, exportPlantPdf, pdfName, plantCsv } from '../impianto/pdf';
 import { plantToProject } from '../impianto/toLab';
 import { useStore } from '../store/projectStore';
 import { currentPlant, useImpianto } from '../impianto/store';
@@ -923,6 +923,7 @@ function DocsStep({ r }: { r: PlantResult }) {
   const p = usePlant();
   const up = useImpianto((s) => s.update);
   const [notes, setNotes] = useState(p.notes);
+  const [busy, setBusy] = useState(false);
   const openInLab = () => {
     if (!window.confirm('Aprire l\'impianto nel laboratorio? Il progetto aperto ora nel laboratorio viene sostituito: salvalo prima, se ti serve.')) return;
     const s = useStore.getState();
@@ -934,12 +935,19 @@ function DocsStep({ r }: { r: PlantResult }) {
       <div className="space-y-4">
         <Card title="Relazione tecnica e tabelle">
           <p className="mb-3 text-[0.75rem] leading-snug text-slate-400">
-            La relazione raccoglie dati generali, obbligo di progetto, bilancio delle potenze, dimensionamento e verifiche di ogni linea, differenziali, impianto di terra, computo dei materiali, ipotesi di calcolo e lo schema unifilare di ogni quadro.
+            La relazione raccoglie dati generali, obbligo di progetto, bilancio delle potenze, dimensionamento e verifiche di ogni linea, differenziali, impianto di terra, computo dei materiali, ipotesi di calcolo, la planimetria, la «foto» di ogni quadro e i suoi schemi unifilare e multifilare.
           </p>
           {r.errors > 0 && <p className="mb-3 text-[0.75rem] text-red-300">Ci sono {r.errors} verifiche da correggere: la relazione le riporta come tali.</p>}
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => buildPlantPdf(p, r).save(pdfName(p))} className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-sky-500">
-              <FileDown size={14} /> Relazione PDF
+            <button
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                void exportPlantPdf(p, r).finally(() => setBusy(false));
+              }}
+              className="flex items-center gap-1.5 rounded-md bg-sky-600 px-3 py-1.5 text-[0.75rem] font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+            >
+              <FileDown size={14} /> {busy ? 'Preparo la relazione…' : 'Relazione PDF'}
             </button>
             <button
               onClick={() => download(pdfName(p).replace('_relazione.pdf', '_linee.csv'), new Blob([plantCsv(r)], { type: 'text/csv;charset=utf-8' }))}

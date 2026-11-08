@@ -6,6 +6,7 @@ import { buildSingleLine } from '../diagram/singleLine';
 import { PALETTES, SingleLineSvg } from '../diagram/SingleLineSvg';
 import type { Project } from '../model/types';
 import { buildReport, pdfSafe } from './reportData';
+import { panelPhotos, type PanelPhoto } from './panelPhoto';
 
 const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
@@ -120,6 +121,10 @@ export async function exportProjectPdf(project: Project): Promise<void> {
     doc.setFont('helvetica', 'normal').setFontSize(10).text(T('Schema non disponibile: il progetto non ha un punto di fornitura.'), MARGIN, MARGIN + 14);
   }
 
+  // ---------------------------------------------------------------- foto dei quadri
+  const photos = await panelPhotos(project).catch(() => [] as PanelPhoto[]);
+  addPanelPhotoPages(doc, photos, T, 'Foto del quadro');
+
   // ---------------------------------------------------------------- note e avvertenze
   doc.addPage('a4', 'portrait');
   let ny = MARGIN + 4;
@@ -158,4 +163,24 @@ export async function exportProjectPdf(project: Project): Promise<void> {
 
   const safeName = project.name.replace(/[^\w\- ]+/g, '').trim() || 'progetto';
   doc.save(`${safeName} - ElectroLab.pdf`);
+}
+
+/** Una pagina orizzontale per ogni «foto» di quadro. */
+export function addPanelPhotoPages(doc: jsPDF, photos: PanelPhoto[], T: (s: string) => string, heading: string, note?: string): void {
+  for (const ph of photos) {
+    doc.addPage('a4', 'landscape');
+    doc.setFont('helvetica', 'bold').setFontSize(12).setTextColor(...INK);
+    doc.text(T(photos.length > 1 ? `${heading}: ${ph.title}` : heading), MARGIN, MARGIN + 4);
+    let top = MARGIN + 8;
+    if (note) {
+      doc.setFont('helvetica', 'normal').setFontSize(8).setTextColor(...MUTED);
+      const lines = doc.splitTextToSize(T(note), 297 - 2 * MARGIN);
+      doc.text(lines, MARGIN, MARGIN + 9);
+      top += lines.length * 3.5 + 2;
+    }
+    const maxW = 297 - 2 * MARGIN;
+    const maxH = 210 - top - MARGIN;
+    const k = Math.min(maxW / ph.w, maxH / ph.h);
+    doc.addImage(ph.data, 'JPEG', MARGIN + (maxW - ph.w * k) / 2, top, ph.w * k, ph.h * k);
+  }
 }

@@ -6,6 +6,9 @@ import { DEVICE_LABEL, KIND_LABEL, SUPPLY_LABEL, USE_LABEL, type Plant } from '.
 import { planExtent, routes } from './plan';
 import { singleLine, type Diagram } from './unifilare';
 import { multiLine, WIRE_PRINT } from './multifilare';
+import { addPanelPhotoPages } from '../export/pdfReport';
+import { panelPhotos, type PanelPhoto } from '../export/panelPhoto';
+import { plantToProject } from './toLab';
 
 const MARGIN = 14;
 const INK: [number, number, number] = [20, 24, 32];
@@ -17,7 +20,13 @@ const STATUS: Record<string, string> = { ok: 'OK', info: 'In opera', warn: 'Atte
 export const pdfName = (p: Plant) => `${p.name.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_') || 'impianto'}_relazione.pdf`;
 
 /** Relazione tecnica del progetto: dati, bilancio delle potenze, dimensionamento delle linee, verifiche, schema unifilare. */
-export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
+/** Scarica la relazione con le «foto» dei quadri ricostruiti come nel laboratorio. */
+export async function exportPlantPdf(p: Plant, r: PlantResult): Promise<void> {
+  const photos = await panelPhotos(plantToProject(p)).catch(() => [] as PanelPhoto[]);
+  buildPlantPdf(p, r, photos).save(pdfName(p));
+}
+
+export function buildPlantPdf(p: Plant, r: PlantResult, photos: PanelPhoto[] = []): jsPDF {
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
   const lastY = () => (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
   let y = MARGIN + 4;
@@ -208,6 +217,15 @@ export function buildPlantPdf(p: Plant, r: PlantResult): jsPDF {
     doc.text(T('Planimetria (schema di massima)'), MARGIN, MARGIN + 2);
     drawPlan(doc, p, r, MARGIN, MARGIN + 8, 297 - 2 * MARGIN - 60, 210 - 2 * MARGIN - 10);
   }
+
+  // «Foto» dei quadri: fronte con dispositivi, pettini e conduttori, come ricostruito nel laboratorio
+  addPanelPhotoPages(
+    doc,
+    photos,
+    T,
+    'Foto del quadro',
+    'Fronte del quadro ricostruito automaticamente dal progetto, come in «Apri nel laboratorio»: disposizione dei dispositivi sulle guide DIN, pettini e conduttori. Disposizione indicativa, da definire con il quadrista.',
+  );
 
   // Schema unifilare di ogni quadro su una pagina orizzontale
   for (const bd of r.boards) {
